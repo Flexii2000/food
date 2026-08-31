@@ -735,10 +735,19 @@ function openAddDialog(meal) {
 function initAddDialog() {
     const dialog = document.getElementById('add-dialog');
     document.getElementById('add-close').addEventListener('click', () => dialog.close());
-    // Klick auf den Hintergrund schliesst ebenfalls - das Ereignis trifft dann
-    // den dialog selbst, nicht seinen Inhalt.
+    // Klick auf den Hintergrund schliesst ebenfalls. Die Pruefung geht ueber die
+    // Koordinaten und NICHT ueber event.target === dialog: verschwindet das
+    // angeklickte Element zwischen mousedown und mouseup - etwa ein Treffer der
+    // Gerichtesuche, deren Liste beim Auswaehlen zuklappt -, stellt der Browser
+    // den Klick dem naechsten ueberlebenden Vorfahren zu. Das ist dann der
+    // dialog selbst, und die Zielpruefung haette ihn bei jeder Auswahl
+    // geschlossen.
     dialog.addEventListener('click', event => {
-        if (event.target === dialog) dialog.close();
+        if (event.target !== dialog) return;
+        const box = dialog.getBoundingClientRect();
+        const inside = event.clientX >= box.left && event.clientX <= box.right
+            && event.clientY >= box.top && event.clientY <= box.bottom;
+        if (!inside) dialog.close();
     });
 }
 
