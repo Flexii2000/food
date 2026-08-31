@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [],
+    "deny": [
+      "Bash",
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "Read",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Task",
+      "TodoWrite"
+    ]
+  }
+}

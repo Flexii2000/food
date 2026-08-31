@@ -4,9 +4,12 @@ import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.NewEntryRequest;
+import com.fherrmann.food.dto.QuickCaptureRequest;
+import com.fherrmann.food.dto.QuickCaptureResult;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
+import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.repository.FoodRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,13 +34,41 @@ class FoodServiceTest {
     Path tempDir;
 
     private FoodService service;
+    private FakeExtractor extractor;
+
+    /**
+     * Steht anstelle des Claude-Aufrufs. Die Tests pruefen, was die App aus einer
+     * Antwort macht - nicht, ob das Modell gut raet; ein Testlauf, der echte
+     * API-Aufrufe braucht, waere weder schnell noch verlaesslich noch umsonst.
+     */
+    private static final class FakeExtractor implements NutritionExtractor {
+        private ExtractedDish next = new ExtractedDish(
+                "Spaghetti Bolognese", 130, 7, 16, 4, 450, 400.0, true,
+                "Portion und Naehrwerte fuer einen grossen Teller geschaetzt.");
+        private boolean available = true;
+        private String seenText;
+        private List<Dish> seenKnown;
+
+        @Override
+        public boolean isAvailable() {
+            return available;
+        }
+
+        @Override
+        public ExtractedDish extract(String text, Nutrients targets, List<Dish> known) {
+            seenText = text;
+            seenKnown = known;
+            return next;
+        }
+    }
 
     @BeforeEach
     void setUp() {
         FoodRepository repository = new FoodRepository(
                 tempDir.resolve("food.json").toString(), new ObjectMapper());
         Clock clock = Clock.fixed(TODAY.atStartOfDay(ZoneId.of("UTC")).toInstant(), ZoneId.of("UTC"));
-        service = new FoodService(repository, clock);
+        extractor = new FakeExtractor();
+        service = new FoodService(repository, extractor, clock);
     }
 
     private static DishRequest skyr() {
@@ -190,6 +221,61 @@ class FoodServiceTest {
         assertThat(status.entriesToday()).isEqualTo(1);
         assertThat(status.dishCount()).isEqualTo(1);
         assertThat(status.lastEntryOn()).isEqualTo(TODAY);
+    }
+
+    @Test
+    void quickCaptureCreatesBothAnEntryAndAReusableDish() {
+        QuickCaptureResult result = service.quickCapture(
+                new QuickCaptureRequest(TODAY, "  mittags einen grossen Teller Spaghetti Bolognese  "));
+
+        // Der Text geht getrimmt rein, so wie er getippt wurde.
+        assertThat(extractor.seenText).isEqualTo("mittags einen grossen Teller Spaghetti Bolognese");
+
+        assertThat(result.dishName()).isEqualTo("Spaghetti Bolognese");
+        assertThat(result.grams()).isEqualTo(450.0);
+        assertThat(result.estimated()).isTrue();
+        assertThat(result.note()).contains("geschaetzt");
+        // 450 g mal 130 kcal je 100 g.
+        assertThat(result.day().consumed().kcal()).isEqualTo(585.0);
+
+        // Und das Gericht steht danach zur Auswahl - genau darum geht es.
+        assertThat(service.dishes()).singleElement()
+                .extracting(Dish::name, Dish::portionG)
+                .containsExactly("Spaghetti Bolognese", 400.0);
+    }
+
+    @Test
+    void quickCaptureGetsTheAlreadyKnownDishesAsContext() {
+        service.createDish(skyr());
+        service.quickCapture(new QuickCaptureRequest(TODAY, "ein Becher Skyr"));
+
+        assertThat(extractor.seenKnown).extracting(Dish::name).containsExactly("Skyr mit Beeren");
+    }
+
+    @Test
+    void quickCaptureRunsThroughTheSameLimitsAsAManualEntry() {
+        // Ein Modell, das sich um eine Zehnerpotenz vertut, kommt an der Pruefung
+        // fuer Eintraege von Hand nicht vorbei.
+        extractor.next = new ExtractedDish("Unfug", 99_000, 7, 16, 4, 450, null, true, "");
+        assertThatThrownBy(() -> service.quickCapture(new QuickCaptureRequest(TODAY, "irgendwas")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("kcal");
+    }
+
+    @Test
+    void quickCaptureRejectsEmptyAndOverlongText() {
+        assertThatThrownBy(() -> service.quickCapture(new QuickCaptureRequest(TODAY, "   ")))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.quickCapture(
+                new QuickCaptureRequest(TODAY, "x".repeat(1001))))
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void quickCaptureAvailabilityFollowsTheExtractor() {
+        assertThat(service.quickCaptureAvailable()).isTrue();
+        extractor.available = false;
+        assertThat(service.quickCaptureAvailable()).isFalse();
     }
 
     @Test

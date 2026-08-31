@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kalorienzähler</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <header>
@@ -20,10 +21,9 @@
 <main>
     <p class="load-msg" id="load-msg"></p>
 
-    <!-- Makros oben, kcal darunter: die drei kleinen Tachos zeigen das schon
-         Verzehrte, der grosse darunter das, was vom Tagesziel noch uebrig ist. -->
+    <!-- kcal oben, Makros darunter: der grosse Tacho zeigt, was vom Tagesziel
+         noch uebrig ist, die drei kleinen darunter das schon Verzehrte. -->
     <section class="panel gauges">
-        <div class="macro-row" id="macro-row"></div>
         <div class="kcal-row">
             <div class="kcal-gauge" id="kcal-gauge"></div>
             <div class="kcal-consumed">
@@ -32,10 +32,35 @@
                 <span class="sub" id="kcal-target">–</span>
             </div>
         </div>
+        <div class="macro-row" id="macro-row"></div>
     </section>
 
     <section class="panel">
-        <h2>Eintragen</h2>
+        <div class="panel-header">
+            <h2>Eintragen</h2>
+            <button type="button" id="quick-open" class="ghost" hidden>Schnellerfassung</button>
+        </div>
+
+        <!-- Freitext statt Formular: "mittags einen grossen Teller Bolognese".
+             Ein Claude-Aufruf auf dem Server macht daraus Naehrwerte, Menge und
+             ein gespeichertes Gericht. Nur sichtbar, wenn der Server dafuer
+             eingerichtet ist (siehe /api/food/features). -->
+        <div class="quick-capture" id="quick-capture" hidden>
+            <label class="grow">Was hast du gegessen?
+                <textarea id="quick-text" rows="3" maxlength="1000"
+                          placeholder="z. B. mittags einen großen Teller Spaghetti Bolognese und einen Becher Skyr"></textarea>
+            </label>
+            <div class="quick-actions">
+                <button type="button" id="quick-submit">Auswerten und eintragen</button>
+                <button type="button" id="quick-cancel" class="ghost">Abbrechen</button>
+                <span id="quick-msg" class="form-msg"></span>
+            </div>
+            <div class="quick-progress" id="quick-progress" hidden>
+                <div class="progress-bar"><div class="progress-fill"></div></div>
+                <span class="progress-label">Gericht wird verarbeitet …</span>
+            </div>
+        </div>
+
         <form id="entry-form">
             <label class="grow">Gericht
                 <select id="in-dish" required>
@@ -72,6 +97,17 @@
     <section class="panel">
         <h2 id="entries-heading">Heute gegessen</h2>
         <div id="entries"></div>
+        <p class="hint" id="swipe-hint" hidden>Nach links wischen löscht einen Eintrag.</p>
+    </section>
+
+    <section class="panel">
+        <div class="panel-header">
+            <h2 id="history-heading">Verlauf</h2>
+            <div class="range-select" id="range-select"></div>
+        </div>
+        <div class="chart-container"><canvas id="history-chart"></canvas></div>
+        <div class="chart-toggles" id="history-toggles"></div>
+        <p class="hint" id="history-msg"></p>
     </section>
 
     <section class="panel">

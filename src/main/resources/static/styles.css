@@ -59,27 +59,27 @@ main {
 
 .gauges { display: flex; flex-direction: column; gap: 1.5rem; }
 
-/* Die drei Makros oben nebeneinander, auf gleicher Hoehe. */
+/* Die drei Makros unten nebeneinander, auf gleicher Hoehe. */
 .macro-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
     justify-items: center;
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
 }
 
 .macro { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
 .macro .gauge { width: 130px; }
 .macro-label { color: var(--muted); font-size: 0.85rem; }
 
-/* kcal darunter: grosser Tacho links, der Verzehrt-Wert als blosse Zahl daneben. */
+/* kcal oben: grosser Tacho links, der Verzehrt-Wert als blosse Zahl daneben. */
 .kcal-row {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 2.5rem;
     flex-wrap: wrap;
-    border-top: 1px solid var(--border);
-    padding-top: 1.5rem;
 }
 
 .kcal-gauge .gauge { width: 230px; }
@@ -228,29 +228,66 @@ details[open] > summary { margin-bottom: 0.8rem; }
 
 /* --- Tagesliste --------------------------------------------------------- */
 
-table.entries {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
+.entry-list { display: flex; flex-direction: column; }
+
+/* Kopfzeile und Zeilen teilen sich dasselbe Raster - dadurch stehen die Spalten
+   untereinander, ohne dass es eine Tabelle sein muss. */
+.entry-head,
+.entry-content {
+    display: grid;
+    grid-template-columns: 1fr 4.5rem 3.5rem 3rem 3rem 3rem 1.8rem;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-table.entries th {
-    text-align: left;
+.entry-head {
     color: var(--muted);
-    font-weight: 500;
     font-size: 0.78rem;
     padding: 0 0.5rem 0.4rem;
     border-bottom: 1px solid var(--border);
 }
 
-table.entries td {
-    padding: 0.5rem;
+/* Der Kasten steht still, nur sein Inhalt faehrt beim Wischen zur Seite und gibt
+   den roten Grund darunter frei. */
+.entry-row {
+    position: relative;
+    overflow: hidden;
     border-bottom: 1px solid var(--border);
 }
 
-table.entries tr:last-child td { border-bottom: none; }
-table.entries .n { text-align: right; font-variant-numeric: tabular-nums; }
-table.entries th.n { text-align: right; }
+.entry-row:last-child { border-bottom: none; }
+
+.entry-delete {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 1rem;
+    background: var(--bad);
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.entry-content {
+    position: relative;
+    /* Deckender Hintergrund, sonst schiene der rote Grund durch. */
+    background: var(--panel);
+    padding: 0.55rem 0.5rem;
+    font-size: 0.9rem;
+    transition: transform 0.2s ease;
+    /* Senkrechtes Scrollen bleibt beim Browser, waagerechtes uebernimmt der
+       Wisch-Handler in app.js. */
+    touch-action: pan-y;
+}
+
+.entry-row.will-delete .entry-delete { background: var(--bad); }
+.entry-row.will-delete .entry-content { box-shadow: -6px 0 12px rgba(0, 0, 0, 0.35); }
+.entry-row.removing .entry-content { transform: translateX(-100%); opacity: 0; }
+
+.e-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry-content .n, .entry-head .n { text-align: right; font-variant-numeric: tabular-nums; }
 
 .row-remove {
     background: none;
@@ -280,6 +317,132 @@ table.entries th.n { text-align: right; }
 .dish-row label.grow { flex: 1 1 10rem; }
 .dish-row button { padding: 0.5rem 0.9rem; font-size: 0.85rem; }
 
+/* --- Kopfzeile mit Aktion ------------------------------------------------ */
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.panel-header h2 { margin: 0 0 0.8rem; }
+.panel-header > button { margin-bottom: 0.8rem; }
+
+/* --- Schnellerfassung --------------------------------------------------- */
+
+.quick-capture {
+    margin-bottom: 1.2rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.quick-capture textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.5rem;
+    font: inherit;
+    font-size: 0.95rem;
+    width: 100%;
+    resize: vertical;
+}
+
+.quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.8rem;
+    margin-top: 0.8rem;
+}
+
+.quick-capture button:disabled { opacity: 0.5; cursor: default; filter: none; }
+
+.quick-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-top: 0.9rem;
+}
+
+.progress-bar {
+    flex: 1 1 8rem;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--track);
+    overflow: hidden;
+}
+
+/* Unbestimmter Fortschritt: wie lange der Aufruf dauert, weiss niemand vorher -
+   ein Balken, der einen Prozentsatz behauptet, waere gelogen. */
+.progress-fill {
+    height: 100%;
+    width: 35%;
+    border-radius: 2px;
+    background: var(--accent);
+    animation: progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+    0%   { margin-left: -35%; }
+    100% { margin-left: 100%; }
+}
+
+.progress-label { color: var(--muted); font-size: 0.85rem; }
+
+/* --- Verlaufsgraph ------------------------------------------------------ */
+
+.range-select { display: flex; gap: 0.4rem; }
+.range-select button.active { border-color: var(--accent); color: var(--text); }
+
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 260px;
+}
+
+.chart-container canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.chart-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    margin-top: 0.6rem;
+    font-size: 0.9rem;
+}
+
+.chart-toggles label {
+    display: inline-flex;
+    /* Muss explizit sein: die globale label-Regel stellt Formularfelder auf
+       column, und eine hoehere Spezifitaet allein aendert nur den display-Wert -
+       die Richtung wuerde sonst geerbt und Kaestchen, Farbe und Text staenden
+       untereinander. */
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text);
+}
+
+.chart-toggles input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
+
+.chart-toggles .swatch {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 2px;
+}
+
 @media (max-width: 640px) {
     main { padding: 1rem; gap: 1rem; }
     header { padding: 1rem; }
@@ -292,6 +455,27 @@ table.entries th.n { text-align: right; }
     form { flex-direction: column; align-items: stretch; }
     .field-row { flex-direction: column; gap: 0.6rem; }
     .dish-row { flex-direction: row; flex-wrap: wrap; }
-    table.entries { font-size: 0.82rem; }
-    table.entries td, table.entries th { padding: 0.4rem 0.3rem; }
+    .chart-container { height: 300px; }
+
+    /* Zwei Zeilen statt sieben Spalten: Name oben, Zahlen darunter. Die
+       Spaltenkoepfe entfallen dabei - stattdessen beschriftet CSS die Werte
+       direkt, sonst waeren "24 18 4" nebeneinander nicht zuzuordnen. */
+    .entry-head { display: none; }
+    .entry-content {
+        grid-template-columns: 1fr repeat(4, auto) 1.8rem;
+        column-gap: 0.6rem;
+        row-gap: 0.15rem;
+        font-size: 0.85rem;
+    }
+    .e-name    { grid-column: 1 / 6; grid-row: 1; }
+    .row-remove { grid-column: 6; grid-row: 1 / span 2; align-self: center; }
+    .e-amount  { grid-column: 1; grid-row: 2; text-align: left; color: var(--muted); }
+    .e-kcal    { grid-column: 2; grid-row: 2; }
+    .e-protein { grid-column: 3; grid-row: 2; }
+    .e-carbs   { grid-column: 4; grid-row: 2; }
+    .e-fat     { grid-column: 5; grid-row: 2; }
+    .e-kcal::after    { content: ' kcal'; color: var(--muted); }
+    .e-protein::before { content: 'E '; color: var(--muted); }
+    .e-carbs::before   { content: 'KH '; color: var(--muted); }
+    .e-fat::before     { content: 'F '; color: var(--muted); }
 }

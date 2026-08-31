@@ -20,9 +20,34 @@ const MACROS = [
     { key: 'carbsG', label: 'Kohlenhydrate', unit: 'g', direction: 'ceiling' },
 ];
 
+// Die Weight-App liegt auf einer eigenen Subdomain, aber unter derselben Site -
+// der private Cookie reist also mit; credentials:'include' braucht es nur, weil
+// die Origin eine andere ist (dort per CORS genau fuer diese Seite freigegeben).
+const WEIGHT_API = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+    ? `${location.protocol}//${location.hostname}:48173`
+    : 'https://weight.fherrmann.com';
+
+const HISTORY_RANGES = [14, 30, 90];
+
+const CHART_COLORS = {
+    kcal: 'rgba(92, 124, 250, 0.75)',
+    kcalOver: 'rgba(239, 83, 80, 0.8)',
+    target: 'rgba(230, 236, 245, 0.45)',
+    weight: '#81c784',
+};
+
 let currentDate = todayIso();
 let dishes = [];
 let day = null;
+
+let historyDays = 30;
+let historyChart = null;
+let dailyTotals = [];
+// Gewicht wird erst geholt, wenn es jemand einblendet - ein Cross-Origin-Request
+// auf gut Glueck waere unnoetig, und ohne Weight-Cookie schlaegt er ohnehin fehl.
+let showWeight = false;
+let weightByDate = {};
+let weightError = null;
 
 function todayIso() {
     const now = new Date();
@@ -79,6 +104,13 @@ function gauge({ ratio, tone, main, sub, mainSize = 20, subSize = 8 }) {
     // Ueber 100 % laeuft der Bogen nicht weiter - er ist dann voll und rot; die
     // Zahl in der Mitte traegt die eigentliche Information.
     const filled = Math.max(0, Math.min(ratio, 1)) * SWEEP * C;
+    // Bei 0 gar keinen Wertbogen zeichnen: stroke-linecap: round malt auch fuer
+    // eine Strichlaenge von 0 noch beide Kappen und damit einen Punkt am
+    // Bogenanfang - der sieht aus wie ein Messwert, wo keiner ist.
+    const value = filled > 0
+        ? `<circle class="gauge-value" cx="50" cy="50" r="${R}"
+                    stroke-dasharray="${filled} ${C}" transform="rotate(135 50 50)"></circle>`
+        : '';
     // Zahl und Beschriftung sitzen als Paar mittig: die Zahl etwas ueber der
     // Mitte, das Label darunter - beide auf y=50 saehen nach unten verrutscht aus.
     const mainY = 50 - subSize * 0.6;
@@ -86,8 +118,7 @@ function gauge({ ratio, tone, main, sub, mainSize = 20, subSize = 8 }) {
         <svg class="gauge tone-${tone}" viewBox="0 0 100 100" role="img" aria-label="${main} ${sub}">
             <circle class="gauge-track" cx="50" cy="50" r="${R}"
                     stroke-dasharray="${SWEEP * C} ${C}" transform="rotate(135 50 50)"></circle>
-            <circle class="gauge-value" cx="50" cy="50" r="${R}"
-                    stroke-dasharray="${filled} ${C}" transform="rotate(135 50 50)"></circle>
+            ${value}
             <text class="gauge-main" x="50" y="${mainY}" font-size="${mainSize}">${main}</text>
             <text class="gauge-sub" x="50" y="${mainY + mainSize * 0.62 + subSize * 0.6}"
                   font-size="${subSize}">${sub}</text>
@@ -140,6 +171,14 @@ function renderGauges() {
 
 // --- Eintraege des Tages ----------------------------------------------------
 
+// Wischen zum Loeschen gibt es nur auf Touch-Geraeten. Mit Maus tut es der
+// x-Knopf; ein Drag-Handler dort wuerde sich nur mit der Textauswahl anlegen.
+const TOUCH_QUERY = window.matchMedia('(pointer: coarse)');
+// Ab hier loest Loslassen das Loeschen aus; weiter als SWIPE_MAX_PX geht die
+// Zeile nicht, damit klar bleibt, dass es eine Geste und kein Scrollen ist.
+const SWIPE_TRIGGER_PX = 70;
+const SWIPE_MAX_PX = 96;
+
 function renderEntries() {
     const container = document.getElementById('entries');
     container.replaceChildren();
@@ -150,6 +189,8 @@ function renderEntries() {
         : `Gegessen am ${fmtDate(currentDate)}`;
 
     const entries = (day && day.entries) || [];
+    document.getElementById('swipe-hint').hidden = !TOUCH_QUERY.matches || !entries.length;
+
     if (!entries.length) {
         const empty = document.createElement('p');
         empty.className = 'hint';
@@ -158,38 +199,137 @@ function renderEntries() {
         return;
     }
 
-    const table = document.createElement('table');
-    table.className = 'entries';
-    table.innerHTML = `
-        <thead><tr>
-            <th>Gericht</th><th class="n">Menge</th><th class="n">kcal</th>
-            <th class="n">E</th><th class="n">KH</th><th class="n">F</th><th></th>
-        </tr></thead><tbody></tbody>`;
-    const body = table.querySelector('tbody');
+    const list = document.createElement('div');
+    list.className = 'entry-list';
 
-    entries.forEach(entry => {
-        const factor = entry.grams / 100;
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${escapeHtml(entry.name)}</td>
-            <td class="n">${num(entry.grams)} g</td>
-            <td class="n">${num(entry.per100g.kcal * factor)}</td>
-            <td class="n">${num(entry.per100g.proteinG * factor)}</td>
-            <td class="n">${num(entry.per100g.carbsG * factor)}</td>
-            <td class="n">${num(entry.per100g.fatG * factor)}</td>`;
-        const cell = document.createElement('td');
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.className = 'row-remove';
-        remove.textContent = '×';
-        remove.title = 'Eintrag löschen';
-        remove.setAttribute('aria-label', `${entry.name} löschen`);
-        remove.addEventListener('click', () => deleteEntry(entry.id));
-        cell.appendChild(remove);
-        row.appendChild(cell);
-        body.appendChild(row);
+    // Kopfzeile mit demselben Grid wie die Zeilen - dadurch stehen die Spalten
+    // untereinander, ohne dass es eine Tabelle sein muss. Eine Tabelle waere
+    // hier im Weg: <tr> laesst sich fuer die Wischgeste nur unzuverlaessig
+    // verschieben, und der rote Grund dahinter braucht einen eigenen Kasten.
+    const head = document.createElement('div');
+    head.className = 'entry-head';
+    head.innerHTML = `
+        <span>Gericht</span>
+        <span class="n">Menge</span>
+        <span class="n">kcal</span>
+        <span class="n">E</span>
+        <span class="n">KH</span>
+        <span class="n">F</span>
+        <span></span>`;
+    list.appendChild(head);
+
+    entries.forEach(entry => list.appendChild(buildEntryRow(entry)));
+    container.appendChild(list);
+}
+
+function buildEntryRow(entry) {
+    const factor = entry.grams / 100;
+    const row = document.createElement('div');
+    row.className = 'entry-row';
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'entry-delete';
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.textContent = 'Löschen';
+
+    const content = document.createElement('div');
+    content.className = 'entry-content';
+    content.innerHTML = `
+        <span class="e-name">${escapeHtml(entry.name)}</span>
+        <span class="e-amount n">${num(entry.grams)} g</span>
+        <span class="e-kcal n">${num(entry.per100g.kcal * factor)}</span>
+        <span class="e-protein n">${num(entry.per100g.proteinG * factor)}</span>
+        <span class="e-carbs n">${num(entry.per100g.carbsG * factor)}</span>
+        <span class="e-fat n">${num(entry.per100g.fatG * factor)}</span>`;
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'row-remove';
+    remove.textContent = '×';
+    remove.title = 'Eintrag löschen';
+    remove.setAttribute('aria-label', `${entry.name} löschen`);
+    remove.addEventListener('click', () => deleteEntry(entry.id));
+    content.appendChild(remove);
+
+    row.append(backdrop, content);
+    enableSwipeToDelete(row, content, () => deleteEntry(entry.id));
+    return row;
+}
+
+/**
+ * Nach links wischen loescht den Eintrag. Die Zeile selbst bleibt stehen, nur
+ * ihr Inhalt faehrt zur Seite und gibt den roten Grund darunter frei.
+ */
+function enableSwipeToDelete(row, content, onDelete) {
+    if (!TOUCH_QUERY.matches) return;
+
+    let startX = 0;
+    let startY = 0;
+    let offset = 0;
+    let tracking = false;
+    let decided = false;
+
+    const settle = () => {
+        content.style.transition = '';
+        content.style.transform = '';
+        row.classList.remove('will-delete');
+    };
+
+    content.addEventListener('touchstart', event => {
+        startX = event.touches[0].clientX;
+        startY = event.touches[0].clientY;
+        offset = 0;
+        tracking = true;
+        decided = false;
+        // Waehrend des Ziehens soll die Zeile dem Finger ohne Nachlauf folgen.
+        content.style.transition = 'none';
+    }, { passive: true });
+
+    content.addEventListener('touchmove', event => {
+        if (!tracking) return;
+        const moveX = event.touches[0].clientX - startX;
+        const moveY = event.touches[0].clientY - startY;
+
+        if (!decided) {
+            // Richtung erst festlegen, wenn der Finger sich eindeutig entschieden
+            // hat - sonst bleibt die Liste beim Scrollen am Finger haengen.
+            if (Math.abs(moveX) < 8 && Math.abs(moveY) < 8) return;
+            decided = true;
+            if (Math.abs(moveY) >= Math.abs(moveX)) {
+                tracking = false;
+                settle();
+                return;
+            }
+        }
+
+        // Nur nach links: nach rechts gibt es nichts freizulegen.
+        offset = Math.max(-SWIPE_MAX_PX, Math.min(0, moveX));
+        content.style.transform = `translateX(${offset}px)`;
+        row.classList.toggle('will-delete', offset <= -SWIPE_TRIGGER_PX);
+        event.preventDefault();
+    }, { passive: false });
+
+    content.addEventListener('touchend', () => {
+        if (!tracking) {
+            settle();
+            return;
+        }
+        tracking = false;
+        content.style.transition = '';
+        if (offset <= -SWIPE_TRIGGER_PX) {
+            // Zeile ganz rausfahren lassen und erst dann loeschen: das Neuladen
+            // baut die Liste ohnehin neu auf, die Animation darf vorher laufen.
+            row.classList.add('removing');
+            onDelete();
+        } else {
+            settle();
+        }
     });
-    container.appendChild(table);
+
+    content.addEventListener('touchcancel', () => {
+        tracking = false;
+        settle();
+    });
 }
 
 // Auch fuer Attributwerte gedacht (value="..."), deshalb werden die
@@ -366,6 +506,266 @@ async function withMessage(element, action) {
     }
 }
 
+// --- Schnellerfassung -------------------------------------------------------
+
+// Ob der Server dafuer eingerichtet ist. Wird beim Laden abgefragt; ohne
+// Claude-Schluessel bleibt der Knopf ausgeblendet, statt einen Fehler anzubieten.
+let quickCaptureAvailable = false;
+
+function initQuickCapture() {
+    const open = document.getElementById('quick-open');
+    const panel = document.getElementById('quick-capture');
+    const text = document.getElementById('quick-text');
+    const submit = document.getElementById('quick-submit');
+    const cancel = document.getElementById('quick-cancel');
+    const progress = document.getElementById('quick-progress');
+    const msg = document.getElementById('quick-msg');
+
+    const close = () => {
+        panel.hidden = true;
+        open.hidden = !quickCaptureAvailable;
+        text.value = '';
+        msg.textContent = '';
+        msg.className = 'form-msg';
+    };
+
+    open.addEventListener('click', () => {
+        panel.hidden = false;
+        open.hidden = true;
+        text.focus();
+    });
+    cancel.addEventListener('click', close);
+
+    const run = async () => {
+        const value = text.value.trim();
+        if (!value) {
+            msg.textContent = 'Bitte etwas eintippen.';
+            msg.className = 'form-msg err';
+            return;
+        }
+        msg.textContent = '';
+        msg.className = 'form-msg';
+        progress.hidden = false;
+        // Waehrend der Auswertung nichts anfassbar lassen: der Aufruf dauert
+        // Sekunden, und ein zweites Absenden wuerde denselben Teller doppelt buchen.
+        submit.disabled = true;
+        cancel.disabled = true;
+        text.disabled = true;
+        try {
+            const result = await fetchJson('/api/food/quick-capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: currentDate, text: value }),
+            });
+            close();
+            await loadAll();
+            // Nach dem Neuladen anzeigen, was verstanden wurde - eine Schaetzung
+            // soll nicht wie eine abgelesene Zahl dastehen.
+            const entryMsg = document.getElementById('entry-msg');
+            entryMsg.className = 'form-msg ok';
+            entryMsg.textContent = `${result.dishName}, ${num(result.grams)} g eingetragen.`
+                + (result.estimated ? ` Geschätzt: ${result.note}` : '');
+        } catch (err) {
+            msg.textContent = `Fehler: ${err.message}`;
+            msg.className = 'form-msg err';
+        } finally {
+            progress.hidden = true;
+            submit.disabled = false;
+            cancel.disabled = false;
+            text.disabled = false;
+        }
+    };
+
+    submit.addEventListener('click', run);
+    // Strg/Cmd+Enter sendet ab - im Textfeld ist Enter ein Zeilenumbruch.
+    text.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            run();
+        }
+    });
+}
+
+async function loadFeatures() {
+    try {
+        const features = await fetchJson('/api/food/features');
+        quickCaptureAvailable = !!(features && features.quickCapture);
+    } catch (err) {
+        quickCaptureAvailable = false;
+    }
+    document.getElementById('quick-open').hidden =
+        !quickCaptureAvailable || !document.getElementById('quick-capture').hidden;
+}
+
+// --- Verlauf ----------------------------------------------------------------
+
+/**
+ * Holt die 7-Tage-Mittel aus der Weight-App. Bewusst das Mittel und nicht den
+ * Tageswert: neben Tagessummen an Kalorien ist die geglaettete Linie die
+ * Aussage, die man sehen will - das Tagesgewicht schwankt um mehrere hundert
+ * Gramm aus Gruenden, die mit dem Essen nichts zu tun haben.
+ */
+async function loadWeightSeries() {
+    try {
+        const points = await fetchJson(`${WEIGHT_API}/api/weight/last90`, { credentials: 'include' });
+        weightByDate = Object.fromEntries(
+            (points || []).filter(p => p.avg7 != null).map(p => [p.date, p.avg7]));
+        weightError = null;
+    } catch (err) {
+        // Kein harter Fehler: der kcal-Verlauf steht auch ohne Gewicht.
+        weightByDate = {};
+        weightError = err.message;
+    }
+}
+
+async function loadHistory() {
+    // Fenster endet immer heute, unabhaengig vom oben gewaehlten Tag: der
+    // Verlauf ist ein Ueberblick, kein zweiter Blick auf denselben Tag.
+    const to = todayIso();
+    const from = shiftDate(to, -(historyDays - 1));
+    const [totals] = await Promise.all([
+        fetchJson(`/api/food/daily?from=${from}&to=${to}`),
+        showWeight && !Object.keys(weightByDate).length ? loadWeightSeries() : Promise.resolve(),
+    ]);
+    dailyTotals = totals || [];
+    renderHistory(from, to);
+}
+
+function renderHistory(from, to) {
+    document.getElementById('history-heading').textContent = `Verlauf – letzte ${historyDays} Tage`;
+
+    // Jeden Kalendertag als Label, auch die ohne Eintrag: sonst ruecken Luecken
+    // zusammen und der Verlauf sieht dichter aus, als er ist.
+    const labels = [];
+    for (let date = from; date <= to; date = shiftDate(date, 1)) {
+        labels.push(date);
+    }
+
+    const byDate = Object.fromEntries(dailyTotals.map(t => [t.date, t.consumed]));
+    const target = (day && day.targets.kcal) || 0;
+    const kcal = labels.map(d => (d in byDate ? byDate[d].kcal : null));
+
+    const datasets = [
+        {
+            type: 'bar',
+            label: 'kcal',
+            data: kcal,
+            // Ueber dem Ziel rot: die Ziellinie allein sagt es zwar auch, aber
+            // ein Balken, der sie ueberragt, faellt schneller auf als ein
+            // Schnittpunkt.
+            backgroundColor: kcal.map(v => (v != null && v > target ? CHART_COLORS.kcalOver : CHART_COLORS.kcal)),
+            borderWidth: 0,
+            yAxisID: 'y',
+            order: 10,
+        },
+        {
+            type: 'line',
+            label: 'Tagesziel',
+            data: labels.map(() => target),
+            borderColor: CHART_COLORS.target,
+            borderDash: [6, 4],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            yAxisID: 'y',
+            order: 5,
+        },
+    ];
+
+    if (showWeight) {
+        datasets.push({
+            type: 'line',
+            label: 'Gewicht (7-Tage-Mittel)',
+            data: labels.map(d => (d in weightByDate ? weightByDate[d] : null)),
+            borderColor: CHART_COLORS.weight,
+            backgroundColor: CHART_COLORS.weight,
+            borderWidth: 2.5,
+            pointRadius: 0,
+            spanGaps: true,
+            tension: 0.3,
+            yAxisID: 'yWeight',
+            order: 1,
+        });
+    }
+
+    const config = {
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                y: { position: 'left', beginAtZero: true, title: { display: true, text: 'kcal' } },
+                yWeight: {
+                    position: 'right',
+                    display: showWeight,
+                    // Eigene Skalierung mit eigenem Gitternetz, das nicht in die
+                    // Flaeche gezeichnet wird: die kcal-Achse behaelt so ihre
+                    // Grenzen, und es liegen nicht zwei Raster uebereinander.
+                    grid: { drawOnChartArea: false },
+                    title: { display: true, text: 'kg' },
+                },
+                // maxRotation: 0 haelt die Datumsbeschriftung waagerecht, damit
+                // das Einblenden des Gewichts nicht den ganzen Chart-Boden umbaut.
+                x: { ticks: { maxTicksLimit: 10, autoSkip: true, maxRotation: 0 } },
+            },
+            plugins: { legend: { display: false } },
+        },
+    };
+
+    if (historyChart) {
+        historyChart.data = config.data;
+        historyChart.options = config.options;
+        historyChart.update();
+    } else {
+        historyChart = new Chart(document.getElementById('history-chart'), config);
+    }
+
+    // Eingeblendetes Gewicht ohne einen einzigen Punkt im Fenster sieht aus wie
+    // ein Defekt - deshalb sagen, dass es an den Daten liegt und nicht am Abruf.
+    const weightPointsInRange = showWeight && labels.some(d => d in weightByDate);
+    const msg = document.getElementById('history-msg');
+    if (weightError) {
+        msg.textContent = `Gewicht nicht verfügbar: ${weightError} (Weight Tracker unter ${WEIGHT_API})`;
+    } else if (showWeight && !weightPointsInRange) {
+        msg.textContent = 'Für diesen Zeitraum liegen keine Gewichtsdaten vor.';
+    } else {
+        msg.textContent = '';
+    }
+}
+
+function initHistoryControls() {
+    const ranges = document.getElementById('range-select');
+    HISTORY_RANGES.forEach(days => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'ghost';
+        button.textContent = `${days} Tage`;
+        button.classList.toggle('active', days === historyDays);
+        button.addEventListener('click', async () => {
+            historyDays = days;
+            ranges.querySelectorAll('button').forEach(b =>
+                b.classList.toggle('active', b === button));
+            await loadHistory();
+        });
+        ranges.appendChild(button);
+    });
+
+    const toggles = document.getElementById('history-toggles');
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = showWeight;
+    checkbox.addEventListener('change', async () => {
+        showWeight = checkbox.checked;
+        await loadHistory();
+    });
+    const swatch = document.createElement('span');
+    swatch.className = 'swatch';
+    swatch.style.backgroundColor = CHART_COLORS.weight;
+    label.append(checkbox, swatch, document.createTextNode('Körpergewicht'));
+    toggles.appendChild(label);
+}
+
 // --- Laden und Formulare ----------------------------------------------------
 
 async function loadAll() {
@@ -381,6 +781,7 @@ async function loadAll() {
     renderDishSelect();
     renderDishList();
     fillTargetsForm();
+    await loadHistory();
 }
 
 async function reload() {
@@ -529,4 +930,7 @@ function initTargetsForm() {
 initDayNav();
 initEntryForm();
 initTargetsForm();
+initHistoryControls();
+initQuickCapture();
+loadFeatures();
 reload();

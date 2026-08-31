@@ -3,7 +3,10 @@ package com.fherrmann.food.controller;
 import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DishRequest;
+import com.fherrmann.food.dto.Features;
 import com.fherrmann.food.dto.NewEntryRequest;
+import com.fherrmann.food.dto.QuickCaptureRequest;
+import com.fherrmann.food.dto.QuickCaptureResult;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
@@ -63,6 +66,21 @@ public class FoodController {
     public ResponseEntity<Void> deleteDish(@PathVariable String id) {
         service.deleteDish(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Welche optionalen Funktionen dieser Server anbietet. */
+    @GetMapping("/features")
+    public Features features() {
+        return new Features(service.quickCaptureAvailable());
+    }
+
+    /**
+     * Schnellerfassung: Freitext rein, fertiger Eintrag samt gespeichertem Gericht
+     * raus. Kann Sekunden dauern - die Oberflaeche zeigt solange einen Fortschritt.
+     */
+    @PostMapping("/quick-capture")
+    public ResponseEntity<QuickCaptureResult> quickCapture(@RequestBody QuickCaptureRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.quickCapture(request));
     }
 
     /** Logs an amount of a dish and returns the refreshed day. */

@@ -40,6 +40,84 @@ umschreiben, was letzten Monat auf dem Teller lag, und ein gelöschtes Gericht
 würde die Historie leerräumen. Die `dishId` bleibt als Rückverweis erhalten
 (für die Sortierung der Auswahlliste), gerechnet wird aber nie über sie.
 
+## Verlauf
+
+Unter der Tagesliste steht ein Balkendiagramm der letzten 14, 30 oder 90 Tage:
+kcal pro Tag gegen eine gestrichelte Ziellinie, Tage über dem Ziel in Rot.
+Tage ohne Eintrag bekommen keinen Balken — nichts eingetragen heißt „unbekannt",
+nicht „nichts gegessen".
+
+Optional lässt sich das **Körpergewicht** einblenden. Das kommt vom
+[Weight Tracker](https://github.com/Flexii2000/weight-app)
+(`GET /api/weight/last90`, per CORS für diese Seite freigegeben) und liegt als
+7-Tage-Mittel auf einer eigenen Achse rechts — neben Tagessummen an Kalorien ist
+die geglättete Linie die Aussage, die man sehen will; das Tagesgewicht schwankt
+um mehrere hundert Gramm aus Gründen, die mit dem Essen nichts zu tun haben.
+Geholt wird es erst beim Einblenden, nicht auf Verdacht.
+
+Die beiden Apps zeigen damit dieselbe Beziehung von zwei Seiten: hier die
+Gewichtskurve über den Kalorien, dort die Kalorien unter der Gewichtskurve.
+
+## Wischen zum Löschen
+
+Auf Touch-Geräten löscht ein Wisch nach links einen Eintrag der Tagesliste; ab
+70 px Zugweg löst das Loslassen aus, darunter federt die Zeile zurück. Der
+`×`-Knopf bleibt daneben bestehen — die Geste ist eine Abkürzung, kein Ersatz.
+
+Die Liste ist deshalb ein CSS-Grid und keine Tabelle: ein `<tr>` lässt sich für
+die Geste nur unzuverlässig verschieben, und der rote Grund darunter braucht
+einen eigenen Kasten. Die Spalten stehen trotzdem untereinander, weil Kopfzeile
+und Zeilen sich dasselbe Raster teilen.
+
+## Schnellerfassung
+
+Statt Formular ein Satz: „mittags einen großen Teller Spaghetti Bolognese".
+Daraus wird ein vollwertiger Eintrag samt gespeichertem Gericht, das danach in
+der Auswahlliste steht.
+
+Ausgewertet wird das **nicht über die API, sondern durch eine Claude-Code-Session
+auf dem Server** — dieselbe Bauart wie der tägliche Lauf des Finance Cockpits.
+Das Wrapper-Skript `run-agent.sh` startet `claude -p` in einem eigenen
+Arbeitsverzeichnis:
+
+```
+~/services/food-agent/
+  CLAUDE.md               Fachkontext: Einheiten, Regeln, Ausgabeformat
+  .claude/settings.json   Rechte: leere allow-Liste, alles andere verboten
+  run-agent.sh            startet die Session, Prompt über stdin
+```
+
+**Das Verzeichnis ist die Leitplanke, nicht der Prompt.** Claude Code lädt
+`CLAUDE.md` und `.claude/settings.json` aus dem Arbeitsverzeichnis; der Agent
+hat kein einziges Werkzeug freigeschaltet und kann damit nichts lesen, nichts
+schreiben und nichts ausführen — nur antworten. Das Verzeichnis liegt bewusst
+**außerhalb des Repos**, damit weder ein Deploy noch der Agent selbst die Rechte
+verschieben kann. Der Text des Nutzers geht in `<beschreibung>`-Klammern hinein
+und ist in `CLAUDE.md` ausdrücklich als Zitat und nicht als Anweisung markiert.
+
+Das Ergebnis läuft anschließend durch **dieselbe Validierung wie ein Eintrag von
+Hand** (`FoodService.addEntry`) — ein Modell, das sich um eine Zehnerpotenz
+vertut, kommt an der Grenze für kcal je 100 g nicht vorbei.
+
+Kann die Beschreibung nicht ausgerechnet werden, wird geschätzt statt
+abgebrochen; der Eintrag ist dann als geschätzt markiert und trägt einen Satz
+zur Herleitung, den die Oberfläche anzeigt. Eine Schätzung soll nicht wie eine
+abgelesene Zahl aussehen.
+
+| Property | Default | Bedeutung |
+|---|---|---|
+| `food.agent.command` (env `FOOD_AGENT_COMMAND`) | leer | Pfad zum Wrapper-Skript. Leer = Funktion aus; die Oberfläche fragt das über `/api/food/features` ab und blendet den Knopf gar nicht erst ein |
+| `food.agent.timeout-seconds` | `120` | danach wird die Session abgeräumt |
+| `FOOD_AGENT_MODEL` (im Wrapper) | `claude-sonnet-5` | Jede Anfrage ist eine frische Session, es entstehen also jedes Mal ~10k Tokens Systemkontext neu — das dominiert die Kosten (~4,5 ct pro Eintrag), nicht der Satz selbst. Mit `claude-haiku-4-5` etwa ein Achtel davon |
+
+### Voraussetzung auf dem Server
+
+Der Dienst läuft als Systemnutzer `food`. `claude` und seine Anmeldedaten liegen
+unter `/home/flexii` (Modus 750), und die systemd-Unit setzt
+`NoNewPrivileges=true` — `food` kann das Wrapper-Skript also **nicht ohne
+Weiteres starten**. `setup-food.sh` prüft das und lässt die Schnellerfassung
+sonst aus, statt einen Knopf anzubieten, der beim Drücken scheitert.
+
 ## Single Source of Truth
 
 Alle Daten liegen in **`data/food.json`** — Tagesziele, Gerichte und Einträge:
@@ -98,6 +176,8 @@ vier Zahlen noch zusammenpassen.
 | PUT     | `/api/food/targets`       | Tagesziele ändern                                       |
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne — liest die Weight-App        |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
+| GET     | `/api/food/features`      | welche optionalen Funktionen der Server anbietet         |
+| POST    | `/api/food/quick-capture` | Freitext → fertiger Eintrag samt gespeichertem Gericht    |
 
 POST-Body für einen Eintrag, entweder mit bekanntem Gericht:
 
@@ -181,6 +261,13 @@ document.cookie = 'fh_private=changeme-local-token; path=/';
 - **`FoodRepositoryTest`** — fehlende Datei ⇒ Defaults, Round-Trip.
 - **`FoodControllerTest`** — Cookie-Prüfung (403 ohne/mit falschem Cookie, 200 mit
   richtigem) und die CORS-Header genau auf den beiden freigegebenen Endpunkten.
+- **`ErrorStatusIT`** — läuft gegen einen echten Server statt gegen MockMvc, und
+  das ist der Punkt: löst ein Endpunkt eine Ausnahme aus, stellt der Container
+  intern nach `/error` zu. Dieser zweite Durchlauf ging ursprünglich an der
+  Cookie-Prüfung vorbei, der Kontext war leer, und Spring Security ersetzte
+  **jeden** Fehlerstatus durch ein 403. MockMvc führt diesen Durchlauf nicht aus
+  und sah davon nichts — die Slice-Tests waren grün, während live aus einem
+  „Menge fehlt" ein „nicht autorisiert" wurde.
 
 ## Konfiguration
 
@@ -204,6 +291,8 @@ com.fherrmann.food
   service/     FoodService                            (Regeln, kein HTTP)
   controller/  FoodController                         (HTTP)
   security/    SecurityConfig, PrivateCookieAuthFilter (geteilter Cookie + CORS)
+
+deploy/agent/  Vorlagen für das Agent-Arbeitsverzeichnis (siehe Schnellerfassung)
 ```
 
 ## Deployment

@@ -35,6 +35,21 @@ public class PrivateCookieAuthFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
+    /**
+     * Auch beim ERROR-Dispatch pruefen.
+     *
+     * <p>{@link OncePerRequestFilter} laesst den Filter dort per Vorgabe aus. Weil
+     * die Sitzung zustandslos ist, ist der Sicherheitskontext beim Rendern der
+     * Fehlerseite dann leer - Spring Security lehnt den internen Weiterlauf nach
+     * {@code /error} ab und ersetzt den echten Status durch 403. Aus einem 400
+     * ("Menge fehlt") wird so ein "nicht autorisiert", und zwar bei jedem
+     * Fehlerpfad der ganzen Anwendung.
+     */
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return false;
+    }
+
     private boolean hasValidCookie(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {

@@ -28,6 +28,11 @@ WEBROOT="/var/www/$DOMAIN"
 PORT=48180
 JAVA="/opt/java/jdk-25.0.1+8/bin/java"
 PRIVATE_MODE_CONF="/etc/nginx/conf.d/private-mode.conf"
+# Arbeitsverzeichnis der Schnellerfassungs-Session. Liegt bewusst NEBEN dem Repo
+# und nicht darin: dort stehen die Rechte des Agents, und weder ein Deploy noch
+# der Agent selbst sollen sie verschieben koennen (dasselbe Prinzip wie beim
+# Finance Cockpit).
+AGENT_DIR="$HOME/services/food-agent"
 
 step() { echo; echo "=== $* ==="; }
 fail() { echo "FEHLER: $*" >&2; exit 1; }
@@ -62,7 +67,7 @@ nginx_apply() {
 
 [[ $EUID -eq 0 ]] && fail "Bitte NICHT mit sudo starten - das Skript ruft sudo selbst auf, wo es noetig ist."
 
-step "1/9  Repo holen"
+step "1/10 Repo holen"
 if [[ -d "$BUILD_DIR/.git" ]]; then
     git -C "$BUILD_DIR" pull --ff-only
 else
@@ -70,14 +75,14 @@ else
     git clone "$REPO" "$BUILD_DIR"
 fi
 
-step "2/9  Jar bauen"
+step "2/10 Jar bauen"
 # Als flexii bauen, nicht als root: sonst gehoert der Gradle-Cache hinterher root.
 (cd "$BUILD_DIR" && JAVA_HOME="$(dirname "$(dirname "$JAVA")")" ./gradlew bootJar --quiet)
 JAR="$BUILD_DIR/build/libs/Food-0.0.1-SNAPSHOT.jar"
 [[ -f "$JAR" ]] || fail "$JAR wurde nicht gebaut."
 echo "    $(du -h "$JAR" | cut -f1)"
 
-step "3/9  Service-User und Verzeichnisse"
+step "3/10 Service-User und Verzeichnisse"
 if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
     sudo useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
     echo "    User $SERVICE_USER angelegt."
@@ -87,7 +92,7 @@ fi
 sudo mkdir -p "$APP_DIR/data"
 sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
 
-step "4/9  Token aus $PRIVATE_MODE_CONF uebernehmen"
+step "4/10 Token aus $PRIVATE_MODE_CONF uebernehmen"
 # Der Token steht genau einmal auf dem System - in der nginx-Map. Hier wird er
 # gelesen statt neu erfunden, damit Cookie und App-Pruefung nicht auseinander
 # laufen koennen.
@@ -100,10 +105,35 @@ sudo chown root:"$SERVICE_USER" /etc/food.env
 sudo chmod 640 /etc/food.env
 echo "    /etc/food.env geschrieben (Token ${TOKEN:0:6}…, $(echo -n "$TOKEN" | wc -c) Zeichen)."
 
-step "5/9  Jar installieren"
+step "5/10 Agent-Verzeichnis fuer die Schnellerfassung"
+mkdir -p "$AGENT_DIR/.claude"
+cp "$BUILD_DIR/deploy/agent/CLAUDE.md" "$AGENT_DIR/CLAUDE.md"
+cp "$BUILD_DIR/deploy/agent/run-agent.sh" "$AGENT_DIR/run-agent.sh"
+cp "$BUILD_DIR/deploy/agent/.claude/settings.json" "$AGENT_DIR/.claude/settings.json"
+chmod +x "$AGENT_DIR/run-agent.sh"
+echo "    $AGENT_DIR eingerichtet."
+
+# Der Dienstnutzer muss das Skript auch wirklich starten koennen. Kann er es
+# nicht (Standardfall: /home/flexii ist 750 und die Unit setzt
+# NoNewPrivileges=true), bleibt die Schnellerfassung aus, statt einen Knopf
+# anzubieten, der beim Druecken scheitert.
+if sudo -u "$SERVICE_USER" test -x "$AGENT_DIR/run-agent.sh" 2>/dev/null; then
+    AGENT_COMMAND="$AGENT_DIR/run-agent.sh"
+    echo "    Dienstnutzer $SERVICE_USER kann das Skript ausfuehren."
+else
+    AGENT_COMMAND=""
+    echo "    HINWEIS: $SERVICE_USER kommt an $AGENT_DIR/run-agent.sh nicht heran."
+    echo "             Schnellerfassung bleibt deaktiviert - siehe README,"
+    echo "             Abschnitt \"Schnellerfassung\"."
+fi
+
+step "6/10 Jar installieren"
 sudo install -o "$SERVICE_USER" -g "$SERVICE_USER" -m 644 "$JAR" "$APP_DIR/app.jar"
 
-step "6/9  systemd-Unit"
+# Erst hier, weil AGENT_COMMAND aus Schritt 5 kommt.
+printf 'FOOD_AGENT_COMMAND=%s\n' "$AGENT_COMMAND" | sudo tee -a /etc/food.env >/dev/null
+
+step "7/10 systemd-Unit"
 sudo cp "$BUILD_DIR/deploy/food.service" /etc/systemd/system/food.service
 sudo systemctl daemon-reload
 sudo systemctl enable food
@@ -118,7 +148,7 @@ sudo systemctl is-active --quiet food || {
 }
 echo "    food.service laeuft."
 
-step "7/9  nginx :80 + Zertifikat"
+step "8/10 nginx :80 + Zertifikat"
 sudo mkdir -p "$WEBROOT"
 sudo chown -R www-data:www-data "$WEBROOT"
 if sudo test -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem"; then
@@ -135,12 +165,12 @@ else
         || fail "certbot fehlgeschlagen. Haeufigste Gruende: DNS fuer $DOMAIN fehlt, oder der taegliche certbot-Lauf haelt gerade die Sperre (dann einfach dieses Skript nochmal starten)."
 fi
 
-step "8/9  nginx vollstaendig (mit Privat-Gate)"
+step "9/10 nginx vollstaendig (mit Privat-Gate)"
 sudo cp "$BUILD_DIR/deploy/nginx-food.fherrmann.com.conf" "/etc/nginx/sites-available/$DOMAIN"
 sudo ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
 nginx_apply
 
-step "9/9  Health-Check"
+step "10/10 Health-Check"
 # Ohne Cookie antwortet die App mit 403 - jeder HTTP-Status beweist, dass sie
 # bedient; laeuft sie nicht, scheitert curl und $code ist 000.
 for i in $(seq 1 30); do

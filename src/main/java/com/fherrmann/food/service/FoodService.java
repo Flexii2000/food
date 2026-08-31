@@ -4,6 +4,8 @@ import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.NewEntryRequest;
+import com.fherrmann.food.dto.QuickCaptureRequest;
+import com.fherrmann.food.dto.QuickCaptureResult;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
@@ -43,12 +45,22 @@ public class FoodService {
     private static final double MAX_MACRO_PER_100G = 100;
     private static final int MAX_NAME_LENGTH = 80;
 
+    /** Genug fuer eine Mahlzeitbeschreibung; alles darueber ist kein Tagebucheintrag mehr. */
+    private static final int MAX_QUICK_CAPTURE_LENGTH = 1000;
+
     private final FoodRepository repository;
+    private final NutritionExtractor extractor;
     private final Clock clock;
 
-    public FoodService(FoodRepository repository, Clock clock) {
+    public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock) {
         this.repository = repository;
+        this.extractor = extractor;
         this.clock = clock;
+    }
+
+    /** Ob die Schnellerfassung eingerichtet ist - siehe {@link NutritionExtractor}. */
+    public boolean quickCaptureAvailable() {
+        return extractor.isAvailable();
     }
 
     // --- reading ------------------------------------------------------------
@@ -184,6 +196,46 @@ public class FoodService {
 
         repository.save(new FoodData(data.targets(), dishes, entries));
         return day(date);
+    }
+
+    /**
+     * Macht aus einer Freitext-Beschreibung einen vollwertigen Eintrag samt
+     * gespeichertem Gericht.
+     *
+     * <p>Bewusst <b>nicht</b> {@code synchronized}: der Aufruf beim Sprachmodell
+     * dauert Sekunden, und solange muss niemand auf das Tagebuch warten. Geschrieben
+     * wird erst danach - ueber {@link #addEntry}, damit fuer diesen Weg genau
+     * dieselben Grenzen und dieselbe Gericht-Zusammenfuehrung gelten wie fuer die
+     * Eingabe von Hand. Ein Modell, das sich vertut, kommt damit an keiner
+     * Pruefung vorbei.
+     */
+    public QuickCaptureResult quickCapture(QuickCaptureRequest request) {
+        if (request == null || request.text() == null || request.text().isBlank()) {
+            throw badRequest("text is required");
+        }
+        String text = request.text().trim();
+        if (text.length() > MAX_QUICK_CAPTURE_LENGTH) {
+            throw badRequest("text must be at most " + MAX_QUICK_CAPTURE_LENGTH + " characters");
+        }
+        LocalDate date = request.date() == null ? today() : request.date();
+
+        FoodData data = repository.load();
+        ExtractedDish extracted = extractor.extract(text, data.targets(), data.dishes());
+
+        DaySummary day = addEntry(new NewEntryRequest(
+                date,
+                null,
+                new DishRequest(
+                        extracted.name(),
+                        extracted.kcal(),
+                        extracted.proteinG(),
+                        extracted.carbsG(),
+                        extracted.fatG(),
+                        extracted.portionG()),
+                extracted.grams()));
+
+        return new QuickCaptureResult(
+                day, extracted.name(), extracted.grams(), extracted.estimated(), extracted.note());
     }
 
     /** Removes one entry. Returns the refreshed day it belonged to. */
