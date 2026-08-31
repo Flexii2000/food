@@ -15,6 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -44,6 +45,10 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      * Liste langsamer wird.
      */
     private static final int MAX_KNOWN_DISHES = 60;
+
+    /** Feldnamen, die der Agent schaetzen kann - Rueckfallwert, siehe unten. */
+    private static final List<String> ALL_ESTIMATABLE = List.of(
+            "kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams", "portionG");
 
     private final List<String> command;
     private final long timeoutSeconds;
@@ -164,9 +169,25 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                 node.path("fatPer100g").asDouble(0),
                 node.path("grams").asDouble(0),
                 portion > 0 ? portion : null,
-                node.path("estimated").asBoolean(true),
+                readEstimatedFields(node.path("estimated")),
                 node.path("note").asString("").trim(),
                 readMeal(node.path("meal").asString("")));
+    }
+
+    /**
+     * Die Feldnamen, die der Agent als geschaetzt gemeldet hat.
+     *
+     * <p>Faellt das Feld aus oder kommt es in einer alten Form (ein blosses
+     * {@code true}) zurueck, gilt vorsichtshalber alles als geschaetzt - lieber
+     * eine abgelesene Zahl faelschlich als Schaetzung markieren als umgekehrt.
+     */
+    private static List<String> readEstimatedFields(JsonNode node) {
+        if (node.isArray()) {
+            List<String> fields = new ArrayList<>();
+            node.forEach(entry -> fields.add(entry.asString("")));
+            return fields;
+        }
+        return node.isMissingNode() || node.asBoolean(true) ? ALL_ESTIMATABLE : List.of();
     }
 
     /** Unbekanntes oder Fehlendes ergibt {@code null} - der Aufrufer entscheidet dann. */

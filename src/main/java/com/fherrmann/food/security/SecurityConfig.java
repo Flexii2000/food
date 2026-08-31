@@ -39,10 +39,12 @@ public class SecurityConfig {
     }
 
     /**
-     * CORS for the two endpoints other fherrmann.com subdomains read: the kcal overlay
-     * in the weight tracker's charts and the statusboard card. Credentials are allowed
-     * because the private-mode cookie has to travel with them - which forces an
-     * explicit origin list, since the spec forbids pairing credentials with {@code *}.
+     * CORS for the handful of endpoints other fherrmann.com subdomains read: the kcal
+     * overlay in the weight tracker's charts ({@code /daily} und {@code /targets} -
+     * die Werte und die Ziellinie dazu) und die Statusboard-Karte
+     * ({@code /status}). Credentials are allowed because the private-mode cookie has
+     * to travel with them - which forces an explicit origin list, since the spec
+     * forbids pairing credentials with {@code *}.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
@@ -53,6 +55,7 @@ public class SecurityConfig {
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/food/daily", config);
+        source.registerCorsConfiguration("/api/food/targets", config);
         source.registerCorsConfiguration("/api/food/status", config);
         return source;
     }

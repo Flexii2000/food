@@ -5,7 +5,7 @@ import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.NewEntryRequest;
 import com.fherrmann.food.dto.QuickCaptureRequest;
-import com.fherrmann.food.dto.QuickCaptureResult;
+import com.fherrmann.food.dto.QuickCapturePreview;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
@@ -44,7 +44,8 @@ class FoodServiceTest {
      */
     private static final class FakeExtractor implements NutritionExtractor {
         private ExtractedDish next = new ExtractedDish(
-                "Spaghetti Bolognese", 130, 7, 16, 4, 450, 400.0, true,
+                "Spaghetti Bolognese", 130, 7, 16, 4, 450, 400.0,
+                List.of("kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams"),
                 "Portion und Naehrwerte fuer einen grossen Teller geschaetzt.", Meal.LUNCH);
         private boolean available = true;
         private String seenText;
@@ -225,24 +226,34 @@ class FoodServiceTest {
     }
 
     @Test
-    void quickCaptureCreatesBothAnEntryAndAReusableDish() {
-        QuickCaptureResult result = service.quickCapture(
+    void quickCaptureOnlyProposesAndWritesNothing() {
+        QuickCapturePreview preview = service.quickCapture(
                 new QuickCaptureRequest(TODAY, "  mittags einen grossen Teller Spaghetti Bolognese  ", null));
 
         // Der Text geht getrimmt rein, so wie er getippt wurde.
         assertThat(extractor.seenText).isEqualTo("mittags einen grossen Teller Spaghetti Bolognese");
 
-        assertThat(result.dishName()).isEqualTo("Spaghetti Bolognese");
-        assertThat(result.grams()).isEqualTo(450.0);
-        assertThat(result.estimated()).isTrue();
-        assertThat(result.note()).contains("geschaetzt");
-        // 450 g mal 130 kcal je 100 g.
-        assertThat(result.day().consumed().kcal()).isEqualTo(585.0);
+        assertThat(preview.name()).isEqualTo("Spaghetti Bolognese");
+        assertThat(preview.grams()).isEqualTo(450.0);
+        assertThat(preview.known()).isFalse();
+        assertThat(preview.portionG()).isEqualTo(400.0);
+        assertThat(preview.meal()).isEqualTo(Meal.LUNCH);
 
-        // Und das Gericht steht danach zur Auswahl - genau darum geht es.
-        assertThat(service.dishes()).singleElement()
-                .extracting(Dish::name, Dish::portionG)
-                .containsExactly("Spaghetti Bolognese", 400.0);
+        // Und zwar wirklich nichts geschrieben - weder Eintrag noch Gericht.
+        assertThat(service.day(TODAY).entries()).isEmpty();
+        assertThat(service.dishes()).isEmpty();
+    }
+
+    @Test
+    void thePreviewSaysWhereEveryValueCameFrom() {
+        QuickCapturePreview preview = service.quickCapture(
+                new QuickCaptureRequest(TODAY, "ein Teller Bolognese", null));
+
+        // Der Fake-Extractor meldet alles ausser der Portionsgroesse als geschaetzt.
+        assertThat(preview.valueSources())
+                .containsEntry("kcal", "estimated")
+                .containsEntry("grams", "estimated")
+                .containsEntry("portionG", "read");
     }
 
     @Test
@@ -257,18 +268,37 @@ class FoodServiceTest {
     void theChosenSectionBeatsTheAgentsGuess() {
         // Der Fake-Extractor tippt auf LUNCH; wer aus dem Fruehstuecks-Abschnitt
         // kommt, hat aber schon gesagt, was er meint.
-        QuickCaptureResult result = service.quickCapture(
-                new QuickCaptureRequest(TODAY, "ein Teller Bolognese", Meal.BREAKFAST));
-        assertThat(result.meal()).isEqualTo(Meal.BREAKFAST);
-        assertThat(result.day().entries()).singleElement()
-                .extracting(e -> e.meal()).isEqualTo(Meal.BREAKFAST);
+        assertThat(service.quickCapture(
+                new QuickCaptureRequest(TODAY, "ein Teller Bolognese", Meal.BREAKFAST)).meal())
+                .isEqualTo(Meal.BREAKFAST);
     }
 
     @Test
     void withoutASectionTheAgentsGuessIsUsed() {
-        QuickCaptureResult result = service.quickCapture(
-                new QuickCaptureRequest(TODAY, "mittags ein Teller Bolognese", null));
-        assertThat(result.meal()).isEqualTo(Meal.LUNCH);
+        assertThat(service.quickCapture(
+                new QuickCaptureRequest(TODAY, "mittags ein Teller Bolognese", null)).meal())
+                .isEqualTo(Meal.LUNCH);
+    }
+
+    @Test
+    void aKnownDishKeepsItsStoredValues() {
+        // "Banane" liegt mit gepflegten Werten in der Liste; der Agent liefert
+        // denselben Namen, aber leicht andere Zahlen.
+        service.createDish(new DishRequest("Banane", 89.0, 1.1, 23.0, 0.3, 120.0));
+        extractor.next = new ExtractedDish(
+                "banane", 105.0, 2.0, 27.0, 0.5, 120, 150.0, List.of("kcalPer100g"), "geraten", Meal.SNACK);
+
+        QuickCapturePreview preview = service.quickCapture(
+                new QuickCaptureRequest(TODAY, "eine Banane", null));
+
+        // Vorgeschlagen werden die gespeicherten 89 kcal je 100 g, nicht die
+        // geratenen 105 - und die Herkunft sagt das auch.
+        assertThat(preview.known()).isTrue();
+        assertThat(preview.name()).isEqualTo("Banane");
+        assertThat(preview.dishId()).isNotNull();
+        assertThat(preview.per100g().kcal()).isEqualTo(89.0);
+        assertThat(preview.portionG()).isEqualTo(120.0);
+        assertThat(preview.valueSources()).containsEntry("kcal", "stored");
     }
 
     @Test
@@ -280,11 +310,21 @@ class FoodServiceTest {
     }
 
     @Test
-    void quickCaptureRunsThroughTheSameLimitsAsAManualEntry() {
-        // Ein Modell, das sich um eine Zehnerpotenz vertut, kommt an der Pruefung
-        // fuer Eintraege von Hand nicht vorbei.
-        extractor.next = new ExtractedDish("Unfug", 99_000, 7, 16, 4, 450, null, true, "", null);
-        assertThatThrownBy(() -> service.quickCapture(new QuickCaptureRequest(TODAY, "irgendwas", null)))
+    void aNonsensicalProposalIsStoppedWhenItIsConfirmed() {
+        // Der Vorschlag selbst schreibt nichts und darf deshalb auch Unfug
+        // anzeigen - spaetestens beim Bestaetigen greift dieselbe Pruefung wie
+        // bei einer Eingabe von Hand. Ein Modell, das sich um eine Zehnerpotenz
+        // vertut, kommt da nicht vorbei.
+        extractor.next = new ExtractedDish("Unfug", 99_000, 7, 16, 4, 450, null, List.of(), "", null);
+        QuickCapturePreview preview = service.quickCapture(
+                new QuickCaptureRequest(TODAY, "irgendwas", null));
+
+        assertThatThrownBy(() -> service.addEntry(new NewEntryRequest(
+                TODAY, null,
+                new DishRequest(preview.name(), preview.per100g().kcal(),
+                        preview.per100g().proteinG(), preview.per100g().carbsG(),
+                        preview.per100g().fatG(), preview.portionG()),
+                preview.grams(), preview.meal())))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("kcal");
     }

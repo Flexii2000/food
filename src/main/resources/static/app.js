@@ -9,6 +9,17 @@ const C = 2 * Math.PI * R;
 // 270° Bogen, beginnend unten links (7:30 Uhr) - die klassische Tacho-Form.
 const SWEEP = 0.75;
 
+// Wie weit ueber dem Ziel noch gelb ist; darueber rot. Vorgabe waren 100 kcal -
+// fuer die Makros in Gramm umgerechnet, damit ueberall dieselbe Toleranz gilt
+// und nicht drei willkuerliche Zahlen nebeneinander stehen:
+// Kohlenhydrate 4 kcal/g -> 25 g, Fett 9 kcal/g -> gut 11 g.
+const TOLERANCE = { kcal: 100, carbsG: 25, fatG: 11 };
+
+// Wie viel Luft der Tacho ueber dem Ziel laesst. Ohne diesen Aufschlag saesse
+// der Zielstrich am Bogenende und waere als Marke wertlos - man saehe nie, ob
+// man knapp oder weit darueber liegt.
+const GAUGE_HEADROOM = 1.25;
+
 const MACROS = [
     // Reihenfolge wie gewuenscht: Eiweiß, Fett, Kohlenhydrate.
     // `direction` sagt, in welche Richtung das Ziel gemeint ist - Eiweiß ist ein
@@ -106,13 +117,38 @@ async function fetchJson(url, options) {
 
 // --- Tachos -----------------------------------------------------------------
 
-function toneFor(ratio, direction) {
+/**
+ * Einfaerbung nach Verzehrtem, Ziel und Richtung des Ziels.
+ *
+ * <p>Bei einer Obergrenze faerbt erst das Ueberschreiten ein, und zwar knapp:
+ * bis zur Toleranz gelb, darueber rot. Vorher passiert nichts - ein Tacho, der
+ * schon bei 85 % warnt, warnt an jedem normalen Tag und wird dadurch bedeutungslos.
+ *
+ * <p>Bei einem Mindestwert (Eiweiß) gibt es keine Warnung: mehr ist dort mehr.
+ */
+function toneFor(consumed, target, direction, tolerance) {
     if (direction === 'floor') {
-        if (ratio >= 1) return 'good';
-        return ratio >= 0.8 ? 'near' : 'neutral';
+        if (consumed >= target) return 'good';
+        return target > 0 && consumed / target >= 0.8 ? 'near' : 'neutral';
     }
-    if (ratio > 1) return 'bad';
-    return ratio >= 0.85 ? 'warn' : 'neutral';
+    const over = consumed - target;
+    if (over <= 0) return 'neutral';
+    return over <= tolerance ? 'warn' : 'bad';
+}
+
+/**
+ * Der Zielstrich: eine kurze radiale Marke da, wo das Tagesziel sitzt. Weil der
+ * Bogen bis GAUGE_HEADROOM des Ziels reicht, liegt sie nicht am Ende, sondern
+ * ein Stueck davor - dadurch ist ablesbar, ob und wie weit man darueber ist.
+ */
+function gaugeTick() {
+    const deg = 135 + (1 / GAUGE_HEADROOM) * SWEEP * 360;
+    const rad = deg * Math.PI / 180;
+    const point = distance => [50 + distance * Math.cos(rad), 50 + distance * Math.sin(rad)];
+    const [x1, y1] = point(R - 7.5);
+    const [x2, y2] = point(R + 7.5);
+    return `<line class="gauge-tick" x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}"
+                  x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"></line>`;
 }
 
 function gauge({ ratio, tone, main, sub, mainSize = 20, subSize = 8 }) {
@@ -134,6 +170,7 @@ function gauge({ ratio, tone, main, sub, mainSize = 20, subSize = 8 }) {
             <circle class="gauge-track" cx="50" cy="50" r="${R}"
                     stroke-dasharray="${SWEEP * C} ${C}" transform="rotate(135 50 50)"></circle>
             ${value}
+            ${gaugeTick()}
             <text class="gauge-main" x="50" y="${mainY}" font-size="${mainSize}">${main}</text>
             <text class="gauge-sub" x="50" y="${mainY + mainSize * 0.62 + subSize * 0.6}"
                   font-size="${subSize}">${sub}</text>
@@ -152,12 +189,12 @@ function renderGauges() {
     macroRow.innerHTML = MACROS.map(macro => {
         const target = day.targets[macro.key] || 0;
         const consumed = day.consumed[macro.key] || 0;
-        const ratio = target > 0 ? consumed / target : 0;
+        const ratio = target > 0 ? consumed / (target * GAUGE_HEADROOM) : 0;
         return `
             <div class="macro">
                 ${gauge({
                     ratio,
-                    tone: toneFor(ratio, macro.direction),
+                    tone: toneFor(consumed, target, macro.direction, TOLERANCE[macro.key]),
                     main: num(consumed),
                     sub: `von ${num(target)} ${macro.unit}`,
                     mainSize: 22,
@@ -170,10 +207,10 @@ function renderGauges() {
     const target = day.targets.kcal || 0;
     const consumed = day.consumed.kcal || 0;
     const remaining = day.remaining.kcal;
-    const ratio = target > 0 ? consumed / target : 0;
+    const ratio = target > 0 ? consumed / (target * GAUGE_HEADROOM) : 0;
     kcalBox.innerHTML = gauge({
         ratio,
-        tone: toneFor(ratio, 'ceiling'),
+        tone: toneFor(consumed, target, 'ceiling', TOLERANCE.kcal),
         main: num(Math.abs(remaining)),
         sub: remaining < 0 ? 'kcal drüber' : 'kcal übrig',
         mainSize: 19,
@@ -571,6 +608,8 @@ function openAddDialog(meal) {
     document.getElementById('entry-msg').textContent = '';
     document.getElementById('in-grams').value = '';
     document.getElementById('in-dish').value = '';
+    proposal = null;
+    renderProposal();
     onDishChange();
 
     document.getElementById('add-dialog').showModal();
@@ -584,6 +623,67 @@ function initAddDialog() {
     dialog.addEventListener('click', event => {
         if (event.target === dialog) dialog.close();
     });
+}
+
+// Woher ein Wert stammt - der Kern des Vorschlags: eine geschaetzte Zahl von
+// einer abgelesenen zu unterscheiden ist die eine Pruefung, die der Nutzer
+// nicht selbst nachholen kann, wenn der Eintrag erst einmal steht.
+const VALUE_SOURCES = {
+    stored: { label: 'gespeichert', tone: 'stored' },
+    read: { label: 'aus dem Text', tone: 'read' },
+    estimated: { label: 'geschätzt', tone: 'estimated' },
+};
+
+const PROPOSAL_FIELDS = [
+    { key: 'kcal', label: 'kcal', unit: '', digits: 0 },
+    { key: 'proteinG', label: 'Eiweiß', unit: ' g', digits: 1 },
+    { key: 'carbsG', label: 'Kohlenhydrate', unit: ' g', digits: 1 },
+    { key: 'fatG', label: 'Fett', unit: ' g', digits: 1 },
+];
+
+// Der zuletzt geholte Vorschlag, bis er bestaetigt oder verworfen wird.
+let proposal = null;
+
+function renderProposal() {
+    const box = document.getElementById('proposal');
+    if (!proposal) {
+        box.hidden = true;
+        return;
+    }
+    box.hidden = false;
+
+    document.getElementById('proposal-name').textContent = proposal.name;
+
+    const badge = document.getElementById('proposal-badge');
+    badge.textContent = proposal.known ? 'Bekanntes Gericht' : 'Neues Gericht';
+    badge.className = `badge ${proposal.known ? 'badge-known' : 'badge-new'}`;
+
+    document.getElementById('proposal-note').textContent = proposal.note || '';
+
+    // Naehrwerte je 100 g, jeweils mit ihrer Herkunft.
+    const values = document.getElementById('proposal-values');
+    values.replaceChildren();
+    PROPOSAL_FIELDS.forEach(field => {
+        const source = VALUE_SOURCES[proposal.valueSources[field.key]] || VALUE_SOURCES.estimated;
+        const row = document.createElement('div');
+        row.className = 'proposal-value';
+        row.innerHTML = `
+            <span class="pv-label">${field.label}</span>
+            <span class="pv-number">${num(proposal.per100g[field.key], field.digits)}${field.unit}</span>
+            <span class="pv-source src-${source.tone}">${source.label}</span>`;
+        values.appendChild(row);
+    });
+
+    const unit = document.createElement('p');
+    unit.className = 'hint';
+    unit.textContent = 'Angaben je 100 g'
+        + (proposal.portionG ? ` · übliche Portion ${num(proposal.portionG)} g` : '');
+    values.appendChild(unit);
+
+    const grams = document.getElementById('proposal-grams');
+    grams.value = Math.round(proposal.grams);
+    const gramsSource = VALUE_SOURCES[proposal.valueSources.grams] || VALUE_SOURCES.estimated;
+    grams.parentElement.dataset.source = gramsSource.label;
 }
 
 function initQuickCapture() {
@@ -601,6 +701,8 @@ function initQuickCapture() {
         text.value = '';
         msg.textContent = '';
         msg.className = 'form-msg';
+        proposal = null;
+        renderProposal();
     };
 
     open.addEventListener('click', () => {
@@ -619,27 +721,21 @@ function initQuickCapture() {
         }
         msg.textContent = '';
         msg.className = 'form-msg';
+        proposal = null;
+        renderProposal();
         progress.hidden = false;
         // Waehrend der Auswertung nichts anfassbar lassen: der Aufruf dauert
-        // Sekunden, und ein zweites Absenden wuerde denselben Teller doppelt buchen.
+        // Sekunden, und ein zweites Absenden startet eine zweite Session.
         submit.disabled = true;
         cancel.disabled = true;
         text.disabled = true;
         try {
-            const result = await fetchJson('/api/food/quick-capture', {
+            proposal = await fetchJson('/api/food/quick-capture', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ date: currentDate, text: value, meal: addMeal }),
             });
-            close();
-            document.getElementById('add-dialog').close();
-            await loadAll();
-            // Nach dem Neuladen anzeigen, was verstanden wurde - eine Schaetzung
-            // soll nicht wie eine abgelesene Zahl dastehen.
-            // Nach dem Schliessen des Fensters braucht die Rueckmeldung einen
-            // Platz auf der Seite selbst.
-            showDayMessage(`${result.dishName}, ${num(result.grams)} g eingetragen.`
-                + (result.estimated ? ` Geschätzt: ${result.note}` : ''));
+            renderProposal();
         } catch (err) {
             msg.textContent = `Fehler: ${err.message}`;
             msg.className = 'form-msg err';
@@ -652,11 +748,60 @@ function initQuickCapture() {
     };
 
     submit.addEventListener('click', run);
-    // Strg/Cmd+Enter sendet ab - im Textfeld ist Enter ein Zeilenumbruch.
+    // Strg/Cmd+Enter wertet aus - im Textfeld ist Enter ein Zeilenumbruch.
     text.addEventListener('keydown', event => {
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
             event.preventDefault();
             run();
+        }
+    });
+
+    document.getElementById('proposal-discard').addEventListener('click', () => {
+        proposal = null;
+        renderProposal();
+        text.focus();
+    });
+
+    document.getElementById('proposal-confirm').addEventListener('click', async () => {
+        if (!proposal) return;
+        const msgEl = document.getElementById('proposal-msg');
+        const grams = parseFloat(document.getElementById('proposal-grams').value);
+        if (!(grams > 0)) {
+            msgEl.textContent = 'Bitte eine Menge angeben.';
+            msgEl.className = 'form-msg err';
+            return;
+        }
+        // Bestaetigt wird ueber den normalen Eintrags-Endpunkt: derselbe Weg und
+        // dieselben Grenzen wie bei einer Eingabe von Hand. Ist das Gericht
+        // bekannt, geht nur seine Id mit - dann bleiben die gepflegten Werte,
+        // wie sie sind.
+        const body = { date: currentDate, grams, meal: proposal.meal };
+        if (proposal.known) {
+            body.dishId = proposal.dishId;
+        } else {
+            body.dish = {
+                name: proposal.name,
+                kcal: proposal.per100g.kcal,
+                proteinG: proposal.per100g.proteinG,
+                carbsG: proposal.per100g.carbsG,
+                fatG: proposal.per100g.fatG,
+                portionG: proposal.portionG,
+            };
+        }
+        try {
+            await fetchJson('/api/food/entries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const name = proposal.name;
+            close();
+            document.getElementById('add-dialog').close();
+            showDayMessage(`${name}, ${num(grams)} g eingetragen.`);
+            await loadAll();
+        } catch (err) {
+            msgEl.textContent = `Fehler: ${err.message}`;
+            msgEl.className = 'form-msg err';
         }
     });
 }

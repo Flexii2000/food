@@ -5,7 +5,7 @@ import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.NewEntryRequest;
 import com.fherrmann.food.dto.QuickCaptureRequest;
-import com.fherrmann.food.dto.QuickCaptureResult;
+import com.fherrmann.food.dto.QuickCapturePreview;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
@@ -26,6 +26,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -205,17 +206,19 @@ public class FoodService {
     }
 
     /**
-     * Macht aus einer Freitext-Beschreibung einen vollwertigen Eintrag samt
-     * gespeichertem Gericht.
+     * Wertet eine Freitext-Beschreibung aus und macht daraus einen <b>Vorschlag</b>.
      *
-     * <p>Bewusst <b>nicht</b> {@code synchronized}: der Aufruf beim Sprachmodell
-     * dauert Sekunden, und solange muss niemand auf das Tagebuch warten. Geschrieben
-     * wird erst danach - ueber {@link #addEntry}, damit fuer diesen Weg genau
-     * dieselben Grenzen und dieselbe Gericht-Zusammenfuehrung gelten wie fuer die
-     * Eingabe von Hand. Ein Modell, das sich vertut, kommt damit an keiner
-     * Pruefung vorbei.
+     * <p>Schreibt bewusst nichts: eine geschaetzte Zahl, die ungefragt im Tagebuch
+     * landet, sieht dort hinterher genauso aus wie eine abgelesene. Der Nutzer
+     * bekommt den Vorschlag samt Herkunft je Wert zu sehen und bestaetigt ihn ueber
+     * den normalen Eintrags-Endpunkt - der damit weiterhin der einzige Weg ist, auf
+     * dem etwas ins Tagebuch kommt, mit denselben Grenzen wie bei Eingabe von Hand.
+     *
+     * <p>Nicht {@code synchronized}: der Aufruf beim Sprachmodell dauert Sekunden,
+     * und solange muss niemand auf das Tagebuch warten. Zu warten gaebe es hier
+     * ohnehin nichts - es wird ja nicht geschrieben.
      */
-    public QuickCaptureResult quickCapture(QuickCaptureRequest request) {
+    public QuickCapturePreview quickCapture(QuickCaptureRequest request) {
         if (request == null || request.text() == null || request.text().isBlank()) {
             throw badRequest("text is required");
         }
@@ -223,7 +226,6 @@ public class FoodService {
         if (text.length() > MAX_QUICK_CAPTURE_LENGTH) {
             throw badRequest("text must be at most " + MAX_QUICK_CAPTURE_LENGTH + " characters");
         }
-        LocalDate date = request.date() == null ? today() : request.date();
 
         FoodData data = repository.load();
         ExtractedDish extracted = extractor.extract(text, data.targets(), data.dishes());
@@ -233,22 +235,58 @@ public class FoodService {
         // meint. Nur ohne Abschnitt zaehlt, was der Text hergibt.
         Meal meal = request.meal() != null ? request.meal() : extracted.meal();
 
-        DaySummary day = addEntry(new NewEntryRequest(
-                date,
-                null,
-                new DishRequest(
-                        extracted.name(),
-                        extracted.kcal(),
-                        extracted.proteinG(),
-                        extracted.carbsG(),
-                        extracted.fatG(),
-                        extracted.portionG()),
-                extracted.grams(),
-                meal));
+        // Kennt die Liste das Gericht schon, gewinnt die gespeicherte Fassung.
+        // Der Agent bekommt sie zwar als Kontext mit und soll sie uebernehmen,
+        // aber "soll" ist keine Garantie: raet er beim Bananen-Naehrwert um ein
+        // paar Kalorien daneben, wuerde ein Upsert ueber den Namen die von Hand
+        // gepflegten Werte ueberschreiben.
+        Optional<Dish> known = data.dishes().stream()
+                .filter(d -> d.name().equalsIgnoreCase(extracted.name().trim()))
+                .findFirst();
 
-        return new QuickCaptureResult(
-                day, extracted.name(), extracted.grams(), extracted.estimated(),
-                extracted.note(), meal == null ? Meal.SNACK : meal);
+        Nutrients per100g = known.map(Dish::per100g).orElseGet(
+                () -> new Nutrients(extracted.kcal(), extracted.proteinG(),
+                        extracted.carbsG(), extracted.fatG()));
+
+        return new QuickCapturePreview(
+                known.isPresent(),
+                known.map(Dish::id).orElse(null),
+                known.map(Dish::name).orElseGet(() -> extracted.name().trim()),
+                per100g.rounded(),
+                known.map(Dish::portionG).orElseGet(extracted::portionG),
+                extracted.grams(),
+                meal == null ? Meal.SNACK : meal,
+                valueSources(extracted, known.isPresent()),
+                known.isPresent()
+                        ? "Bekanntes Gericht erkannt - die gespeicherten Nährwerte werden übernommen."
+                        : extracted.note());
+    }
+
+    /**
+     * Woher jeder einzelne Wert stammt. Genau das ist es, was der Nutzer vor dem
+     * Bestaetigen sehen muss: eine geschaetzte Zahl von einer abgelesenen zu
+     * unterscheiden, ist die eine Pruefung, die er selbst nicht nachholen kann.
+     */
+    private static Map<String, String> valueSources(ExtractedDish extracted, boolean known) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        BiConsumer<String, String> put = (field, agentField) -> sources.put(field,
+                extracted.estimatedFields().contains(agentField) ? "estimated" : "read");
+
+        if (known) {
+            // Aus der Gerichteliste, also weder geraten noch aus dem Text.
+            List.of("kcal", "proteinG", "carbsG", "fatG", "portionG")
+                    .forEach(field -> sources.put(field, "stored"));
+        } else {
+            put.accept("kcal", "kcalPer100g");
+            put.accept("proteinG", "proteinPer100g");
+            put.accept("carbsG", "carbsPer100g");
+            put.accept("fatG", "fatPer100g");
+            put.accept("portionG", "portionG");
+        }
+        // Die Menge steht im Text oder eben nicht - unabhaengig davon, ob das
+        // Gericht bekannt ist.
+        put.accept("grams", "grams");
+        return sources;
     }
 
     /** Removes one entry. Returns the refreshed day it belonged to. */

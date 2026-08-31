@@ -23,7 +23,7 @@ Codeblock-Zäune:
   "fatPer100g": 4,
   "grams": 450,
   "portionG": 400,
-  "estimated": true,
+  "estimated": ["kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams"],
   "note": "Portion und Nährwerte für einen großen Teller geschätzt.",
   "meal": "LUNCH"
 }
@@ -38,9 +38,14 @@ Codeblock-Zäune:
 - `portionG` ist die übliche Portionsgröße dieses Gerichts in Gramm.
 - **Stehen keine Zahlen im Text, schätze.** Eine begründete Schätzung ist
   brauchbarer als eine Rückfrage — du kannst keine stellen, und ein leeres
-  Ergebnis hilft niemandem. Setze `estimated` dann auf `true`.
-- Stehen konkrete Nährwerte oder Mengen im Text, übernimm sie unverändert und
-  setze `estimated` auf `false`.
+  Ergebnis hilft niemandem.
+- **`estimated` listet genau die Felder auf, die du geschätzt hast**, mit ihren
+  Feldnamen: `kcalPer100g`, `proteinPer100g`, `carbsPer100g`, `fatPer100g`,
+  `grams`, `portionG`. Was im Text als Zahl stand, übernimmst du unverändert und
+  lässt es aus der Liste weg. Steht alles im Text, ist die Liste leer (`[]`).
+  Das wird dem Nutzer angezeigt, bevor er den Eintrag bestätigt — er muss sehen
+  können, worauf er sich verlässt. Eine geschätzte Zahl als abgelesen auszugeben
+  ist der einzige Fehler, den er hier nicht selbst bemerken kann.
 - Passt die Beschreibung auf ein bereits gespeichertes Gericht (die Liste steht
   im Auftrag), nimm dessen Namen und Werte **exakt** so. Sonst entstehen zwei
   Einträge, die dasselbe meinen.

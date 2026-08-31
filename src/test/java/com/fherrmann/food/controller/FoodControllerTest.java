@@ -121,6 +121,17 @@ class FoodControllerTest {
 
     @Test
     @WithMockUser
+    void targetsAreReadableFromTheWeightTrackersOrigin() throws Exception {
+        when(service.targets()).thenReturn(new Nutrients(2300, 200, 235.5, 62));
+        // Die Weight-App zeichnet die kcal-Ziellinie in ihre Charts und braucht
+        // dafuer denselben Wert, gegen den hier gerechnet wird.
+        mockMvc.perform(get("/api/food/targets").header("Origin", "https://weight.fherrmann.com"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://weight.fherrmann.com"));
+    }
+
+    @Test
+    @WithMockUser
     void dayIsNotReadableCrossSite() throws Exception {
         when(service.day(any())).thenReturn(emptyDay());
         // Nur /daily und /status sind fuer andere Origins freigegeben - der Rest der

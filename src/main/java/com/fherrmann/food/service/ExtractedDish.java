@@ -2,6 +2,8 @@ package com.fherrmann.food.service;
 
 import com.fherrmann.food.model.Meal;
 
+import java.util.List;
+
 /**
  * Das Ergebnis der Freitext-Auswertung, bevor daraus ein Gericht und ein
  * Eintrag werden. Naehrwerte immer je 100 g - das ist die Basis, in der die App
@@ -14,7 +16,8 @@ import com.fherrmann.food.model.Meal;
  * @param fatG      Fett je 100 g
  * @param grams     wie viel davon gegessen wurde
  * @param portionG  uebliche Portionsgroesse, die am Gericht hinterlegt wird
- * @param estimated true, wenn die Werte geschaetzt statt aus dem Text abgelesen sind
+ * @param estimatedFields Feldnamen, die geschaetzt statt aus dem Text abgelesen
+ *                  wurden. Leer heisst: alles stand als Zahl im Text
  * @param note      ein Satz zur Herleitung, auf Deutsch
  * @param meal      die aus dem Text erschlossene Mahlzeit, oder {@code null}
  */
@@ -26,7 +29,11 @@ public record ExtractedDish(
         double fatG,
         double grams,
         Double portionG,
-        boolean estimated,
+        List<String> estimatedFields,
         String note,
         Meal meal) {
+
+    public ExtractedDish {
+        estimatedFields = estimatedFields == null ? List.of() : List.copyOf(estimatedFields);
+    }
 }

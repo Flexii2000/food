@@ -96,13 +96,34 @@
                       placeholder="z. B. einen großen Teller Spaghetti Bolognese und einen Becher Skyr"></textarea>
         </label>
         <div class="quick-actions">
-            <button type="button" id="quick-submit">Auswerten und eintragen</button>
+            <button type="button" id="quick-submit">Auswerten</button>
             <button type="button" id="quick-cancel" class="ghost">Zurück</button>
             <span id="quick-msg" class="form-msg"></span>
         </div>
         <div class="quick-progress" id="quick-progress" hidden>
             <div class="progress-bar"><div class="progress-fill"></div></div>
             <span class="progress-label">Gericht wird verarbeitet …</span>
+        </div>
+
+        <!-- Der Vorschlag. Eingetragen wird erst nach dem Bestaetigen: eine
+             geschaetzte Zahl, die ungefragt im Tagebuch landet, sieht dort
+             hinterher genauso aus wie eine abgelesene. -->
+        <div class="proposal" id="proposal" hidden>
+            <div class="proposal-head">
+                <span class="proposal-name" id="proposal-name"></span>
+                <span class="badge" id="proposal-badge"></span>
+            </div>
+            <p class="proposal-note" id="proposal-note"></p>
+            <div class="proposal-values" id="proposal-values"></div>
+            <label class="proposal-grams">Menge (g)
+                <input type="number" id="proposal-grams" step="1" min="1" max="20000">
+            </label>
+            <div class="quick-actions">
+                <button type="button" id="proposal-confirm">Übernehmen</button>
+                <button type="button" id="proposal-discard" class="ghost">Verwerfen</button>
+                <span id="proposal-msg" class="form-msg"></span>
+            </div>
+            <p class="hint">Nährwerte lassen sich hinterher unter „Gerichte verwalten" korrigieren.</p>
         </div>
     </div>
 

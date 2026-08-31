@@ -16,6 +16,12 @@
 
 * { box-sizing: border-box; }
 
+/* Ohne !important verliert das hidden-Attribut gegen jede Regel, die einen
+   eigenen display-Wert setzt - .quick-progress und .portion-shortcuts stehen
+   beide auf flex und blieben dadurch sichtbar, obwohl das JavaScript sie
+   ausgeblendet hatte. */
+[hidden] { display: none !important; }
+
 body {
     margin: 0;
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -105,6 +111,16 @@ main {
     stroke-width: 9;
     stroke-linecap: round;
     transition: stroke-dasharray 0.35s ease, stroke 0.2s ease;
+}
+
+/* Der Zielstrich liegt ueber Bahn und Wert - er ist die Bezugsgroesse, nicht
+   Teil der Fuellung, und muss auch dann sichtbar bleiben, wenn der Bogen ihn
+   schon ueberholt hat. */
+.gauge-tick {
+    stroke: var(--text);
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0.85;
 }
 
 .gauge-main, .gauge-sub {
@@ -471,6 +487,74 @@ details[open] > summary { margin-bottom: 0.8rem; }
 }
 
 .progress-label { color: var(--muted); font-size: 0.85rem; }
+
+/* --- Vorschlag der Schnellerfassung ------------------------------------- */
+
+.proposal {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.proposal-head {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+}
+
+.proposal-name { font-size: 1.05rem; font-weight: 600; }
+
+.badge {
+    font-size: 0.72rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+}
+
+/* Ein bekanntes Gericht bringt gepflegte Werte mit, ein neues nicht - der
+   Unterschied entscheidet, wie genau man hinsehen sollte. */
+.badge-known { border-color: var(--good); color: var(--good); }
+.badge-new { border-color: var(--accent); color: var(--accent); }
+
+.proposal-note { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); }
+
+.proposal-values { margin-top: 0.8rem; }
+
+.proposal-value {
+    display: grid;
+    grid-template-columns: 1fr 6rem 8rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+}
+
+.pv-label { color: var(--muted); }
+.pv-number { text-align: right; font-variant-numeric: tabular-nums; }
+
+.pv-source {
+    font-size: 0.75rem;
+    text-align: right;
+}
+
+/* Drei Herkuenfte, drei Toene: gespeichert ist belastbar, aus dem Text stand
+   wirklich so da, geschaetzt ist geraten - und genau das soll auffallen. */
+.src-stored { color: var(--good); }
+.src-read { color: var(--muted); }
+.src-estimated { color: var(--warn); }
+
+.proposal-grams { margin-top: 0.9rem; max-width: 10rem; }
+
+/* Die Menge ist der Wert, den man am ehesten korrigieren will - deshalb als
+   einziger im Vorschlag ein Eingabefeld, mit seiner Herkunft daneben. */
+.proposal-grams::after {
+    content: attr(data-source);
+    font-size: 0.75rem;
+    color: var(--warn);
+}
 
 /* --- Verlaufsgraph ------------------------------------------------------ */
 

@@ -6,7 +6,7 @@ import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.Features;
 import com.fherrmann.food.dto.NewEntryRequest;
 import com.fherrmann.food.dto.QuickCaptureRequest;
-import com.fherrmann.food.dto.QuickCaptureResult;
+import com.fherrmann.food.dto.QuickCapturePreview;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
@@ -75,12 +75,13 @@ public class FoodController {
     }
 
     /**
-     * Schnellerfassung: Freitext rein, fertiger Eintrag samt gespeichertem Gericht
-     * raus. Kann Sekunden dauern - die Oberflaeche zeigt solange einen Fortschritt.
+     * Schnellerfassung: Freitext rein, <b>Vorschlag</b> raus. Schreibt nichts - der
+     * Nutzer bestaetigt ihn anschliessend ueber {@link #addEntry}. Kann Sekunden
+     * dauern, die Oberflaeche zeigt solange einen Fortschritt.
      */
     @PostMapping("/quick-capture")
-    public ResponseEntity<QuickCaptureResult> quickCapture(@RequestBody QuickCaptureRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.quickCapture(request));
+    public QuickCapturePreview quickCapture(@RequestBody QuickCaptureRequest request) {
+        return service.quickCapture(request);
     }
 
     /** Logs an amount of a dish and returns the refreshed day. */

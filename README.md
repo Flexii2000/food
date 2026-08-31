@@ -15,10 +15,28 @@ Oben drei kleine Tachos nebeneinander für die **bisher verzehrten** Makros
 (Eiweiß, Fett, Kohlenhydrate), darunter ein großer Tacho für die **noch übrigen**
 kcal, daneben als bloße Zahl der verzehrte Wert.
 
-Die Einfärbung folgt der Richtung, in die das jeweilige Ziel gemeint ist:
-Eiweiß ist ein **Mindestwert** (ab dem Ziel grün), kcal, Fett und Kohlenhydrate
-sind **Obergrenzen** (ab 85 % gelb, darüber rot). Eine gemeinsame Skala für alle
-vier würde die Hälfte der Fälle falsch herum bewerten.
+Auf jedem Tacho sitzt ein **Zielstrich**. Der Bogen reicht bis 125 % des Ziels,
+die Marke also nicht ans Ende — sonst wäre nicht ablesbar, ob man knapp oder
+weit darüber liegt.
+
+Die Einfärbung folgt der Richtung, in die das jeweilige Ziel gemeint ist. Eiweiß
+ist ein **Mindestwert**: ab dem Ziel grün, darüber bleibt es grün — mehr ist
+mehr. kcal, Fett und Kohlenhydrate sind **Obergrenzen** und färben erst beim
+Überschreiten, dann aber knapp:
+
+| | gelb ab | rot ab |
+|---|---|---|
+| kcal | +1 | +101 |
+| Kohlenhydrate | +0,1 g | +25,1 g |
+| Fett | +0,1 g | +11,1 g |
+
+Die Toleranz ist überall dieselbe, nur in der jeweiligen Einheit: 100 kcal, für
+die Makros über ihren Brennwert umgerechnet (Kohlenhydrate 4 kcal/g → 25 g,
+Fett 9 kcal/g → gut 11 g). Drei frei gewählte Zahlen nebeneinander wären
+willkürlich.
+
+Unterhalb des Ziels passiert bewusst **nichts**: ein Tacho, der schon bei 85 %
+warnt, warnt an jedem normalen Tag und wird dadurch bedeutungslos.
 
 ## Gramm-basiert, mit optionaler Portion
 
@@ -99,6 +117,28 @@ und Zeilen sich dasselbe Raster teilen.
 Statt Formular ein Satz: „mittags einen großen Teller Spaghetti Bolognese".
 Daraus wird ein vollwertiger Eintrag samt gespeichertem Gericht, das danach in
 der Auswahlliste steht.
+
+**Eingetragen wird erst nach dem Bestätigen.** Die Auswertung macht einen
+Vorschlag und schreibt nichts: eine geschätzte Zahl, die ungefragt im Tagebuch
+landet, sieht dort hinterher genauso aus wie eine abgelesene. Der Vorschlag
+zeigt je Wert, woher er stammt —
+
+- **gespeichert** (grün) — aus der Gerichteliste übernommen
+- **aus dem Text** (grau) — stand als Zahl in der Beschreibung
+- **geschätzt** (gelb) — geraten
+
+— und dazu, ob ein **neues Gericht** angelegt oder ein **bekanntes erkannt**
+wurde. Die Menge ist als Einziges direkt korrigierbar; sie ist der Wert, den man
+am ehesten anpassen will. Bestätigt wird über denselben Eintrags-Endpunkt wie
+bei einer Eingabe von Hand — mit denselben Grenzen, sodass ein Modell, das sich
+um eine Zehnerpotenz vertut, nicht durchkommt.
+
+Ist das Gericht schon gespeichert, **gewinnt die gespeicherte Fassung**. Der
+Agent bekommt die Liste zwar als Kontext und soll sie übernehmen, aber „soll"
+ist keine Garantie: rät er beim Bananen-Nährwert ein paar Kalorien daneben,
+würde ein Upsert über den Namen die von Hand gepflegten Werte überschreiben. Vom
+Modell kommt in dem Fall nur noch die Menge — das Einzige, was im Text steht und
+nicht in der Datenbank.
 
 Ausgewertet wird das **nicht über die API, sondern durch eine Claude-Code-Session
 auf dem Server** — dieselbe Bauart wie der tägliche Lauf des Finance Cockpits.
@@ -202,7 +242,7 @@ vier Zahlen noch zusammenpassen.
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne — liest die Weight-App        |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
 | GET     | `/api/food/features`      | welche optionalen Funktionen der Server anbietet         |
-| POST    | `/api/food/quick-capture` | Freitext → fertiger Eintrag samt gespeichertem Gericht    |
+| POST    | `/api/food/quick-capture` | Freitext → **Vorschlag** (schreibt nichts)               |
 
 POST-Body für einen Eintrag, entweder mit bekanntem Gericht:
 
