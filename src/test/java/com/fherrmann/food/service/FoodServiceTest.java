@@ -150,6 +150,20 @@ class FoodServiceTest {
     }
 
     @Test
+    void aDishCreatedButNeverLoggedCanBeLogged() {
+        // Ueber die Verwaltung angelegte Gerichte haben kein lastUsedOn. Sie
+        // danach unter demselben Namen einzutragen lief in eine NPE, weil
+        // findFirst() ueber einem null-Element ausloest.
+        service.createDish(skyr());
+
+        DaySummary day = service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.BREAKFAST));
+
+        assertThat(day.consumed().kcal()).isEqualTo(240.0);
+        assertThat(service.dishes()).singleElement()
+                .extracting(Dish::lastUsedOn).isEqualTo(TODAY);
+    }
+
+    @Test
     void renamingOntoAnExistingNameIsRejected() {
         service.createDish(skyr());
         service.createDish(new DishRequest("Haferflocken", 370.0, 13.0, 59.0, 7.0, null));

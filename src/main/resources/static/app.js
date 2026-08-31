@@ -429,34 +429,18 @@ function escapeHtml(value) {
 
 const NEW_DISH = '__new__';
 
-function renderDishSelect() {
-    const select = document.getElementById('in-dish');
-    const previous = select.value;
-    select.replaceChildren();
+const NEW_DISH_REQUIRED = ['nd-name', 'nd-kcal', 'nd-protein', 'nd-carbs', 'nd-fat'];
 
-    const placeholder = new Option('– bitte wählen –', '');
-    placeholder.disabled = true;
-    select.appendChild(placeholder);
-
-    dishes.forEach(dish => {
-        const suffix = dish.portionG ? ` · Portion ${num(dish.portionG)} g` : '';
-        select.appendChild(new Option(
-            `${dish.name} (${num(dish.per100g.kcal)} kcal/100 g${suffix})`, dish.id));
-    });
-    select.appendChild(new Option('＋ Neues Gericht …', NEW_DISH));
-
-    select.value = dishes.some(d => d.id === previous) || previous === NEW_DISH ? previous : '';
-    if (!select.value) placeholder.selected = true;
-    onDishChange();
-}
-
+/** Das gerade gewaehlte Gericht, oder null (nichts gewaehlt / neues Gericht). */
 function selectedDish() {
     const id = document.getElementById('in-dish').value;
     return dishes.find(d => d.id === id) || null;
 }
 
-const NEW_DISH_REQUIRED = ['nd-name', 'nd-kcal', 'nd-protein', 'nd-carbs', 'nd-fat'];
-
+/**
+ * Haelt die Anzeige an der Auswahl: Naehrwert-Hinweis, Portionsknoepfe und der
+ * Block fuer ein neues Gericht haengen alle daran.
+ */
 function onDishChange() {
     const value = document.getElementById('in-dish').value;
     const isNew = value === NEW_DISH;
@@ -493,8 +477,7 @@ function onDishChange() {
                 button.className = 'ghost';
                 button.textContent = label;
                 button.addEventListener('click', () => {
-                    document.getElementById('in-grams').value =
-                        Math.round(dish.portionG * factor);
+                    document.getElementById('in-grams').value = Math.round(dish.portionG * factor);
                 });
                 shortcuts.appendChild(button);
             });
@@ -504,6 +487,140 @@ function onDishChange() {
     } else {
         shortcuts.hidden = true;
     }
+}
+
+// Der gerade hervorgehobene Eintrag in der Auswahlliste, fuer die Pfeiltasten.
+let dishHighlight = -1;
+
+/**
+ * Die gefilterte Auswahlliste. Gesucht wird ueber Teilzeichenketten, damit
+ * "bol" auch "Spaghetti Bolognese" findet - eine Liste, die nur den Anfang
+ * vergleicht, zwingt zum Erraten der Schreibweise.
+ */
+function dishMatches(query) {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return dishes;
+    return dishes.filter(d => d.name.toLowerCase().includes(needle));
+}
+
+function renderDishOptions() {
+    const box = document.getElementById('dish-options');
+    const search = document.getElementById('dish-search');
+    const matches = dishMatches(search.value);
+    box.replaceChildren();
+    dishHighlight = -1;
+
+    matches.forEach((dish, index) => {
+        const suffix = dish.portionG ? ` · Portion ${num(dish.portionG)} g` : '';
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.className = 'dish-option';
+        option.role = 'option';
+        option.dataset.index = String(index);
+        option.innerHTML = `<span class="do-name">${escapeHtml(dish.name)}</span>`
+            + `<span class="do-meta">${num(dish.per100g.kcal)} kcal/100 g${escapeHtml(suffix)}</span>`;
+        // mousedown statt click: click kaeme erst nach dem blur des Suchfeldes,
+        // und das schliesst die Liste, bevor die Auswahl ankommt.
+        option.addEventListener('mousedown', event => {
+            event.preventDefault();
+            chooseDish(dish.id, dish.name);
+        });
+        box.appendChild(option);
+    });
+
+    if (!matches.length) {
+        const empty = document.createElement('p');
+        empty.className = 'hint dish-option-empty';
+        empty.textContent = 'Kein Gericht gefunden.';
+        box.appendChild(empty);
+    }
+
+    const create = document.createElement('button');
+    create.type = 'button';
+    create.className = 'dish-option dish-option-new';
+    create.textContent = '＋ Neues Gericht …';
+    create.addEventListener('mousedown', event => {
+        event.preventDefault();
+        chooseDish(NEW_DISH, search.value.trim());
+    });
+    box.appendChild(create);
+}
+
+function openDishOptions() {
+    renderDishOptions();
+    const box = document.getElementById('dish-options');
+    box.hidden = false;
+    document.getElementById('dish-search').setAttribute('aria-expanded', 'true');
+}
+
+function closeDishOptions() {
+    document.getElementById('dish-options').hidden = true;
+    document.getElementById('dish-search').setAttribute('aria-expanded', 'false');
+    dishHighlight = -1;
+}
+
+/** Uebernimmt eine Auswahl ins versteckte Feld und schliesst die Liste. */
+function chooseDish(id, label) {
+    document.getElementById('in-dish').value = id;
+    const search = document.getElementById('dish-search');
+    // Bei "Neues Gericht" bleibt der getippte Text stehen - meist ist er schon
+    // der Name, den das neue Gericht bekommen soll.
+    search.value = id === NEW_DISH ? label : label;
+    if (id === NEW_DISH && label) {
+        document.getElementById('nd-name').value = label;
+    }
+    closeDishOptions();
+    onDishChange();
+}
+
+function moveDishHighlight(step) {
+    const options = [...document.querySelectorAll('#dish-options .dish-option')];
+    if (!options.length) return;
+    dishHighlight = (dishHighlight + step + options.length) % options.length;
+    options.forEach((option, index) =>
+        option.classList.toggle('highlighted', index === dishHighlight));
+    options[dishHighlight].scrollIntoView({ block: 'nearest' });
+}
+
+function initDishSearch() {
+    const search = document.getElementById('dish-search');
+
+    search.addEventListener('focus', openDishOptions);
+    search.addEventListener('input', () => {
+        // Tippen verwirft eine frueher getroffene Auswahl - sonst zeigte das Feld
+        // einen Suchtext, waehrend im Hintergrund noch ein anderes Gericht steht.
+        document.getElementById('in-dish').value = '';
+        openDishOptions();
+        onDishChange();
+    });
+    search.addEventListener('blur', () => setTimeout(closeDishOptions, 0));
+
+    search.addEventListener('keydown', event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (document.getElementById('dish-options').hidden) openDishOptions();
+            moveDishHighlight(event.key === 'ArrowDown' ? 1 : -1);
+            return;
+        }
+        if (event.key === 'Escape') {
+            closeDishOptions();
+            return;
+        }
+        if (event.key === 'Enter') {
+            const options = [...document.querySelectorAll('#dish-options .dish-option')];
+            if (dishHighlight >= 0 && options[dishHighlight]) {
+                event.preventDefault();
+                options[dishHighlight].dispatchEvent(new MouseEvent('mousedown'));
+            }
+        }
+    });
+}
+
+/** Setzt Suchfeld und Auswahl zurueck - beim Oeffnen des Eingabefensters. */
+function resetDishSearch() {
+    document.getElementById('in-dish').value = '';
+    document.getElementById('dish-search').value = '';
+    closeDishOptions();
 }
 
 function renderDishList() {
@@ -607,7 +724,7 @@ function openAddDialog(meal) {
     document.getElementById('quick-msg').textContent = '';
     document.getElementById('entry-msg').textContent = '';
     document.getElementById('in-grams').value = '';
-    document.getElementById('in-dish').value = '';
+    resetDishSearch();
     proposal = null;
     renderProposal();
     onDishChange();
@@ -632,6 +749,9 @@ const VALUE_SOURCES = {
     stored: { label: 'gespeichert', tone: 'stored' },
     read: { label: 'aus dem Text', tone: 'read' },
     estimated: { label: 'geschätzt', tone: 'estimated' },
+    // Sobald von Hand korrigiert wurde, stimmt die urspruengliche Herkunft nicht
+    // mehr - dann steht das auch dran.
+    edited: { label: 'geändert', tone: 'edited' },
 };
 
 const PROPOSAL_FIELDS = [
@@ -644,6 +764,24 @@ const PROPOSAL_FIELDS = [
 // Der zuletzt geholte Vorschlag, bis er bestaetigt oder verworfen wird.
 let proposal = null;
 
+/**
+ * Laesst das Textfeld mit seinem Inhalt wachsen.
+ *
+ * <p>Erst auf `auto` zuruecksetzen, dann auf die Scrollhoehe: ohne den ersten
+ * Schritt kennt scrollHeight nur die aktuelle, schon vergroesserte Hoehe und das
+ * Feld koennte nie wieder schrumpfen. Die Obergrenze steht im CSS (max-height),
+ * ab dort scrollt das Feld wieder.
+ */
+function autoGrow(field) {
+    field.style.height = 'auto';
+    field.style.height = `${field.scrollHeight}px`;
+}
+
+function proposalFieldIds() {
+    return ['proposal-name', 'proposal-portion', 'proposal-grams',
+        ...PROPOSAL_FIELDS.map(f => `pf-${f.key}`)];
+}
+
 function renderProposal() {
     const box = document.getElementById('proposal');
     if (!proposal) {
@@ -652,7 +790,7 @@ function renderProposal() {
     }
     box.hidden = false;
 
-    document.getElementById('proposal-name').textContent = proposal.name;
+    document.getElementById('proposal-name').value = proposal.name;
 
     const badge = document.getElementById('proposal-badge');
     badge.textContent = proposal.known ? 'Bekanntes Gericht' : 'Neues Gericht';
@@ -660,30 +798,102 @@ function renderProposal() {
 
     document.getElementById('proposal-note').textContent = proposal.note || '';
 
-    // Naehrwerte je 100 g, jeweils mit ihrer Herkunft.
+    // Naehrwerte je 100 g als Eingabefelder, jeweils mit ihrer Herkunft daneben.
     const values = document.getElementById('proposal-values');
     values.replaceChildren();
     PROPOSAL_FIELDS.forEach(field => {
         const source = VALUE_SOURCES[proposal.valueSources[field.key]] || VALUE_SOURCES.estimated;
         const row = document.createElement('div');
         row.className = 'proposal-value';
-        row.innerHTML = `
-            <span class="pv-label">${field.label}</span>
-            <span class="pv-number">${num(proposal.per100g[field.key], field.digits)}${field.unit}</span>
-            <span class="pv-source src-${source.tone}">${source.label}</span>`;
+
+        const label = document.createElement('label');
+        label.className = 'pv-label';
+        label.htmlFor = `pf-${field.key}`;
+        label.textContent = field.label + (field.unit ? ` (${field.unit.trim()})` : '');
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.id = `pf-${field.key}`;
+        input.step = field.digits ? '0.1' : '1';
+        input.min = '0';
+        input.max = field.key === 'kcal' ? '1000' : '100';
+        input.value = round(proposal.per100g[field.key], field.digits);
+
+        const mark = document.createElement('span');
+        mark.className = `pv-source src-${source.tone}`;
+        mark.textContent = source.label;
+        markEditedOnInput(input, mark);
+
+        row.append(label, input, mark);
         values.appendChild(row);
     });
 
-    const unit = document.createElement('p');
-    unit.className = 'hint';
-    unit.textContent = 'Angaben je 100 g'
-        + (proposal.portionG ? ` · übliche Portion ${num(proposal.portionG)} g` : '');
-    values.appendChild(unit);
+    document.getElementById('proposal-unit').textContent =
+        'Angaben je 100 g. Was der Agent geraten hat, lässt sich hier direkt korrigieren.';
 
     const grams = document.getElementById('proposal-grams');
     grams.value = Math.round(proposal.grams);
+    const gramsMark = document.getElementById('proposal-grams-source');
     const gramsSource = VALUE_SOURCES[proposal.valueSources.grams] || VALUE_SOURCES.estimated;
-    grams.parentElement.dataset.source = gramsSource.label;
+    gramsMark.className = `pv-source src-${gramsSource.tone}`;
+    gramsMark.textContent = gramsSource.label;
+    markEditedOnInput(grams, gramsMark);
+
+    document.getElementById('proposal-portion').value =
+        proposal.portionG == null ? '' : Math.round(proposal.portionG);
+}
+
+/** Sobald jemand tippt, ist die Herkunft "geaendert" - und bleibt es. */
+function markEditedOnInput(input, mark) {
+    input.addEventListener('input', () => {
+        mark.className = 'pv-source src-edited';
+        mark.textContent = VALUE_SOURCES.edited.label;
+    }, { once: true });
+}
+
+function round(value, digits) {
+    if (value == null) return '';
+    const factor = 10 ** (digits || 0);
+    return Math.round(value * factor) / factor;
+}
+
+/**
+ * Was beim Bestaetigen gesendet wird.
+ *
+ * <p>Ein bekanntes Gericht wird nur dann ueber seine Id gebucht, wenn Name und
+ * Naehrwerte unveraendert sind - dann bleibt die gepflegte Fassung unangetastet.
+ * Hat jemand etwas korrigiert, ist genau das die Aussage: die neuen Werte gehen
+ * als Gericht mit und aktualisieren den Eintrag in der Liste.
+ */
+function proposalPayload() {
+    const name = document.getElementById('proposal-name').value.trim();
+    const per100g = {};
+    PROPOSAL_FIELDS.forEach(field => {
+        per100g[field.key] = parseFloat(document.getElementById(`pf-${field.key}`).value);
+    });
+    const portionRaw = document.getElementById('proposal-portion').value;
+    const portionG = portionRaw === '' ? null : parseFloat(portionRaw);
+
+    const unchanged = proposal.known
+        && name.toLowerCase() === proposal.name.toLowerCase()
+        && PROPOSAL_FIELDS.every(field =>
+            Math.abs(per100g[field.key] - proposal.per100g[field.key]) < 0.05)
+        && (portionG ?? null) === (proposal.portionG == null ? null : Math.round(proposal.portionG));
+
+    if (unchanged) {
+        return { dishId: proposal.dishId, name };
+    }
+    return {
+        name,
+        dish: {
+            name,
+            kcal: per100g.kcal,
+            proteinG: per100g.proteinG,
+            carbsG: per100g.carbsG,
+            fatG: per100g.fatG,
+            portionG,
+        },
+    };
 }
 
 function initQuickCapture() {
@@ -703,13 +913,19 @@ function initQuickCapture() {
         msg.className = 'form-msg';
         proposal = null;
         renderProposal();
+        autoGrow(text);
     };
 
     open.addEventListener('click', () => {
         panel.hidden = false;
         open.hidden = true;
+        // Erst messen, wenn das Feld auch sichtbar ist - in einem
+        // ausgeblendeten Element ist scrollHeight 0.
+        autoGrow(text);
         text.focus();
     });
+
+    text.addEventListener('input', () => autoGrow(text));
     cancel.addEventListener('click', close);
 
     const run = async () => {
@@ -748,12 +964,14 @@ function initQuickCapture() {
     };
 
     submit.addEventListener('click', run);
-    // Strg/Cmd+Enter wertet aus - im Textfeld ist Enter ein Zeilenumbruch.
+    // Enter wertet aus, Shift+Enter macht eine neue Zeile. Umgekehrt waere es
+    // die Vorgabe eines Textfeldes - hier tippt aber niemand Absaetze, sondern
+    // einen Satz, und der soll mit Enter losgehen. Strg/Cmd+Enter bleibt
+    // zusaetzlich moeglich, weil es in Eingabefeldern verbreitet ist.
     text.addEventListener('keydown', event => {
-        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault();
-            run();
-        }
+        if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+        event.preventDefault();
+        run();
     });
 
     document.getElementById('proposal-discard').addEventListener('click', () => {
@@ -771,22 +989,19 @@ function initQuickCapture() {
             msgEl.className = 'form-msg err';
             return;
         }
+        const payload = proposalPayload();
+        if (!payload.name) {
+            msgEl.textContent = 'Bitte einen Namen angeben.';
+            msgEl.className = 'form-msg err';
+            return;
+        }
         // Bestaetigt wird ueber den normalen Eintrags-Endpunkt: derselbe Weg und
-        // dieselben Grenzen wie bei einer Eingabe von Hand. Ist das Gericht
-        // bekannt, geht nur seine Id mit - dann bleiben die gepflegten Werte,
-        // wie sie sind.
+        // dieselben Grenzen wie bei einer Eingabe von Hand.
         const body = { date: currentDate, grams, meal: proposal.meal };
-        if (proposal.known) {
-            body.dishId = proposal.dishId;
+        if (payload.dishId) {
+            body.dishId = payload.dishId;
         } else {
-            body.dish = {
-                name: proposal.name,
-                kcal: proposal.per100g.kcal,
-                proteinG: proposal.per100g.proteinG,
-                carbsG: proposal.per100g.carbsG,
-                fatG: proposal.per100g.fatG,
-                portionG: proposal.portionG,
-            };
+            body.dish = payload.dish;
         }
         try {
             await fetchJson('/api/food/entries', {
@@ -794,7 +1009,7 @@ function initQuickCapture() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            const name = proposal.name;
+            const name = payload.name;
             close();
             document.getElementById('add-dialog').close();
             showDayMessage(`${name}, ${num(grams)} g eingetragen.`);
@@ -851,6 +1066,12 @@ async function loadHistory() {
     renderHistory(from, to);
 }
 
+/** Steht an dieser Stelle ein Wert, dessen Nachbarn beide fehlen? */
+function isolatedPoint(values, index) {
+    if (values[index] == null) return false;
+    return values[index - 1] == null && values[index + 1] == null;
+}
+
 function renderHistory(from, to) {
     document.getElementById('history-heading').textContent = `Verlauf – letzte ${historyDays} Tage`;
 
@@ -867,14 +1088,30 @@ function renderHistory(from, to) {
 
     const datasets = [
         {
-            type: 'bar',
+            type: 'line',
             label: 'kcal',
             data: kcal,
-            // Ueber dem Ziel rot: die Ziellinie allein sagt es zwar auch, aber
-            // ein Balken, der sie ueberragt, faellt schneller auf als ein
-            // Schnittpunkt.
-            backgroundColor: kcal.map(v => (v != null && v > target ? CHART_COLORS.kcalOver : CHART_COLORS.kcal)),
-            borderWidth: 0,
+            borderColor: CHART_COLORS.kcal,
+            backgroundColor: CHART_COLORS.kcal,
+            borderWidth: 2.5,
+            // Abschnitte oberhalb des Ziels rot: die Ziellinie allein sagt es
+            // zwar auch, aber eine Kurve, die dort die Farbe wechselt, faellt
+            // schneller auf als ein Schnittpunkt.
+            segment: {
+                borderColor: ctx => (ctx.p0.parsed.y > target || ctx.p1.parsed.y > target
+                    ? CHART_COLORS.kcalOver
+                    : CHART_COLORS.kcal),
+            },
+            // NICHT ueberbruecken: Tage ohne Eintrag sind unbekannt, nicht null.
+            spanGaps: false,
+            // Ein Tag, der allein zwischen zwei Luecken steht, hat kein
+            // Liniensegment und waere sonst unsichtbar.
+            pointRadius: ctx => (isolatedPoint(kcal, ctx.dataIndex) ? 3 : 0),
+            pointBackgroundColor: ctx => (kcal[ctx.dataIndex] > target
+                ? CHART_COLORS.kcalOver
+                : CHART_COLORS.kcal),
+            pointHoverRadius: 4,
+            tension: 0.25,
             yAxisID: 'y',
             order: 10,
         },
@@ -998,7 +1235,6 @@ async function loadAll() {
     document.getElementById('day-date').value = currentDate;
     renderGauges();
     renderEntries();
-    renderDishSelect();
     renderDishList();
     fillTargetsForm();
     await loadHistory();
@@ -1056,8 +1292,6 @@ function initEntryForm() {
     const grams = document.getElementById('in-grams');
     const msg = document.getElementById('entry-msg');
 
-    select.addEventListener('change', onDishChange);
-
     form.addEventListener('submit', async event => {
         event.preventDefault();
         msg.textContent = '';
@@ -1092,7 +1326,7 @@ function initEntryForm() {
             grams.value = '';
             ['nd-name', 'nd-kcal', 'nd-protein', 'nd-carbs', 'nd-fat', 'nd-portion']
                 .forEach(id => { document.getElementById(id).value = ''; });
-            select.value = '';
+            resetDishSearch();
             document.getElementById('add-dialog').close();
             showDayMessage('Eingetragen.');
             await loadAll();
@@ -1170,6 +1404,7 @@ initEntryForm();
 initTargetsForm();
 initHistoryControls();
 initAddDialog();
+initDishSearch();
 initQuickCapture();
 loadFeatures();
 reload();

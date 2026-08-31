@@ -408,10 +408,15 @@ public class FoodService {
         String targetId = id != null
                 ? id
                 : byName.map(Dish::id).orElseGet(() -> UUID.randomUUID().toString());
+        // Erst findFirst, dann map - nicht umgekehrt: findFirst() auf einem
+        // Stream, dessen erstes Element null ist, wirft eine NPE. Genau das
+        // passierte bei einem Gericht, das ueber die Verwaltung angelegt, aber
+        // noch nie eingetragen wurde: dessen lastUsedOn ist null, und jeder
+        // Versuch, es zu buchen, endete in einem 500er.
         LocalDate lastUsed = dishes.stream()
                 .filter(d -> d.id().equals(targetId))
-                .map(Dish::lastUsedOn)
                 .findFirst()
+                .map(Dish::lastUsedOn)
                 .orElse(null);
 
         Dish dish = new Dish(targetId, name, per100g, portionG, lastUsed);

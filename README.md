@@ -60,10 +60,13 @@ würde die Historie leerräumen. Die `dishId` bleibt als Rückverweis erhalten
 
 ## Verlauf
 
-Unter der Tagesliste steht ein Balkendiagramm der letzten 14, 30 oder 90 Tage:
-kcal pro Tag gegen eine gestrichelte Ziellinie, Tage über dem Ziel in Rot.
-Tage ohne Eintrag bekommen keinen Balken — nichts eingetragen heißt „unbekannt",
-nicht „nichts gegessen".
+Unter der Tagesliste steht der Verlauf der letzten 14, 30 oder 90 Tage: kcal pro
+Tag als Kurve gegen eine gestrichelte Ziellinie, Abschnitte über dem Ziel in
+Rot. Lücken werden **nicht überbrückt** — nichts eingetragen heißt „unbekannt",
+nicht „nichts gegessen", und eine durchgezogene Linie würde über solche Tage
+hinweg behaupten, dazwischen sei etwas erfasst worden. Ein Tag, der allein
+zwischen zwei Lücken steht, bekommt einen Punkt; er hätte sonst kein
+Liniensegment und wäre unsichtbar.
 
 Optional lässt sich das **Körpergewicht** einblenden. Das kommt vom
 [Weight Tracker](https://github.com/Flexii2000/weight-app)
@@ -101,6 +104,19 @@ Die Werte in den Zeilen beschriften sich selbst (`240 kcal · E 24 · KH 18 ·
 F 4`). Ohne das bräuchte jeder Abschnitt eine eigene Kopfzeile — viermal
 dieselben fünf Wörter, nur damit „24 18 4" zuzuordnen ist.
 
+## Gericht suchen
+
+Das Feld „Gericht" ist ein Suchfeld, keine Auswahlliste: mit ein paar Dutzend
+Gerichten wird ein `<select>` zum Scrollmarathon. Gesucht wird über
+Teilzeichenketten — „bol" findet auch „Spaghetti Bolognese"; eine Liste, die nur
+den Anfang vergleicht, zwingt zum Erraten der Schreibweise. Pfeiltasten und
+Enter wählen aus, ganz unten steht immer „＋ Neues Gericht …", das den getippten
+Text gleich als Namen übernimmt.
+
+Die Trefferliste steht **im Fluss** und schwebt nicht: das Eingabefenster
+scrollt, und eine absolut positionierte Liste würde an dessen Rand
+abgeschnitten.
+
 ## Wischen zum Löschen
 
 Auf Touch-Geräten löscht ein Wisch nach links einen Eintrag der Tagesliste; ab
@@ -128,10 +144,19 @@ zeigt je Wert, woher er stammt —
 - **geschätzt** (gelb) — geraten
 
 — und dazu, ob ein **neues Gericht** angelegt oder ein **bekanntes erkannt**
-wurde. Die Menge ist als Einziges direkt korrigierbar; sie ist der Wert, den man
-am ehesten anpassen will. Bestätigt wird über denselben Eintrags-Endpunkt wie
-bei einer Eingabe von Hand — mit denselben Grenzen, sodass ein Modell, das sich
-um eine Zehnerpotenz vertut, nicht durchkommt.
+wurde. **Alles ist editierbar**, Name eingeschlossen — was der Agent geraten hat,
+korrigiert man hier und nicht hinterher an zweiter Stelle. Sobald ein Wert
+angefasst wurde, steht neben ihm „geändert" statt der ursprünglichen Herkunft.
+
+Bestätigt wird über denselben Eintrags-Endpunkt wie bei einer Eingabe von Hand —
+mit denselben Grenzen, sodass ein Modell, das sich um eine Zehnerpotenz vertut,
+nicht durchkommt. Ein bekanntes Gericht wird nur dann über seine Id gebucht,
+wenn Name und Nährwerte unverändert sind; hat jemand etwas korrigiert, ist genau
+das die Aussage, und die neuen Werte aktualisieren den Eintrag in der Liste.
+
+Im Textfeld sendet **Enter** ab, **Shift+Enter** macht eine neue Zeile — umgekehrt
+wäre es die Vorgabe eines Textfeldes, aber hier tippt niemand Absätze. Das Feld
+wächst mit dem Text mit.
 
 Ist das Gericht schon gespeichert, **gewinnt die gespeicherte Fassung**. Der
 Agent bekommt die Liste zwar als Kontext und soll sie übernehmen, aber „soll"

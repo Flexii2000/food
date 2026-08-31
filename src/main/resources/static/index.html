@@ -110,28 +110,48 @@
              hinterher genauso aus wie eine abgelesene. -->
         <div class="proposal" id="proposal" hidden>
             <div class="proposal-head">
-                <span class="proposal-name" id="proposal-name"></span>
+                <input type="text" id="proposal-name" class="proposal-name"
+                       maxlength="80" aria-label="Name des Gerichts">
                 <span class="badge" id="proposal-badge"></span>
             </div>
             <p class="proposal-note" id="proposal-note"></p>
+
+            <!-- Alles editierbar. Der Vorschlag ist ein Vorschlag: was der Agent
+                 geraten hat, korrigiert man hier, nicht hinterher an zwei
+                 Stellen. Rechts steht je Wert, woher er stammt. -->
             <div class="proposal-values" id="proposal-values"></div>
-            <label class="proposal-grams">Menge (g)
-                <input type="number" id="proposal-grams" step="1" min="1" max="20000">
-            </label>
+            <p class="hint" id="proposal-unit"></p>
+
+            <div class="proposal-amounts">
+                <label>Menge (g)
+                    <input type="number" id="proposal-grams" step="1" min="1" max="20000">
+                </label>
+                <span class="pv-source" id="proposal-grams-source"></span>
+                <label>Portion (g, optional)
+                    <input type="number" id="proposal-portion" step="1" min="1" max="20000">
+                </label>
+            </div>
+
             <div class="quick-actions">
                 <button type="button" id="proposal-confirm">Übernehmen</button>
                 <button type="button" id="proposal-discard" class="ghost">Verwerfen</button>
                 <span id="proposal-msg" class="form-msg"></span>
             </div>
-            <p class="hint">Nährwerte lassen sich hinterher unter „Gerichte verwalten" korrigieren.</p>
         </div>
     </div>
 
     <form id="entry-form">
+        <!-- Suchfeld statt Auswahlliste: mit ein paar Dutzend Gerichten wird
+             ein <select> zum Scrollmarathon. Das sichtbare Feld traegt den
+             Suchtext, die eigentliche Auswahl steht im versteckten Feld. -->
         <label class="grow">Gericht
-            <select id="in-dish" required>
-                <option value="">– bitte wählen –</option>
-            </select>
+            <div class="combo">
+                <input type="text" id="dish-search" autocomplete="off" role="combobox"
+                       aria-expanded="false" aria-controls="dish-options" aria-autocomplete="list"
+                       placeholder="tippen zum Suchen …">
+                <input type="hidden" id="in-dish">
+                <div class="dish-options" id="dish-options" role="listbox" hidden></div>
+            </div>
         </label>
         <label>Menge (g)
             <input type="number" id="in-grams" step="1" min="1" max="20000" required>
