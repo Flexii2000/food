@@ -11,6 +11,7 @@ import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.FoodData;
 import com.fherrmann.food.model.FoodEntry;
+import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.repository.FoodRepository;
 import org.springframework.http.HttpStatus;
@@ -192,6 +193,11 @@ public class FoodService {
                 dish.name(),
                 grams,
                 dish.per100g(),
+                // Ohne Angabe unter Snacks: die Tagesliste zeigt vier feste
+                // Abschnitte, und ein Eintrag ohne Zuordnung waere sonst nur im
+                // Restfach fuer Altbestand sichtbar - das waere eine Aussage
+                // ueber das Alter des Eintrags, nicht ueber die Mahlzeit.
+                request.meal() == null ? Meal.SNACK : request.meal(),
                 Instant.now(clock)));
 
         repository.save(new FoodData(data.targets(), dishes, entries));
@@ -222,6 +228,11 @@ public class FoodService {
         FoodData data = repository.load();
         ExtractedDish extracted = extractor.extract(text, data.targets(), data.dishes());
 
+        // Der Abschnitt, aus dem die Eingabe kam, schlaegt die Vermutung des
+        // Agents: wer auf "+" beim Mittagessen tippt, hat schon gesagt, was er
+        // meint. Nur ohne Abschnitt zaehlt, was der Text hergibt.
+        Meal meal = request.meal() != null ? request.meal() : extracted.meal();
+
         DaySummary day = addEntry(new NewEntryRequest(
                 date,
                 null,
@@ -232,10 +243,12 @@ public class FoodService {
                         extracted.carbsG(),
                         extracted.fatG(),
                         extracted.portionG()),
-                extracted.grams()));
+                extracted.grams(),
+                meal));
 
         return new QuickCaptureResult(
-                day, extracted.name(), extracted.grams(), extracted.estimated(), extracted.note());
+                day, extracted.name(), extracted.grams(), extracted.estimated(),
+                extracted.note(), meal == null ? Meal.SNACK : meal);
     }
 
     /** Removes one entry. Returns the refreshed day it belonged to. */

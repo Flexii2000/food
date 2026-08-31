@@ -58,6 +58,31 @@ Geholt wird es erst beim Einblenden, nicht auf Verdacht.
 Die beiden Apps zeigen damit dieselbe Beziehung von zwei Seiten: hier die
 Gewichtskurve über den Kalorien, dort die Kalorien unter der Gewichtskurve.
 
+## Nach Mahlzeiten getrennt
+
+Die Tagesliste zerfällt in **Frühstück, Mittagessen, Abendessen, Snacks**, jeder
+Abschnitt mit eigener kcal-Teilsumme und eigenem `+`. Eine durchlaufende Liste
+wird über den Tag hinweg unübersichtlich, und die Frage „war das Frühstück zu
+groß?" lässt sich an einer Gesamtsumme nicht beantworten.
+
+Der `+` öffnet ein Fenster, das schon auf diese Mahlzeit gestellt ist — darin
+beide Eingabewege, die Schnellerfassung und das Formular. Dadurch gibt es keinen
+dauerhaft sichtbaren Formularblock mehr, der oben Platz wegnimmt.
+
+Am Eintrag ist die Zuordnung `null`-erlaubt: Einträge aus der Zeit vor dieser
+Aufteilung haben keine, und sie nachträglich zu raten hieße, eine Vermutung wie
+eine Angabe aussehen zu lassen. Sie stehen in einem Abschnitt **Ohne
+Zuordnung**, der nur erscheint, solange es solche gibt.
+
+Kam eine Schnellerfassung aus einem bestimmten Abschnitt, schlägt der die
+Vermutung des Agents: wer auf `+` beim Mittagessen tippt, hat schon gesagt, was
+er meint. Nur ohne Abschnitt zählt, was der Text hergibt („mittags einen Teller
+…" → `LUNCH`).
+
+Die Werte in den Zeilen beschriften sich selbst (`240 kcal · E 24 · KH 18 ·
+F 4`). Ohne das bräuchte jeder Abschnitt eine eigene Kopfzeile — viermal
+dieselben fünf Wörter, nur damit „24 18 4" zuzuordnen ist.
+
 ## Wischen zum Löschen
 
 Auf Touch-Geräten löscht ein Wisch nach links einen Eintrag der Tagesliste; ab
@@ -170,7 +195,7 @@ vier Zahlen noch zusammenpassen.
 | POST    | `/api/food/dishes`        | Gericht anlegen                                         |
 | PUT     | `/api/food/dishes/{id}`   | Gericht korrigieren                                     |
 | DELETE  | `/api/food/dishes/{id}`   | Gericht vergessen (Einträge bleiben)                    |
-| POST    | `/api/food/entries`       | Menge eintragen                                         |
+| POST    | `/api/food/entries`       | Menge eintragen (mit `meal`)                            |
 | DELETE  | `/api/food/entries/{id}`  | Eintrag löschen                                         |
 | GET     | `/api/food/targets`       | Tagesziele                                              |
 | PUT     | `/api/food/targets`       | Tagesziele ändern                                       |
@@ -182,8 +207,11 @@ vier Zahlen noch zusammenpassen.
 POST-Body für einen Eintrag, entweder mit bekanntem Gericht:
 
 ```json
-{ "date": "2026-08-31", "dishId": "9b2e3707-…", "grams": 300 }
+{ "date": "2026-08-31", "dishId": "9b2e3707-…", "grams": 300, "meal": "LUNCH" }
 ```
+
+`meal` ist einer von `BREAKFAST`, `LUNCH`, `DINNER`, `SNACK`; ohne Angabe landet
+der Eintrag unter `SNACK` — sonst wäre er in keinem der vier Abschnitte sichtbar.
 
 …oder mit einem neuen, das dabei gleich gespeichert wird:
 
@@ -285,7 +313,7 @@ In `src/main/resources/application.properties`:
 
 ```
 com.fherrmann.food
-  model/       Nutrients, Dish, FoodEntry, FoodData   (Domänenmodell)
+  model/       Nutrients, Dish, FoodEntry, FoodData, Meal  (Domänenmodell)
   dto/         DaySummary, DayTotal, StatusInfo, …    (API-Transferobjekte)
   repository/  FoodRepository                         (JSON-I/O)
   service/     FoodService                            (Regeln, kein HTTP)

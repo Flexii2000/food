@@ -1,5 +1,7 @@
 package com.fherrmann.food.dto;
 
+import com.fherrmann.food.model.Meal;
+
 import java.time.LocalDate;
 
 /**
@@ -14,6 +16,9 @@ import java.time.LocalDate;
  * @param dishId id of a remembered dish
  * @param dish   a new dish to store and log in one go
  * @param grams  amount eaten in grams
+ * @param meal   zu welcher Mahlzeit; ohne Angabe {@link Meal#SNACK}, weil der
+ *               Eintrag sonst in keinem Abschnitt der Tagesliste auftauchen wuerde
  */
-public record NewEntryRequest(LocalDate date, String dishId, DishRequest dish, Double grams) {
+public record NewEntryRequest(
+        LocalDate date, String dishId, DishRequest dish, Double grams, Meal meal) {
 }

@@ -1,6 +1,7 @@
 package com.fherrmann.food.service;
 
 import com.fherrmann.food.model.Dish;
+import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,8 +15,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -66,9 +65,13 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
 
     @Override
     public boolean isAvailable() {
-        // Nicht nur "konfiguriert", sondern "liegt auch da": sonst bietet die
-        // Oberflaeche einen Knopf an, der erst beim Druecken scheitert.
-        return !command.isEmpty() && Files.isExecutable(Path.of(command.getFirst()));
+        // Bewusst nur "ist konfiguriert" und keine Dateipruefung: der Aufruf geht
+        // ueber `sudo -u flexii` auf ein Skript unterhalb von /home/flexii, und
+        // genau dorthin kommt der Dienstnutzer nicht - eine Existenzpruefung
+        // waere hier immer negativ. Ob es wirklich funktioniert, stellt
+        // setup-food.sh bei der Installation fest und laesst die Einstellung
+        // sonst leer.
+        return !command.isEmpty();
     }
 
     @Override
@@ -162,7 +165,17 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                 node.path("grams").asDouble(0),
                 portion > 0 ? portion : null,
                 node.path("estimated").asBoolean(true),
-                node.path("note").asString("").trim());
+                node.path("note").asString("").trim(),
+                readMeal(node.path("meal").asString("")));
+    }
+
+    /** Unbekanntes oder Fehlendes ergibt {@code null} - der Aufrufer entscheidet dann. */
+    private static Meal readMeal(String value) {
+        try {
+            return value == null || value.isBlank() ? null : Meal.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private JsonNode tryReadJson(String value) {

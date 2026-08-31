@@ -21,9 +21,10 @@
 <main>
     <p class="load-msg" id="load-msg"></p>
 
-    <!-- kcal oben, Makros darunter: der grosse Tacho zeigt, was vom Tagesziel
-         noch uebrig ist, die drei kleinen darunter das schon Verzehrte. -->
+    <!-- Makros oben, kcal darunter: die drei kleinen Tachos zeigen das schon
+         Verzehrte, der grosse darunter das, was vom Tagesziel noch uebrig ist. -->
     <section class="panel gauges">
+        <div class="macro-row" id="macro-row"></div>
         <div class="kcal-row">
             <div class="kcal-gauge" id="kcal-gauge"></div>
             <div class="kcal-consumed">
@@ -32,71 +33,15 @@
                 <span class="sub" id="kcal-target">–</span>
             </div>
         </div>
-        <div class="macro-row" id="macro-row"></div>
     </section>
 
-    <section class="panel">
-        <div class="panel-header">
-            <h2>Eintragen</h2>
-            <button type="button" id="quick-open" class="ghost" hidden>Schnellerfassung</button>
-        </div>
-
-        <!-- Freitext statt Formular: "mittags einen grossen Teller Bolognese".
-             Ein Claude-Aufruf auf dem Server macht daraus Naehrwerte, Menge und
-             ein gespeichertes Gericht. Nur sichtbar, wenn der Server dafuer
-             eingerichtet ist (siehe /api/food/features). -->
-        <div class="quick-capture" id="quick-capture" hidden>
-            <label class="grow">Was hast du gegessen?
-                <textarea id="quick-text" rows="3" maxlength="1000"
-                          placeholder="z. B. mittags einen großen Teller Spaghetti Bolognese und einen Becher Skyr"></textarea>
-            </label>
-            <div class="quick-actions">
-                <button type="button" id="quick-submit">Auswerten und eintragen</button>
-                <button type="button" id="quick-cancel" class="ghost">Abbrechen</button>
-                <span id="quick-msg" class="form-msg"></span>
-            </div>
-            <div class="quick-progress" id="quick-progress" hidden>
-                <div class="progress-bar"><div class="progress-fill"></div></div>
-                <span class="progress-label">Gericht wird verarbeitet …</span>
-            </div>
-        </div>
-
-        <form id="entry-form">
-            <label class="grow">Gericht
-                <select id="in-dish" required>
-                    <option value="">– bitte wählen –</option>
-                </select>
-            </label>
-            <label>Menge (g)
-                <input type="number" id="in-grams" step="1" min="1" max="20000" required>
-            </label>
-            <button type="submit">Eintragen</button>
-            <span id="entry-msg" class="form-msg"></span>
-        </form>
-
-        <div class="portion-shortcuts" id="portion-shortcuts" hidden></div>
-        <p class="dish-hint" id="dish-hint" hidden></p>
-
-        <!-- Faellt auf, sobald "Neues Gericht" gewaehlt ist: das Gericht wird beim
-             Eintragen mitgespeichert und steht danach in der Liste oben. -->
-        <fieldset class="new-dish" id="new-dish" hidden>
-            <legend>Neues Gericht</legend>
-            <div class="field-row">
-                <label class="grow">Name <input type="text" id="nd-name" maxlength="80"></label>
-                <label>Portion (g, optional) <input type="number" id="nd-portion" step="1" min="1" max="20000"></label>
-            </div>
-            <div class="field-row">
-                <label>kcal / 100 g <input type="number" id="nd-kcal" step="0.1" min="0" max="1000"></label>
-                <label>Eiweiß / 100 g <input type="number" id="nd-protein" step="0.1" min="0" max="100"></label>
-                <label>Kohlenhydrate / 100 g <input type="number" id="nd-carbs" step="0.1" min="0" max="100"></label>
-                <label>Fett / 100 g <input type="number" id="nd-fat" step="0.1" min="0" max="100"></label>
-            </div>
-        </fieldset>
-    </section>
-
+    <!-- Nach Mahlzeiten getrennt: eine einzige Liste wird ueber den Tag hinweg
+         unuebersichtlich, und die Frage "war das Fruehstueck zu gross?" laesst
+         sich an einer Gesamtsumme nicht beantworten. Jeder Abschnitt hat seinen
+         eigenen "+", der das Eingabefenster schon auf diese Mahlzeit stellt. -->
     <section class="panel">
         <h2 id="entries-heading">Heute gegessen</h2>
-        <div id="entries"></div>
+        <div id="meals"></div>
         <p class="hint" id="swipe-hint" hidden>Nach links wischen löscht einen Eintrag.</p>
     </section>
 
@@ -134,6 +79,63 @@
         </details>
     </section>
 </main>
+
+<!-- Eingabefenster. Oeffnet sich ueber den "+" eines Abschnitts und weiss dann
+     schon, zu welcher Mahlzeit der Eintrag gehoert. -->
+<dialog id="add-dialog" class="add-dialog">
+    <div class="dialog-head">
+        <h2 id="add-title">Hinzufügen</h2>
+        <button type="button" id="add-close" class="dialog-close" aria-label="Schließen">×</button>
+    </div>
+
+    <button type="button" id="quick-open" class="ghost" hidden>Schnellerfassung</button>
+
+    <div class="quick-capture" id="quick-capture" hidden>
+        <label class="grow">Was hast du gegessen?
+            <textarea id="quick-text" rows="3" maxlength="1000"
+                      placeholder="z. B. einen großen Teller Spaghetti Bolognese und einen Becher Skyr"></textarea>
+        </label>
+        <div class="quick-actions">
+            <button type="button" id="quick-submit">Auswerten und eintragen</button>
+            <button type="button" id="quick-cancel" class="ghost">Zurück</button>
+            <span id="quick-msg" class="form-msg"></span>
+        </div>
+        <div class="quick-progress" id="quick-progress" hidden>
+            <div class="progress-bar"><div class="progress-fill"></div></div>
+            <span class="progress-label">Gericht wird verarbeitet …</span>
+        </div>
+    </div>
+
+    <form id="entry-form">
+        <label class="grow">Gericht
+            <select id="in-dish" required>
+                <option value="">– bitte wählen –</option>
+            </select>
+        </label>
+        <label>Menge (g)
+            <input type="number" id="in-grams" step="1" min="1" max="20000" required>
+        </label>
+        <button type="submit">Eintragen</button>
+        <span id="entry-msg" class="form-msg"></span>
+    </form>
+
+    <div class="portion-shortcuts" id="portion-shortcuts" hidden></div>
+    <p class="dish-hint" id="dish-hint" hidden></p>
+
+    <fieldset class="new-dish" id="new-dish" hidden>
+        <legend>Neues Gericht</legend>
+        <div class="field-row">
+            <label class="grow">Name <input type="text" id="nd-name" maxlength="80"></label>
+            <label>Portion (g, optional) <input type="number" id="nd-portion" step="1" min="1" max="20000"></label>
+        </div>
+        <div class="field-row">
+            <label>kcal / 100 g <input type="number" id="nd-kcal" step="0.1" min="0" max="1000"></label>
+            <label>Eiweiß / 100 g <input type="number" id="nd-protein" step="0.1" min="0" max="100"></label>
+            <label>Kohlenhydrate / 100 g <input type="number" id="nd-carbs" step="0.1" min="0" max="100"></label>
+            <label>Fett / 100 g <input type="number" id="nd-fat" step="0.1" min="0" max="100"></label>
+        </div>
+    </fieldset>
+</dialog>
 
 <script src="app.js"></script>
 </body>

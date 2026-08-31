@@ -29,6 +29,18 @@ const WEIGHT_API = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
 
 const HISTORY_RANGES = [14, 30, 90];
 
+// Reihenfolge wie der Tag verlaeuft, nicht alphabetisch. `null` steht fuer
+// Eintraege aus der Zeit vor dieser Aufteilung: der Abschnitt taucht nur auf,
+// solange es solche gibt, und verschwindet danach von selbst. Sie nachtraeglich
+// einzusortieren hiesse, eine Vermutung wie eine Angabe aussehen zu lassen.
+const MEALS = [
+    { key: 'BREAKFAST', label: 'Frühstück' },
+    { key: 'LUNCH', label: 'Mittagessen' },
+    { key: 'DINNER', label: 'Abendessen' },
+    { key: 'SNACK', label: 'Snacks' },
+];
+const UNASSIGNED = { key: null, label: 'Ohne Zuordnung' };
+
 const CHART_COLORS = {
     kcal: 'rgba(92, 124, 250, 0.75)',
     kcalOver: 'rgba(239, 83, 80, 0.8)',
@@ -39,6 +51,9 @@ const CHART_COLORS = {
 let currentDate = todayIso();
 let dishes = [];
 let day = null;
+
+// Zu welcher Mahlzeit das offene Eingabefenster gehoert.
+let addMeal = MEALS[0].key;
 
 let historyDays = 30;
 let historyChart = null;
@@ -180,7 +195,7 @@ const SWIPE_TRIGGER_PX = 70;
 const SWIPE_MAX_PX = 96;
 
 function renderEntries() {
-    const container = document.getElementById('entries');
+    const container = document.getElementById('meals');
     container.replaceChildren();
 
     const heading = document.getElementById('entries-heading');
@@ -191,35 +206,65 @@ function renderEntries() {
     const entries = (day && day.entries) || [];
     document.getElementById('swipe-hint').hidden = !TOUCH_QUERY.matches || !entries.length;
 
+    const sections = [...MEALS];
+    // Der Restabschnitt nur, wenn er auch etwas enthaelt.
+    if (entries.some(e => !e.meal)) {
+        sections.push(UNASSIGNED);
+    }
+
+    sections.forEach(meal => {
+        const own = entries.filter(e => (e.meal || null) === meal.key);
+        container.appendChild(buildMealSection(meal, own));
+    });
+}
+
+function buildMealSection(meal, entries) {
+    const section = document.createElement('section');
+    section.className = 'meal';
+
+    const head = document.createElement('div');
+    head.className = 'meal-head';
+
+    const title = document.createElement('span');
+    title.className = 'meal-title';
+    title.textContent = meal.label;
+
+    const sum = document.createElement('span');
+    sum.className = 'meal-sum';
+    // Teilsumme je Abschnitt: an einer Tagesgesamtsumme laesst sich nicht
+    // ablesen, welche Mahlzeit aus dem Rahmen fiel.
+    const kcal = entries.reduce((acc, e) => acc + e.per100g.kcal * e.grams / 100, 0);
+    sum.textContent = entries.length ? `${num(kcal)} kcal` : '';
+
+    head.append(title, sum);
+
+    // Der Restabschnitt bekommt kein "+": dort landet nichts Neues mehr.
+    if (meal.key) {
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'meal-add';
+        add.textContent = '+';
+        add.title = `Etwas zu ${meal.label} hinzufügen`;
+        add.setAttribute('aria-label', `Etwas zu ${meal.label} hinzufügen`);
+        add.addEventListener('click', () => openAddDialog(meal));
+        head.appendChild(add);
+    }
+
+    section.appendChild(head);
+
     if (!entries.length) {
         const empty = document.createElement('p');
-        empty.className = 'hint';
+        empty.className = 'hint meal-empty';
         empty.textContent = 'Noch nichts eingetragen.';
-        container.appendChild(empty);
-        return;
+        section.appendChild(empty);
+        return section;
     }
 
     const list = document.createElement('div');
     list.className = 'entry-list';
-
-    // Kopfzeile mit demselben Grid wie die Zeilen - dadurch stehen die Spalten
-    // untereinander, ohne dass es eine Tabelle sein muss. Eine Tabelle waere
-    // hier im Weg: <tr> laesst sich fuer die Wischgeste nur unzuverlaessig
-    // verschieben, und der rote Grund dahinter braucht einen eigenen Kasten.
-    const head = document.createElement('div');
-    head.className = 'entry-head';
-    head.innerHTML = `
-        <span>Gericht</span>
-        <span class="n">Menge</span>
-        <span class="n">kcal</span>
-        <span class="n">E</span>
-        <span class="n">KH</span>
-        <span class="n">F</span>
-        <span></span>`;
-    list.appendChild(head);
-
     entries.forEach(entry => list.appendChild(buildEntryRow(entry)));
-    container.appendChild(list);
+    section.appendChild(list);
+    return section;
 }
 
 function buildEntryRow(entry) {
@@ -512,6 +557,35 @@ async function withMessage(element, action) {
 // Claude-Schluessel bleibt der Knopf ausgeblendet, statt einen Fehler anzubieten.
 let quickCaptureAvailable = false;
 
+function openAddDialog(meal) {
+    addMeal = meal.key;
+    document.getElementById('add-title').textContent = `${meal.label} – hinzufügen`;
+
+    // Beim Oeffnen zurueck auf den Ausgangszustand: ein halb ausgefuelltes
+    // Formular vom letzten Mal waere hier eine Falle.
+    const quick = document.getElementById('quick-capture');
+    quick.hidden = true;
+    document.getElementById('quick-open').hidden = !quickCaptureAvailable;
+    document.getElementById('quick-text').value = '';
+    document.getElementById('quick-msg').textContent = '';
+    document.getElementById('entry-msg').textContent = '';
+    document.getElementById('in-grams').value = '';
+    document.getElementById('in-dish').value = '';
+    onDishChange();
+
+    document.getElementById('add-dialog').showModal();
+}
+
+function initAddDialog() {
+    const dialog = document.getElementById('add-dialog');
+    document.getElementById('add-close').addEventListener('click', () => dialog.close());
+    // Klick auf den Hintergrund schliesst ebenfalls - das Ereignis trifft dann
+    // den dialog selbst, nicht seinen Inhalt.
+    dialog.addEventListener('click', event => {
+        if (event.target === dialog) dialog.close();
+    });
+}
+
 function initQuickCapture() {
     const open = document.getElementById('quick-open');
     const panel = document.getElementById('quick-capture');
@@ -555,16 +629,17 @@ function initQuickCapture() {
             const result = await fetchJson('/api/food/quick-capture', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ date: currentDate, text: value }),
+                body: JSON.stringify({ date: currentDate, text: value, meal: addMeal }),
             });
             close();
+            document.getElementById('add-dialog').close();
             await loadAll();
             // Nach dem Neuladen anzeigen, was verstanden wurde - eine Schaetzung
             // soll nicht wie eine abgelesene Zahl dastehen.
-            const entryMsg = document.getElementById('entry-msg');
-            entryMsg.className = 'form-msg ok';
-            entryMsg.textContent = `${result.dishName}, ${num(result.grams)} g eingetragen.`
-                + (result.estimated ? ` Geschätzt: ${result.note}` : '');
+            // Nach dem Schliessen des Fensters braucht die Rueckmeldung einen
+            // Platz auf der Seite selbst.
+            showDayMessage(`${result.dishName}, ${num(result.grams)} g eingetragen.`
+                + (result.estimated ? ` Geschätzt: ${result.note}` : ''));
         } catch (err) {
             msg.textContent = `Fehler: ${err.message}`;
             msg.className = 'form-msg err';
@@ -784,13 +859,31 @@ async function loadAll() {
     await loadHistory();
 }
 
+/**
+ * Kurze Rueckmeldung unter den Kacheln. Das Eingabefenster ist zu dem Zeitpunkt
+ * schon zu, die Meldung braucht also einen Platz auf der Seite - und sie
+ * verschwindet von selbst, damit sie nicht als Dauerzustand missverstanden wird.
+ */
+let dayMessageTimer = null;
+
+function showDayMessage(text) {
+    const el = document.getElementById('load-msg');
+    el.textContent = text;
+    el.classList.add('ok');
+    clearTimeout(dayMessageTimer);
+    dayMessageTimer = setTimeout(() => {
+        el.textContent = '';
+        el.classList.remove('ok');
+    }, 8000);
+}
+
 async function reload() {
     try {
         await loadAll();
-        document.getElementById('load-msg').textContent = '';
     } catch (err) {
-        document.getElementById('load-msg').textContent =
-            `Daten konnten nicht geladen werden: ${err.message}`;
+        const el = document.getElementById('load-msg');
+        el.classList.remove('ok');
+        el.textContent = `Daten konnten nicht geladen werden: ${err.message}`;
     }
 }
 
@@ -825,7 +918,7 @@ function initEntryForm() {
         msg.textContent = '';
         msg.className = 'form-msg';
 
-        const body = { date: currentDate, grams: parseFloat(grams.value) };
+        const body = { date: currentDate, grams: parseFloat(grams.value), meal: addMeal };
         if (select.value === NEW_DISH) {
             body.dish = {
                 name: document.getElementById('nd-name').value,
@@ -851,12 +944,12 @@ function initEntryForm() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            msg.textContent = 'Eingetragen.';
-            msg.classList.add('ok');
             grams.value = '';
             ['nd-name', 'nd-kcal', 'nd-protein', 'nd-carbs', 'nd-fat', 'nd-portion']
                 .forEach(id => { document.getElementById(id).value = ''; });
             select.value = '';
+            document.getElementById('add-dialog').close();
+            showDayMessage('Eingetragen.');
             await loadAll();
         } catch (err) {
             msg.textContent = `Fehler: ${err.message}`;
@@ -931,6 +1024,7 @@ initDayNav();
 initEntryForm();
 initTargetsForm();
 initHistoryControls();
+initAddDialog();
 initQuickCapture();
 loadFeatures();
 reload();

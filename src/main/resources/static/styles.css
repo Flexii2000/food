@@ -59,27 +59,28 @@ main {
 
 .gauges { display: flex; flex-direction: column; gap: 1.5rem; }
 
-/* Die drei Makros unten nebeneinander, auf gleicher Hoehe. */
+/* Die drei Makros oben nebeneinander, auf gleicher Hoehe. */
 .macro-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
     justify-items: center;
-    border-top: 1px solid var(--border);
-    padding-top: 1.5rem;
 }
 
 .macro { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
 .macro .gauge { width: 130px; }
 .macro-label { color: var(--muted); font-size: 0.85rem; }
 
-/* kcal oben: grosser Tacho links, der Verzehrt-Wert als blosse Zahl daneben. */
+/* kcal darunter: grosser Tacho links, der Verzehrt-Wert als blosse Zahl daneben.
+   Die Trennlinie gehoert zwischen die beiden Bloecke, sitzt also hier oben. */
 .kcal-row {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 2.5rem;
     flex-wrap: wrap;
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
 }
 
 .kcal-gauge .gauge { width: 230px; }
@@ -228,24 +229,55 @@ details[open] > summary { margin-bottom: 0.8rem; }
 
 /* --- Tagesliste --------------------------------------------------------- */
 
+.meal + .meal { margin-top: 1.4rem; }
+
+.meal-head {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.meal-title { font-weight: 600; font-size: 0.95rem; }
+
+/* Schiebt den "+" ans rechte Ende und die Teilsumme direkt daneben. */
+.meal-sum {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.meal-add {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.meal-add:hover { border-color: var(--accent); color: var(--text); filter: none; }
+
+.meal-empty { margin: 0.5rem 0 0; }
+
 .entry-list { display: flex; flex-direction: column; }
 
-/* Kopfzeile und Zeilen teilen sich dasselbe Raster - dadurch stehen die Spalten
-   untereinander, ohne dass es eine Tabelle sein muss. */
-.entry-head,
+/* Eigenes Raster statt Tabelle: ein <tr> laesst sich fuer die Wischgeste nur
+   unzuverlaessig verschieben, und der rote Grund darunter braucht einen eigenen
+   Kasten. Die Spalten stehen trotzdem untereinander. */
 .entry-content {
     display: grid;
-    grid-template-columns: 1fr 4.5rem 3.5rem 3rem 3rem 3rem 1.8rem;
+    grid-template-columns: 1fr 4.5rem 5.5rem 4rem 4.5rem 4rem 1.8rem;
     align-items: center;
     gap: 0.5rem;
 }
 
-.entry-head {
-    color: var(--muted);
-    font-size: 0.78rem;
-    padding: 0 0.5rem 0.4rem;
-    border-bottom: 1px solid var(--border);
-}
 
 /* Der Kasten steht still, nur sein Inhalt faehrt beim Wischen zur Seite und gibt
    den roten Grund darunter frei. */
@@ -287,7 +319,15 @@ details[open] > summary { margin-bottom: 0.8rem; }
 .entry-row.removing .entry-content { transform: translateX(-100%); opacity: 0; }
 
 .e-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.entry-content .n, .entry-head .n { text-align: right; font-variant-numeric: tabular-nums; }
+.entry-content .n { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Die Werte beschriften sich selbst. Seit die Tagesliste in Mahlzeiten zerfaellt,
+   gaebe es sonst je Abschnitt eine eigene Kopfzeile - viermal dieselben fuenf
+   Woerter, nur damit "24 18 4" zuzuordnen ist. */
+.e-kcal::after     { content: ' kcal'; color: var(--muted); }
+.e-protein::before { content: 'E '; color: var(--muted); }
+.e-carbs::before   { content: 'KH '; color: var(--muted); }
+.e-fat::before     { content: 'F '; color: var(--muted); }
 
 .row-remove {
     background: none;
@@ -329,6 +369,45 @@ details[open] > summary { margin-bottom: 0.8rem; }
 
 .panel-header h2 { margin: 0 0 0.8rem; }
 .panel-header > button { margin-bottom: 0.8rem; }
+
+/* --- Eingabefenster ----------------------------------------------------- */
+
+.add-dialog {
+    width: min(46rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+}
+
+.add-dialog::backdrop { background: rgba(8, 11, 18, 0.7); }
+
+.dialog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.dialog-head h2 { margin: 0; font-size: 1.05rem; }
+
+.dialog-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 1.4rem;
+    line-height: 1;
+    padding: 0 0.3rem;
+    cursor: pointer;
+}
+
+.dialog-close:hover { color: var(--text); filter: none; }
+
+.add-dialog #quick-open { margin-bottom: 1rem; }
 
 /* --- Schnellerfassung --------------------------------------------------- */
 
@@ -460,7 +539,6 @@ details[open] > summary { margin-bottom: 0.8rem; }
     /* Zwei Zeilen statt sieben Spalten: Name oben, Zahlen darunter. Die
        Spaltenkoepfe entfallen dabei - stattdessen beschriftet CSS die Werte
        direkt, sonst waeren "24 18 4" nebeneinander nicht zuzuordnen. */
-    .entry-head { display: none; }
     .entry-content {
         grid-template-columns: 1fr repeat(4, auto) 1.8rem;
         column-gap: 0.6rem;
@@ -474,8 +552,4 @@ details[open] > summary { margin-bottom: 0.8rem; }
     .e-protein { grid-column: 3; grid-row: 2; }
     .e-carbs   { grid-column: 4; grid-row: 2; }
     .e-fat     { grid-column: 5; grid-row: 2; }
-    .e-kcal::after    { content: ' kcal'; color: var(--muted); }
-    .e-protein::before { content: 'E '; color: var(--muted); }
-    .e-carbs::before   { content: 'KH '; color: var(--muted); }
-    .e-fat::before     { content: 'F '; color: var(--muted); }
 }

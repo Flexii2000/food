@@ -113,18 +113,28 @@ cp "$BUILD_DIR/deploy/agent/.claude/settings.json" "$AGENT_DIR/.claude/settings.
 chmod +x "$AGENT_DIR/run-agent.sh"
 echo "    $AGENT_DIR eingerichtet."
 
-# Der Dienstnutzer muss das Skript auch wirklich starten koennen. Kann er es
-# nicht (Standardfall: /home/flexii ist 750 und die Unit setzt
-# NoNewPrivileges=true), bleibt die Schnellerfassung aus, statt einen Knopf
-# anzubieten, der beim Druecken scheitert.
-if sudo -u "$SERVICE_USER" test -x "$AGENT_DIR/run-agent.sh" 2>/dev/null; then
-    AGENT_COMMAND="$AGENT_DIR/run-agent.sh"
-    echo "    Dienstnutzer $SERVICE_USER kann das Skript ausfuehren."
+# Der Dienstnutzer kommt an /home/flexii nicht heran (750) - die Session laeuft
+# deshalb ueber eine einzelne sudo-Ausnahme als flexii. Die Regel wird VOR dem
+# Installieren geprueft: eine kaputte Datei unter /etc/sudoers.d/ legt sudo auf
+# dem ganzen System lahm.
+sudo visudo -c -q -f "$BUILD_DIR/deploy/sudoers-food-agent" \
+    || fail "sudoers-Regel ist fehlerhaft - nichts installiert."
+sudo install -o root -g root -m 440 \
+    "$BUILD_DIR/deploy/sudoers-food-agent" /etc/sudoers.d/20-food-agent
+echo "    /etc/sudoers.d/20-food-agent installiert."
+
+# Jetzt gegenpruefen, ob es auch wirklich greift - ohne dabei eine (kostende)
+# Claude-Session zu starten. Schlaegt das fehl, bleibt die Schnellerfassung aus,
+# statt einen Knopf anzubieten, der erst beim Druecken scheitert.
+if sudo -u "$SERVICE_USER" sudo -n -u flexii "$AGENT_DIR/run-agent.sh" --version >/dev/null 2>&1 \
+        || sudo -u "$SERVICE_USER" sudo -n -l -u flexii "$AGENT_DIR/run-agent.sh" >/dev/null 2>&1; then
+    AGENT_COMMAND="/usr/bin/sudo -n -u flexii $AGENT_DIR/run-agent.sh"
+    echo "    $SERVICE_USER darf die Session als flexii starten."
 else
     AGENT_COMMAND=""
-    echo "    HINWEIS: $SERVICE_USER kommt an $AGENT_DIR/run-agent.sh nicht heran."
-    echo "             Schnellerfassung bleibt deaktiviert - siehe README,"
-    echo "             Abschnitt \"Schnellerfassung\"."
+    echo "    HINWEIS: die sudo-Ausnahme greift nicht."
+    echo "             Steht NoNewPrivileges noch in /etc/systemd/system/food.service?"
+    echo "             Schnellerfassung bleibt so lange deaktiviert."
 fi
 
 step "6/10 Jar installieren"

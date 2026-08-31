@@ -1,5 +1,7 @@
 package com.fherrmann.food.dto;
 
+import com.fherrmann.food.model.Meal;
+
 /**
  * Was die Schnellerfassung aus dem Freitext gemacht hat.
  *
@@ -12,11 +14,13 @@ package com.fherrmann.food.dto;
  * @param note      ein Satz dazu, worauf die Werte beruhen ("Portion auf 350 g
  *                  geschaetzt"). Wird in der Oberflaeche angezeigt, damit eine
  *                  Schaetzung nicht wie eine Messung aussieht.
+ * @param meal      unter welcher Mahlzeit der Eintrag gelandet ist
  */
 public record QuickCaptureResult(
         DaySummary day,
         String dishName,
         double grams,
         boolean estimated,
-        String note) {
+        String note,
+        Meal meal) {
 }

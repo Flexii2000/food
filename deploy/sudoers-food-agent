@@ -1,0 +1,26 @@
+# Erlaubt dem Dienstnutzer der Food-App genau ein Kommando als flexii: das
+# Wrapper-Skript der Schnellerfassung.
+#
+# Warum das noetig ist: die Claude-Code-Session braucht Binary und Anmeldedaten
+# unter /home/flexii, und das Verzeichnis ist 750 - der Systemnutzer `food` kann
+# dort nicht einmal hineinsehen. Die App als flexii laufen zu lassen waere die
+# Alternative gewesen; flexii ist aber in `docker` und `lxd` und damit faktisch
+# root-aequivalent. Eine einzelne, benannte Ausnahme ist das kleinere Uebel.
+#
+# Was ein Angreifer damit NICHT kann: das Skript legt seine Aufrufparameter
+# selbst fest, kontrolliert wird nur die Standardeingabe - also der Satz
+# "ich hatte Nudeln". Weder das Rechteprofil noch --permission-mode lassen sich
+# von aussen umbiegen, und .claude/settings.json im Agent-Verzeichnis gehoert
+# flexii und ist fuer `food` nicht beschreibbar.
+#
+# Installation ueber deploy/setup-food.sh; von Hand:
+#   sudo visudo -c -f deploy/sudoers-food-agent   # erst pruefen!
+#   sudo install -o root -g root -m 440 deploy/sudoers-food-agent \
+#        /etc/sudoers.d/20-food-agent
+
+# Kein Pseudo-Terminal fuer dieses Kommando: Prompt und Antwort laufen ueber
+# Standardein- und -ausgabe, und ein tty wuerde die Eingabe zurueckspiegeln und
+# Zeilenenden umschreiben. Die globale use_pty-Vorgabe bleibt fuer alles andere.
+Defaults!/home/flexii/services/food-agent/run-agent.sh !use_pty
+
+food ALL=(flexii) NOPASSWD: /home/flexii/services/food-agent/run-agent.sh

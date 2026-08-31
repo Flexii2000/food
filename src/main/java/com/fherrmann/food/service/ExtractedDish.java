@@ -1,5 +1,7 @@
 package com.fherrmann.food.service;
 
+import com.fherrmann.food.model.Meal;
+
 /**
  * Das Ergebnis der Freitext-Auswertung, bevor daraus ein Gericht und ein
  * Eintrag werden. Naehrwerte immer je 100 g - das ist die Basis, in der die App
@@ -14,6 +16,7 @@ package com.fherrmann.food.service;
  * @param portionG  uebliche Portionsgroesse, die am Gericht hinterlegt wird
  * @param estimated true, wenn die Werte geschaetzt statt aus dem Text abgelesen sind
  * @param note      ein Satz zur Herleitung, auf Deutsch
+ * @param meal      die aus dem Text erschlossene Mahlzeit, oder {@code null}
  */
 public record ExtractedDish(
         String name,
@@ -24,5 +27,6 @@ public record ExtractedDish(
         double grams,
         Double portionG,
         boolean estimated,
-        String note) {
+        String note,
+        Meal meal) {
 }

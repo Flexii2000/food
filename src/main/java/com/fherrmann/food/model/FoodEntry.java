@@ -19,6 +19,8 @@ import java.time.LocalDate;
  * @param name      dish name as it was at the time of logging
  * @param grams     amount eaten, in grams
  * @param per100g   nutrition per 100 g as it was at the time of logging
+ * @param meal      zu welcher Mahlzeit der Eintrag gehoert, oder {@code null}
+ *                  bei Eintraegen aus der Zeit vor dieser Aufteilung
  * @param createdAt when the entry was made; orders entries within a day
  */
 public record FoodEntry(
@@ -28,6 +30,7 @@ public record FoodEntry(
         String name,
         double grams,
         Nutrients per100g,
+        Meal meal,
         Instant createdAt) {
 
     /** What this entry actually contributes to the day: per-100 g values times the amount. */

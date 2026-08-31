@@ -24,7 +24,14 @@ Restart=on-failure
 RestartSec=5
 
 # Basic hardening - the app only needs to write its own data directory.
-NoNewPrivileges=true
+#
+# NoNewPrivileges steht hier bewusst NICHT: die Schnellerfassung startet ihre
+# Claude-Session ueber `sudo -u flexii`, und systemd wuerde damit jede
+# Rechteerweiterung im Dienst unterbinden - sudo eingeschlossen. Die Ausnahme
+# ist eng gefasst (siehe deploy/sudoers-food-agent): genau ein Kommando, genau
+# ein Zielnutzer, feste Aufrufparameter. Wer die Schnellerfassung nicht braucht,
+# kann NoNewPrivileges=true hier wieder eintragen und FOOD_AGENT_COMMAND in
+# /etc/food.env leeren.
 PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/opt/food/data

@@ -24,7 +24,8 @@ Codeblock-Zäune:
   "grams": 450,
   "portionG": 400,
   "estimated": true,
-  "note": "Portion und Nährwerte für einen großen Teller geschätzt."
+  "note": "Portion und Nährwerte für einen großen Teller geschätzt.",
+  "meal": "LUNCH"
 }
 ```
 
@@ -48,6 +49,10 @@ Codeblock-Zäune:
 - `name` ist kurz und ohne Mengenangabe: „Spaghetti Bolognese", nicht „großer
   Teller Spaghetti Bolognese".
 - `note` ist **ein** kurzer deutscher Satz dazu, worauf die Zahlen beruhen.
+- `meal` ist einer von `BREAKFAST`, `LUNCH`, `DINNER`, `SNACK` — erschlossen aus
+  dem Text („mittags …" → `LUNCH`, „zum Frühstück …" → `BREAKFAST`). Gibt der
+  Text nichts her, nimm `SNACK`. Kam die Eingabe aus einem bestimmten Abschnitt,
+  überschreibt die App deine Angabe ohnehin.
 - Plausibilität: `kcalPer100g` liegt zwischen 0 und 1000, die drei Makros je
   zwischen 0 und 100, `grams` zwischen 1 und 20000. Werte außerhalb weist die
   App ohnehin zurück.
