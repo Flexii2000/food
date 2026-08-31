@@ -78,7 +78,11 @@ sudo install -o "$SERVICE_USER" -g "$SERVICE_USER" -m 644 "$JAR" "$APP_DIR/app.j
 step "6/9  systemd-Unit"
 sudo cp "$BUILD_DIR/deploy/food.service" /etc/systemd/system/food.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now food
+sudo systemctl enable food
+# restart statt "enable --now": laeuft der Dienst schon (zweiter Lauf des
+# Skripts), wuerde --now ihn nicht anfassen - das gerade installierte Jar
+# bliebe dann ungenutzt, und das Skript meldete trotzdem Erfolg.
+sudo systemctl restart food
 sleep 2
 sudo systemctl is-active --quiet food || {
     sudo journalctl -u food -n 30 --no-pager >&2
