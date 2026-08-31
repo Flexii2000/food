@@ -32,6 +32,34 @@ PRIVATE_MODE_CONF="/etc/nginx/conf.d/private-mode.conf"
 step() { echo; echo "=== $* ==="; }
 fail() { echo "FEHLER: $*" >&2; exit 1; }
 
+# Konfiguration pruefen und nginx neu einlesen.
+#
+# Der Umweg ueber die Warteschleife hat einen konkreten Grund: der taegliche
+# certbot-Lauf STOPPT nginx fuer rund zehn Sekunden, weil drei Zertifikate auf
+# `authenticator = standalone` stehen und certbot dafuer selbst an Port 80 muss.
+# Ein Reload, der in dieses Fenster faellt, scheitert mit "Unit cannot be
+# reloaded because it is inactive" - und riss dieses Skript beim ersten Lauf
+# mitten in der Installation ab.
+#
+# Bewusst NICHT `reload-or-restart`: das wuerde nginx waehrend des
+# certbot-Laufs starten, ihm den Port wegnehmen und die Erneuerung kaputt
+# machen. Und es faellt nicht unter die NOPASSWD-Regel in
+# /etc/sudoers.d/10-flexii-deploy, die exakt auf `systemctl reload nginx` passt.
+nginx_apply() {
+    sudo nginx -t
+    for attempt in $(seq 1 30); do
+        if systemctl is-active --quiet nginx; then
+            sudo systemctl reload nginx
+            return 0
+        fi
+        if [[ $attempt -eq 1 ]]; then
+            echo "    nginx laeuft gerade nicht - vermutlich ein certbot-Lauf. Warte ..."
+        fi
+        sleep 2
+    done
+    fail "nginx ist seit 60 s nicht aktiv. Status: systemctl status nginx"
+}
+
 [[ $EUID -eq 0 ]] && fail "Bitte NICHT mit sudo starten - das Skript ruft sudo selbst auf, wo es noetig ist."
 
 step "1/9  Repo holen"
@@ -101,17 +129,16 @@ else
     awk '/^server \{/{n++} n==1' "$BUILD_DIR/deploy/nginx-food.fherrmann.com.conf" \
         | sudo tee "/etc/nginx/sites-available/$DOMAIN" >/dev/null
     sudo ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
-    sudo nginx -t
-    sudo systemctl reload nginx
+    nginx_apply
     sudo certbot certonly --webroot -w "$WEBROOT" -d "$DOMAIN" --non-interactive --agree-tos \
-        --register-unsafely-without-email || fail "certbot fehlgeschlagen - DNS fuer $DOMAIN gesetzt?"
+        --register-unsafely-without-email \
+        || fail "certbot fehlgeschlagen. Haeufigste Gruende: DNS fuer $DOMAIN fehlt, oder der taegliche certbot-Lauf haelt gerade die Sperre (dann einfach dieses Skript nochmal starten)."
 fi
 
 step "8/9  nginx vollstaendig (mit Privat-Gate)"
 sudo cp "$BUILD_DIR/deploy/nginx-food.fherrmann.com.conf" "/etc/nginx/sites-available/$DOMAIN"
 sudo ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
-sudo nginx -t
-sudo systemctl reload nginx
+nginx_apply
 
 step "9/9  Health-Check"
 # Ohne Cookie antwortet die App mit 403 - jeder HTTP-Status beweist, dass sie
