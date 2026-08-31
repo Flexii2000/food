@@ -906,6 +906,31 @@ function proposalPayload() {
     };
 }
 
+// Eine Auswertung mit Nachschlagen dauert bis zu einer Minute. Ohne sichtbar
+// laufende Uhr wirkt das wie ein haengendes Fenster, und man drueckt neu.
+let progressTimer = null;
+
+function startProgressClock() {
+    const label = document.querySelector('#quick-progress .progress-label');
+    const started = Date.now();
+    const tick = () => {
+        const seconds = Math.round((Date.now() - started) / 1000);
+        label.textContent = seconds < 3
+            ? 'Gericht wird verarbeitet …'
+            : `Gericht wird verarbeitet … (${seconds} s)`;
+    };
+    tick();
+    clearInterval(progressTimer);
+    progressTimer = setInterval(tick, 1000);
+}
+
+function stopProgressClock() {
+    clearInterval(progressTimer);
+    progressTimer = null;
+    document.querySelector('#quick-progress .progress-label').textContent =
+        'Gericht wird verarbeitet …';
+}
+
 function initQuickCapture() {
     const open = document.getElementById('quick-open');
     const panel = document.getElementById('quick-capture');
@@ -950,6 +975,7 @@ function initQuickCapture() {
         proposal = null;
         renderProposal();
         progress.hidden = false;
+        startProgressClock();
         // Waehrend der Auswertung nichts anfassbar lassen: der Aufruf dauert
         // Sekunden, und ein zweites Absenden startet eine zweite Session.
         submit.disabled = true;
@@ -966,6 +992,7 @@ function initQuickCapture() {
             msg.textContent = `Fehler: ${err.message}`;
             msg.className = 'form-msg err';
         } finally {
+            stopProgressClock();
             progress.hidden = true;
             submit.disabled = false;
             cancel.disabled = false;
