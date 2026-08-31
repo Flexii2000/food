@@ -2,6 +2,7 @@
    die beiden Seiten gehoeren zusammen und sollen sich nicht wie zwei Produkte
    anfuehlen. */
 :root {
+    --measured: #4fc3f7;
     --bg: #0f1420;
     --panel: #1a2130;
     --border: #2a3346;
@@ -628,6 +629,9 @@ details[open] > summary { margin-bottom: 0.8rem; }
    wirklich so da, geschaetzt ist geraten - und genau das soll auffallen. */
 .src-stored { color: var(--good); }
 .src-read { color: var(--muted); }
+/* Nachgeschlagen ist belastbarer als geschaetzt, aber weniger als eine Zahl aus
+   dem Text - eigener Ton, damit der Unterschied ueberhaupt auffaellt. */
+.src-lookedup { color: var(--measured, #4fc3f7); }
 .src-estimated { color: var(--warn); }
 .src-edited { color: var(--accent); }
 

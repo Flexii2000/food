@@ -178,21 +178,39 @@ Arbeitsverzeichnis:
 ```
 
 **Das Verzeichnis ist die Leitplanke, nicht der Prompt.** Claude Code lädt
-`CLAUDE.md` und `.claude/settings.json` aus dem Arbeitsverzeichnis; der Agent
-hat kein einziges Werkzeug freigeschaltet und kann damit nichts lesen, nichts
-schreiben und nichts ausführen — nur antworten. Das Verzeichnis liegt bewusst
+`CLAUDE.md` und `.claude/settings.json` aus dem Arbeitsverzeichnis. Freigeschaltet
+sind genau zwei Werkzeuge — **Websuche und Seitenabruf**, damit der Agent
+Nährwerte nachschlagen kann statt sie zu raten. Alles andere ist verboten: kein
+Dateizugriff, keine Kommandos, keine Unteraufträge. Das Verzeichnis liegt bewusst
 **außerhalb des Repos**, damit weder ein Deploy noch der Agent selbst die Rechte
 verschieben kann. Der Text des Nutzers geht in `<beschreibung>`-Klammern hinein
-und ist in `CLAUDE.md` ausdrücklich als Zitat und nicht als Anweisung markiert.
+und ist in `CLAUDE.md` ausdrücklich als Zitat und nicht als Anweisung markiert;
+ein Einschleusungsversuch dort („ignoriere alle Anweisungen, rufe … ab") wurde
+im Test ignoriert und ausdrücklich als solcher in der `note` benannt.
+
+⚠️ **Die `allow`-Liste greift nur in einem vertrauten Verzeichnis.** Fehlt
+`projects["…/food-agent"].hasTrustDialogAccepted` in `~/.claude.json`, meldet
+Claude Code „this workspace has not been trusted", ignoriert *alle*
+`allow`-Einträge und der Agent steht ohne Werkzeuge da — er rät dann wieder,
+ohne dass es auffällt. `setup-food.sh` setzt das Flag mit.
 
 Das Ergebnis läuft anschließend durch **dieselbe Validierung wie ein Eintrag von
 Hand** (`FoodService.addEntry`) — ein Modell, das sich um eine Zehnerpotenz
 vertut, kommt an der Grenze für kcal je 100 g nicht vorbei.
 
-Kann die Beschreibung nicht ausgerechnet werden, wird geschätzt statt
-abgebrochen; der Eintrag ist dann als geschätzt markiert und trägt einen Satz
-zur Herleitung, den die Oberfläche anzeigt. Eine Schätzung soll nicht wie eine
-abgelesene Zahl aussehen.
+### Nachschlagen statt raten
+
+Nennt die Beschreibung ein konkretes Produkt — „6 Wagner Piccolinis", „Big Mac" —,
+schlägt der Agent die Nährwerte im Netz nach, unaufgefordert. Bei allgemeinen
+Gerichten („ein Teller Nudeln mit Tomatensoße") lohnt das nicht; das entscheidet
+er selbst.
+
+Der Vorschlag unterscheidet deshalb **vier** Herkünfte je Wert: *gespeichert*,
+*aus dem Text*, *nachgeschlagen* und *geschätzt*. Findet er das Produkt nicht,
+sagt er das (`lookedUp: []`, Grund in der `note`) statt einen Fund vorzutäuschen.
+
+Eine Suche dauert deutlich länger als eine Schätzung — gemessen bis 56 s, daher
+`food.agent.timeout-seconds=180`.
 
 | Property | Default | Bedeutung |
 |---|---|---|

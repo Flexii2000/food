@@ -44,7 +44,7 @@ class FoodServiceTest {
      */
     private static final class FakeExtractor implements NutritionExtractor {
         private ExtractedDish next = new ExtractedDish(
-                "Spaghetti Bolognese", 130, 7, 16, 4, 450, 400.0,
+                "Spaghetti Bolognese", 130, 7, 16, 4, 450, 400.0, List.of(),
                 List.of("kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams"),
                 "Portion und Naehrwerte fuer einen grossen Teller geschaetzt.", Meal.LUNCH);
         private boolean available = true;
@@ -300,7 +300,7 @@ class FoodServiceTest {
         // denselben Namen, aber leicht andere Zahlen.
         service.createDish(new DishRequest("Banane", 89.0, 1.1, 23.0, 0.3, 120.0));
         extractor.next = new ExtractedDish(
-                "banane", 105.0, 2.0, 27.0, 0.5, 120, 150.0, List.of("kcalPer100g"), "geraten", Meal.SNACK);
+                "banane", 105.0, 2.0, 27.0, 0.5, 120, 150.0, List.of(), List.of("kcalPer100g"), "geraten", Meal.SNACK);
 
         QuickCapturePreview preview = service.quickCapture(
                 new QuickCaptureRequest(TODAY, "eine Banane", null));
@@ -313,6 +313,25 @@ class FoodServiceTest {
         assertThat(preview.per100g().kcal()).isEqualTo(89.0);
         assertThat(preview.portionG()).isEqualTo(120.0);
         assertThat(preview.valueSources()).containsEntry("kcal", "stored");
+    }
+
+    @Test
+    void nachgeschlageneWerteGeltenNichtAlsGeschaetzt() {
+        // Der Agent darf Naehrwerte im Netz nachschlagen. Das ist belastbarer als
+        // eine Schaetzung und muss im Vorschlag auch so dastehen.
+        extractor.next = new ExtractedDish(
+                "Wagner Piccolinis", 229, 10.9, 28.4, 7.5, 180, 270.0,
+                List.of("kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "portionG"),
+                List.of("grams"),
+                "Naehrwerte laut original-wagner.de.", Meal.SNACK);
+
+        QuickCapturePreview preview = service.quickCapture(
+                new QuickCaptureRequest(TODAY, "6 Wagner Piccolinis", null));
+
+        assertThat(preview.valueSources())
+                .containsEntry("kcal", "lookedUp")
+                .containsEntry("portionG", "lookedUp")
+                .containsEntry("grams", "estimated");
     }
 
     @Test
@@ -329,7 +348,7 @@ class FoodServiceTest {
         // anzeigen - spaetestens beim Bestaetigen greift dieselbe Pruefung wie
         // bei einer Eingabe von Hand. Ein Modell, das sich um eine Zehnerpotenz
         // vertut, kommt da nicht vorbei.
-        extractor.next = new ExtractedDish("Unfug", 99_000, 7, 16, 4, 450, null, List.of(), "", null);
+        extractor.next = new ExtractedDish("Unfug", 99_000, 7, 16, 4, 450, null, List.of(), List.of(), "", null);
         QuickCapturePreview preview = service.quickCapture(
                 new QuickCaptureRequest(TODAY, "irgendwas", null));
 

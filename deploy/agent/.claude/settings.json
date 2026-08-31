@@ -1,7 +1,10 @@
 {
   "permissions": {
     "defaultMode": "default",
-    "allow": [],
+    "allow": [
+      "WebSearch",
+      "WebFetch"
+    ],
     "deny": [
       "Bash",
       "Edit",
@@ -10,8 +13,6 @@
       "Read",
       "Glob",
       "Grep",
-      "WebFetch",
-      "WebSearch",
       "Task",
       "TodoWrite"
     ]

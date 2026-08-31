@@ -169,6 +169,7 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                 node.path("fatPer100g").asDouble(0),
                 node.path("grams").asDouble(0),
                 portion > 0 ? portion : null,
+                readFieldList(node.path("lookedUp")),
                 readEstimatedFields(node.path("estimated")),
                 node.path("note").asString("").trim(),
                 readMeal(node.path("meal").asString("")));
@@ -183,11 +184,19 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      */
     private static List<String> readEstimatedFields(JsonNode node) {
         if (node.isArray()) {
-            List<String> fields = new ArrayList<>();
-            node.forEach(entry -> fields.add(entry.asString("")));
-            return fields;
+            return readFieldList(node);
         }
         return node.isMissingNode() || node.asBoolean(true) ? ALL_ESTIMATABLE : List.of();
+    }
+
+    /** Eine Liste von Feldnamen; alles andere ergibt eine leere Liste. */
+    private static List<String> readFieldList(JsonNode node) {
+        if (!node.isArray()) {
+            return List.of();
+        }
+        List<String> fields = new ArrayList<>();
+        node.forEach(entry -> fields.add(entry.asString("")));
+        return fields;
     }
 
     /** Unbekanntes oder Fehlendes ergibt {@code null} - der Aufrufer entscheidet dann. */

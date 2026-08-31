@@ -269,8 +269,14 @@ public class FoodService {
      */
     private static Map<String, String> valueSources(ExtractedDish extracted, boolean known) {
         Map<String, String> sources = new LinkedHashMap<>();
+        // Reihenfolge ist Absicht: nachgeschlagen schlaegt geschaetzt, und was in
+        // keiner Liste steht, stand als Zahl im Text. Meldet der Agent ein Feld in
+        // beiden Listen, gilt die schwaechere Aussage - lieber eine
+        // nachgeschlagene Zahl faelschlich als Schaetzung markieren als umgekehrt.
         BiConsumer<String, String> put = (field, agentField) -> sources.put(field,
-                extracted.estimatedFields().contains(agentField) ? "estimated" : "read");
+                extracted.estimatedFields().contains(agentField) ? "estimated"
+                        : extracted.lookedUpFields().contains(agentField) ? "lookedUp"
+                        : "read");
 
         if (known) {
             // Aus der Gerichteliste, also weder geraten noch aus dem Text.

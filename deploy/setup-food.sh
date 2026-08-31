@@ -113,6 +113,24 @@ cp "$BUILD_DIR/deploy/agent/.claude/settings.json" "$AGENT_DIR/.claude/settings.
 chmod +x "$AGENT_DIR/run-agent.sh"
 echo "    $AGENT_DIR eingerichtet."
 
+# Ohne dieses Flag ignoriert Claude Code die allow-Liste des Verzeichnisses
+# ("this workspace has not been trusted") - der Agent haette dann KEINE
+# Werkzeuge und wuerde Naehrwerte nur noch raten statt nachzuschlagen. Die
+# deny-Liste greift auch ohne, das Vertrauen schaltet nur die Erlaubnisse frei.
+python3 - "$AGENT_DIR" <<'TRUST'
+import json, pathlib, shutil, sys, datetime
+agent_dir = sys.argv[1]
+config = pathlib.Path.home() / ".claude.json"
+if not config.exists():
+    print("    HINWEIS: ~/.claude.json fehlt - Vertrauen nicht gesetzt.")
+    raise SystemExit
+shutil.copy2(config, config.with_suffix(f".json.bak-{datetime.datetime.now():%Y%m%d-%H%M%S}"))
+data = json.loads(config.read_text())
+data.setdefault("projects", {}).setdefault(agent_dir, {})["hasTrustDialogAccepted"] = True
+config.write_text(json.dumps(data, indent=2))
+print(f"    Workspace {agent_dir} als vertrauenswuerdig eingetragen.")
+TRUST
+
 # Der Dienstnutzer kommt an /home/flexii nicht heran (750) - die Session laeuft
 # deshalb ueber eine einzelne sudo-Ausnahme als flexii. Die Regel wird VOR dem
 # Installieren geprueft: eine kaputte Datei unter /etc/sudoers.d/ legt sudo auf

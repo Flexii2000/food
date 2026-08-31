@@ -16,8 +16,9 @@ import java.util.List;
  * @param fatG      Fett je 100 g
  * @param grams     wie viel davon gegessen wurde
  * @param portionG  uebliche Portionsgroesse, die am Gericht hinterlegt wird
- * @param estimatedFields Feldnamen, die geschaetzt statt aus dem Text abgelesen
- *                  wurden. Leer heisst: alles stand als Zahl im Text
+ * @param lookedUpFields Feldnamen, die im Netz nachgeschlagen wurden
+ * @param estimatedFields Feldnamen, die geschaetzt wurden. Was in keiner der
+ *                  beiden Listen steht, stand als Zahl im Text
  * @param note      ein Satz zur Herleitung, auf Deutsch
  * @param meal      die aus dem Text erschlossene Mahlzeit, oder {@code null}
  */
@@ -29,11 +30,13 @@ public record ExtractedDish(
         double fatG,
         double grams,
         Double portionG,
+        List<String> lookedUpFields,
         List<String> estimatedFields,
         String note,
         Meal meal) {
 
     public ExtractedDish {
+        lookedUpFields = lookedUpFields == null ? List.of() : List.copyOf(lookedUpFields);
         estimatedFields = estimatedFields == null ? List.of() : List.copyOf(estimatedFields);
     }
 }

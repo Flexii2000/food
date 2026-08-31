@@ -748,6 +748,7 @@ function initAddDialog() {
 const VALUE_SOURCES = {
     stored: { label: 'gespeichert', tone: 'stored' },
     read: { label: 'aus dem Text', tone: 'read' },
+    lookedUp: { label: 'nachgeschlagen', tone: 'lookedup' },
     estimated: { label: 'geschätzt', tone: 'estimated' },
     // Sobald von Hand korrigiert wurde, stimmt die urspruengliche Herkunft nicht
     // mehr - dann steht das auch dran.
