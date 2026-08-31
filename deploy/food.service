@@ -1,0 +1,33 @@
+# systemd unit for the calorie counter (food.fherrmann.com).
+#
+# Install: see deploy/setup-food.sh, which puts this in place along with
+# everything else. Manually:
+#   sudo cp deploy/food.service /etc/systemd/system/food.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now food
+#
+# FH_PRIVATE_TOKEN must NOT be committed anywhere - it lives in /etc/food.env
+# (see EnvironmentFile below), readable only by root and the service user.
+
+[Unit]
+Description=Food (calorie counter)
+After=network.target
+
+[Service]
+User=food
+Group=food
+WorkingDirectory=/opt/food
+EnvironmentFile=/etc/food.env
+# Absoluter Pfad: das JDK liegt unter /opt/java und ist nicht im PATH des
+# systemd-Dienstes (wie bei health-viz.service).
+ExecStart=/opt/java/jdk-25.0.1+8/bin/java -jar /opt/food/app.jar
+Restart=on-failure
+RestartSec=5
+
+# Basic hardening - the app only needs to write its own data directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/food/data
+
+[Install]
+WantedBy=multi-user.target

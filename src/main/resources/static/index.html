@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalorienzähler</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+    <h1>Kalorienzähler</h1>
+    <div class="day-nav">
+        <button type="button" id="day-prev" aria-label="Tag zurück">&larr;</button>
+        <input type="date" id="day-date" aria-label="Tag">
+        <button type="button" id="day-next" aria-label="Tag vor">&rarr;</button>
+        <button type="button" id="day-today" class="ghost">Heute</button>
+    </div>
+</header>
+
+<main>
+    <p class="load-msg" id="load-msg"></p>
+
+    <!-- Makros oben, kcal darunter: die drei kleinen Tachos zeigen das schon
+         Verzehrte, der grosse darunter das, was vom Tagesziel noch uebrig ist. -->
+    <section class="panel gauges">
+        <div class="macro-row" id="macro-row"></div>
+        <div class="kcal-row">
+            <div class="kcal-gauge" id="kcal-gauge"></div>
+            <div class="kcal-consumed">
+                <span class="label">Verzehrt</span>
+                <span class="value" id="kcal-consumed">–</span>
+                <span class="sub" id="kcal-target">–</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Eintragen</h2>
+        <form id="entry-form">
+            <label class="grow">Gericht
+                <select id="in-dish" required>
+                    <option value="">– bitte wählen –</option>
+                </select>
+            </label>
+            <label>Menge (g)
+                <input type="number" id="in-grams" step="1" min="1" max="20000" required>
+            </label>
+            <button type="submit">Eintragen</button>
+            <span id="entry-msg" class="form-msg"></span>
+        </form>
+
+        <div class="portion-shortcuts" id="portion-shortcuts" hidden></div>
+        <p class="dish-hint" id="dish-hint" hidden></p>
+
+        <!-- Faellt auf, sobald "Neues Gericht" gewaehlt ist: das Gericht wird beim
+             Eintragen mitgespeichert und steht danach in der Liste oben. -->
+        <fieldset class="new-dish" id="new-dish" hidden>
+            <legend>Neues Gericht</legend>
+            <div class="field-row">
+                <label class="grow">Name <input type="text" id="nd-name" maxlength="80"></label>
+                <label>Portion (g, optional) <input type="number" id="nd-portion" step="1" min="1" max="20000"></label>
+            </div>
+            <div class="field-row">
+                <label>kcal / 100 g <input type="number" id="nd-kcal" step="0.1" min="0" max="1000"></label>
+                <label>Eiweiß / 100 g <input type="number" id="nd-protein" step="0.1" min="0" max="100"></label>
+                <label>Kohlenhydrate / 100 g <input type="number" id="nd-carbs" step="0.1" min="0" max="100"></label>
+                <label>Fett / 100 g <input type="number" id="nd-fat" step="0.1" min="0" max="100"></label>
+            </div>
+        </fieldset>
+    </section>
+
+    <section class="panel">
+        <h2 id="entries-heading">Heute gegessen</h2>
+        <div id="entries"></div>
+    </section>
+
+    <section class="panel">
+        <details id="dishes-panel">
+            <summary>Gerichte verwalten</summary>
+            <div id="dish-list" class="dish-list"></div>
+            <p class="hint">Änderungen gelten für neue Einträge. Bereits eingetragene
+                Portionen behalten die Werte, mit denen sie erfasst wurden.</p>
+        </details>
+    </section>
+
+    <section class="panel">
+        <details>
+            <summary>Tagesziele anpassen</summary>
+            <form id="targets-form">
+                <label>kcal <input type="number" id="tg-kcal" step="1" min="1" max="20000" required></label>
+                <label>Eiweiß (g) <input type="number" id="tg-protein" step="0.1" min="0" max="2000" required></label>
+                <label>Kohlenhydrate (g) <input type="number" id="tg-carbs" step="0.1" min="0" max="2000" required></label>
+                <label>Fett (g) <input type="number" id="tg-fat" step="0.1" min="0" max="2000" required></label>
+                <button type="submit">Ziele speichern</button>
+                <span id="targets-msg" class="form-msg"></span>
+            </form>
+            <p class="hint" id="targets-check"></p>
+        </details>
+    </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

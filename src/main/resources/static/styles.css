@@ -1,0 +1,297 @@
+/* Farben und Grundformen bewusst identisch zur Weight-App (weight.fherrmann.com):
+   die beiden Seiten gehoeren zusammen und sollen sich nicht wie zwei Produkte
+   anfuehlen. */
+:root {
+    --bg: #0f1420;
+    --panel: #1a2130;
+    --border: #2a3346;
+    --text: #e6ecf5;
+    --muted: #8b97ab;
+    --accent: #5c7cfa;
+    --good: #66bb6a;
+    --warn: #ffa726;
+    --bad: #ef5350;
+    --track: #253049;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.2rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+header h1 { margin: 0; font-size: 1.4rem; }
+
+.day-nav { display: flex; align-items: center; gap: 0.4rem; }
+
+main {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem;
+}
+
+.panel h2 { margin-top: 0; font-size: 1.05rem; }
+
+/* --- Tachos ------------------------------------------------------------- */
+
+.gauges { display: flex; flex-direction: column; gap: 1.5rem; }
+
+/* Die drei Makros oben nebeneinander, auf gleicher Hoehe. */
+.macro-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    justify-items: center;
+}
+
+.macro { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+.macro .gauge { width: 130px; }
+.macro-label { color: var(--muted); font-size: 0.85rem; }
+
+/* kcal darunter: grosser Tacho links, der Verzehrt-Wert als blosse Zahl daneben. */
+.kcal-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+}
+
+.kcal-gauge .gauge { width: 230px; }
+
+.kcal-consumed { display: flex; flex-direction: column; gap: 0.25rem; }
+.kcal-consumed .label { color: var(--muted); font-size: 0.85rem; }
+.kcal-consumed .value { font-size: 2.4rem; font-weight: 600; line-height: 1.1; }
+.kcal-consumed .sub { color: var(--muted); font-size: 0.85rem; }
+
+.gauge { display: block; height: auto; }
+
+.gauge-track {
+    fill: none;
+    stroke: var(--track);
+    stroke-width: 9;
+    stroke-linecap: round;
+}
+
+.gauge-value {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 9;
+    stroke-linecap: round;
+    transition: stroke-dasharray 0.35s ease, stroke 0.2s ease;
+}
+
+.gauge-main, .gauge-sub {
+    text-anchor: middle;
+    dominant-baseline: middle;
+    font-family: inherit;
+}
+
+.gauge-main { fill: var(--text); font-weight: 600; }
+.gauge-sub { fill: var(--muted); }
+
+.tone-good .gauge-value { stroke: var(--good); }
+.tone-near .gauge-value { stroke: var(--accent); }
+.tone-warn .gauge-value { stroke: var(--warn); }
+.tone-bad  .gauge-value { stroke: var(--bad); }
+.tone-bad  .gauge-main  { fill: var(--bad); }
+
+/* --- Formulare ---------------------------------------------------------- */
+
+form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+label.grow { flex: 1 1 12rem; }
+
+input, select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.5rem;
+    font-size: 0.95rem;
+    font-family: inherit;
+    width: 100%;
+}
+
+button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.6rem 1.2rem;
+    font-size: 0.95rem;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+button:hover { filter: brightness(1.1); }
+
+button.ghost {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.45rem 0.8rem;
+    font-size: 0.85rem;
+}
+
+button.ghost:hover { color: var(--text); border-color: var(--accent); filter: none; }
+
+button.danger { background: none; border: 1px solid var(--border); color: var(--bad); }
+button.danger:hover { border-color: var(--bad); filter: none; }
+
+.day-nav button:not(.ghost) {
+    padding: 0.45rem 0.7rem;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+
+.day-nav button:not(.ghost):hover { border-color: var(--accent); filter: none; }
+.day-nav input { width: auto; }
+
+.portion-shortcuts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
+
+.dish-hint, .hint {
+    margin: 0.6rem 0 0;
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.new-dish {
+    margin-top: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.8rem 1rem 1rem;
+}
+
+.new-dish legend { color: var(--muted); font-size: 0.85rem; padding: 0 0.4rem; }
+.field-row { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.6rem; }
+.field-row label { flex: 1 1 8rem; }
+
+.form-msg { font-size: 0.85rem; color: var(--muted); }
+.form-msg.ok { color: var(--good); }
+.form-msg.err { color: var(--bad); }
+
+.load-msg {
+    margin: 0;
+    min-height: 1rem;
+    font-size: 0.9rem;
+    color: var(--bad);
+}
+
+details > summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+details > summary:hover { color: var(--text); }
+details[open] > summary { margin-bottom: 0.8rem; }
+
+/* --- Tagesliste --------------------------------------------------------- */
+
+table.entries {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+table.entries th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 0.78rem;
+    padding: 0 0.5rem 0.4rem;
+    border-bottom: 1px solid var(--border);
+}
+
+table.entries td {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+table.entries tr:last-child td { border-bottom: none; }
+table.entries .n { text-align: right; font-variant-numeric: tabular-nums; }
+table.entries th.n { text-align: right; }
+
+.row-remove {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0 0.3rem;
+    cursor: pointer;
+}
+
+.row-remove:hover { color: var(--bad); filter: none; }
+
+/* --- Gerichte-Verwaltung ------------------------------------------------ */
+
+.dish-list { display: flex; flex-direction: column; gap: 0.8rem; }
+
+.dish-row {
+    align-items: flex-end;
+    gap: 0.6rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.dish-row:last-of-type { border-bottom: none; }
+.dish-row label { flex: 0 0 4.5rem; }
+.dish-row label.grow { flex: 1 1 10rem; }
+.dish-row button { padding: 0.5rem 0.9rem; font-size: 0.85rem; }
+
+@media (max-width: 640px) {
+    main { padding: 1rem; gap: 1rem; }
+    header { padding: 1rem; }
+    /* Im umgeschalteten Spalten-Flex zaehlt flex-basis als HOEHE - ohne das hier
+       zieht sich das Gericht-Feld auf 12rem Hoehe auseinander. */
+    form label.grow { flex: 0 0 auto; }
+    .macro .gauge { width: 100%; max-width: 130px; }
+    .kcal-gauge .gauge { width: 200px; }
+    .kcal-row { gap: 1.2rem; }
+    form { flex-direction: column; align-items: stretch; }
+    .field-row { flex-direction: column; gap: 0.6rem; }
+    .dish-row { flex-direction: row; flex-wrap: wrap; }
+    table.entries { font-size: 0.82rem; }
+    table.entries td, table.entries th { padding: 0.4rem 0.3rem; }
+}
