@@ -295,7 +295,7 @@ function buildMealSection(meal, entries) {
     const kcal = entries.reduce((acc, e) => acc + e.per100g.kcal * e.grams / 100, 0);
     const target = day && day.mealTargets ? day.mealTargets[meal.key] : null;
     if (target != null) {
-        sum.innerHTML = `<span class="ms-actual">${num(kcal)}</span> von ${num(target)} kcal`;
+        sum.innerHTML = `<span class="ms-actual">${num(kcal)}</span>/${num(target)} kcal`;
     } else if (entries.length) {
         sum.textContent = `${num(kcal)} kcal`;
     }

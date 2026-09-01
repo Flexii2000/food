@@ -99,7 +99,7 @@ Gewichtskurve über den Kalorien, dort die Kalorien unter der Gewichtskurve.
 
 Die Tagesliste zerfällt in **Frühstück, Mittagessen, Abendessen, Snacks**, jeder
 Abschnitt mit eigenem `+` und einer Teilsumme gegen sein eigenes kcal-Ziel
-(`536 von 575 kcal`). Eine durchlaufende Liste wird über den Tag hinweg
+(`536/575 kcal`). Eine durchlaufende Liste wird über den Tag hinweg
 unübersichtlich, und die Frage „war das Frühstück zu groß?" lässt sich an einer
 Gesamtsumme nicht beantworten.
 
