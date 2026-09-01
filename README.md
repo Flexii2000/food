@@ -104,6 +104,10 @@ Die Werte in den Zeilen beschriften sich selbst (`240 kcal · E 24 · KH 18 ·
 F 4`). Ohne das bräuchte jeder Abschnitt eine eigene Kopfzeile — viermal
 dieselben fünf Wörter, nur damit „24 18 4" zuzuordnen ist.
 
+**Auf dem Handy bleiben nur Name und kcal stehen.** Sechs Zahlen nebeneinander
+liest auf einem schmalen Display niemand im Vorbeigehen; die Teilsumme steht
+ohnehin in der Abschnittszeile, Menge und Makros stehen auf dem Desktop.
+
 ## Gericht suchen
 
 Das Feld „Gericht" ist ein Suchfeld, keine Auswahlliste: mit ein paar Dutzend
