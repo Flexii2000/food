@@ -289,6 +289,59 @@ unter `/home/flexii` (Modus 750), und die systemd-Unit setzt
 Weiteres starten**. `setup-food.sh` prüft das und lässt die Schnellerfassung
 sonst aus, statt einen Knopf anzubieten, der beim Drücken scheitert.
 
+## Push: der Server meldet sich
+
+Die Schnellerfassung dauert bis zu einer Minute. Die App muss dafür nicht offen
+bleiben: ist ein Auftrag fertig, schickt der Server eine Benachrichtigung an
+alle angemeldeten Geräte.
+
+**Warum das nicht in der App allein geht:** legt man das Handy weg, friert iOS
+sie nach etwa dreißig Sekunden ein. Nur der Server läuft weiter, und nur er
+weiß, wann die Auswertung fertig ist.
+
+**Anmeldung:** `POST /api/food/devices` mit `{"token": "…"}`. Die App ruft das
+bei jedem Start auf, weil iOS die Kennung gelegentlich austauscht. Gespeichert
+wird in `data/devices.json` — bewusst neben `food.json` und nicht darin: das
+Tagebuch ist der Bestand, den man aufhebt, Gerätekennungen sind flüchtig.
+Lehnt Apple eine ab (410 oder `BadDeviceToken`), fliegt sie raus; erst dann
+weiß man sicher, dass sie tot ist.
+
+**Ohne Bibliothek.** APNs ist ein HTTP/2-POST mit einem signierten Token im
+Kopf, und beides kann das JDK. Eine Abhängigkeit für dreißig Zeilen wäre mehr
+Pflege als Ersparnis.
+
+### Der Fallstrick: DER gegen JOSE
+
+Die JCA liefert eine ES256-Signatur als DER-Struktur mit variabler Länge, JWT
+erwartet 64 rohe Bytes — R und S, je 32, rechtsbündig. Wer die DER-Bytes direkt
+einsetzt, bekommt von Apple `InvalidProviderToken` und sucht den Fehler beim
+Schlüssel oder der Team-ID, wo keiner ist. `ApnsClientTest` hält das fest,
+unter anderem mit fünfzig echten Signaturen, weil die DER-Länge je nach
+Zufallswerten schwankt.
+
+### Sandbox oder Produktion
+
+Entscheidet **nicht** der Server, sondern womit die App signiert wurde. Eine
+Entwicklungssignatur liefert Kennungen, die nur die Sandbox kennt; an den
+Produktionshost geschickt kommt `BadDeviceToken` und sonst nichts.
+`APNS_HOST` steht deshalb standardmäßig auf `api.sandbox.push.apple.com`.
+
+### Konfiguration
+
+Alles über `/etc/food.env`; **ohne Schlüssel passiert schlicht nichts**, die
+Schnellerfassung läuft unverändert weiter.
+
+```
+APNS_KEY_FILE=/etc/apns-cockpit.p8    # .p8 aus dem Developer-Portal, chmod 640 root:food
+APNS_KEY_ID=…                          # zehn Zeichen, steht neben dem Schlüssel im Portal
+APNS_TEAM_ID=…
+APNS_TOPIC=com.fherrmann.cockpit       # die Bundle-ID der App
+APNS_HOST=https://api.sandbox.push.apple.com
+```
+
+Die `.p8` gehört **nicht** ins Repo und lässt sich im Portal nur ein einziges
+Mal herunterladen.
+
 ## Symbol
 
 `favicon.svg` ist ein SVG, das nur ein Emoji als Text enthält (🍎). Der Browser
