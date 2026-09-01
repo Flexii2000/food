@@ -289,6 +289,19 @@ unter `/home/flexii` (Modus 750), und die systemd-Unit setzt
 Weiteres starten**. `setup-food.sh` prüft das und lässt die Schnellerfassung
 sonst aus, statt einen Knopf anzubieten, der beim Drücken scheitert.
 
+## Symbol
+
+`favicon.svg` ist ein SVG, das nur ein Emoji als Text enthält (🍎). Der Browser
+rendert es mit der Emoji-Schrift des Systems — das spart eine eigene Grafik und
+sieht auf jeder Plattform so aus, wie der Nutzer es dort gewohnt ist.
+
+Für den Home-Bildschirm auf iOS geht das nicht: `apple-touch-icon` akzeptiert
+kein SVG. Dafür liegt eine 180×180-PNG daneben, gerendert aus demselben Emoji
+auf dem Hintergrund der Seite.
+
+Dazu ein `theme-color`-Meta im Ton der Oberfläche, damit die Browserleiste auf
+dem Handy nicht hell danebensteht.
+
 ## Single Source of Truth
 
 Alle Daten liegen in **`data/food.json`** — Tagesziele, Gerichte und Einträge:

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Emoji als Text statt gezeichnetem Pfad: der Browser rendert es mit der
+       Emoji-Schrift des Systems, das spart eine eigene Grafik und sieht auf
+       jeder Plattform so aus, wie der Nutzer es dort gewohnt ist. -->
+  <text x="32" y="34" font-size="52" text-anchor="middle" dominant-baseline="central">🍎</text>
+</svg>
