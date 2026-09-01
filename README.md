@@ -98,9 +98,24 @@ Gewichtskurve über den Kalorien, dort die Kalorien unter der Gewichtskurve.
 ## Nach Mahlzeiten getrennt
 
 Die Tagesliste zerfällt in **Frühstück, Mittagessen, Abendessen, Snacks**, jeder
-Abschnitt mit eigener kcal-Teilsumme und eigenem `+`. Eine durchlaufende Liste
-wird über den Tag hinweg unübersichtlich, und die Frage „war das Frühstück zu
-groß?" lässt sich an einer Gesamtsumme nicht beantworten.
+Abschnitt mit eigenem `+` und einer Teilsumme gegen sein eigenes kcal-Ziel
+(`536 von 575 kcal`). Eine durchlaufende Liste wird über den Tag hinweg
+unübersichtlich, und die Frage „war das Frühstück zu groß?" lässt sich an einer
+Gesamtsumme nicht beantworten.
+
+### Die Mahlzeitenziele sind Anteile, keine Zahlen
+
+Gespeichert wird nicht „575 kcal fürs Frühstück", sondern **25 %**. Voreinstellung
+für einen Tag ist 25 / 35 / 30 / 10 (bei 2300 kcal also 575 / 805 / 690 / 230).
+
+Der Grund: so bleiben die Mahlzeitenziele stimmig, wenn das Tagesziel sich
+ändert — bei 2000 kcal wird das Frühstück automatisch zu 500 —, statt an zweiter
+Stelle von Hand nachgezogen werden zu müssen. Und weil die Anteile in Summe
+100 % ergeben müssen (das prüft der Server und die Eingabe zeigt die Summe live),
+summieren sich die vier Ziele immer genau auf das Tagesziel.
+
+Die Teilsummen sind bewusst **nicht eingefärbt**: der große Tacho trägt das
+Urteil über den Tag, und vier weitere Warnflächen machen die Seite zur Nörgelei.
 
 Der `+` öffnet ein Fenster, das schon auf diese Mahlzeit gestellt ist — darin
 beide Eingabewege, die Schnellerfassung und das Formular. Dadurch gibt es keinen

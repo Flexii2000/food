@@ -45,7 +45,8 @@ class FoodRepositoryTest {
         Path nested = tempDir.resolve("sub").resolve("food.json");
         FoodRepository repository = new FoodRepository(nested.toString(), mapper);
         Dish dish = new Dish("d1", "Skyr", new Nutrients(80, 8, 6, 1.3), 300.0, LocalDate.of(2026, 8, 30));
-        repository.save(new FoodData(new Nutrients(2300, 200, 235.5, 62), List.of(dish), List.of()));
+        repository.save(new FoodData(new Nutrients(2300, 200, 235.5, 62),
+                FoodData.DEFAULT_MEAL_SHARES, List.of(dish), List.of()));
 
         FoodData reloaded = repository.load();
         assertThat(reloaded.targets().kcal()).isEqualTo(2300);

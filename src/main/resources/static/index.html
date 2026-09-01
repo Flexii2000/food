@@ -99,6 +99,17 @@
                 <button type="submit">Ziele speichern</button>
                 <span id="targets-msg" class="form-msg"></span>
             </form>
+
+            <!-- Aufteilung des kcal-Ziels auf die Mahlzeiten. Als Anteile, damit
+                 die Mahlzeitenziele automatisch mitwandern, wenn sich das
+                 Tagesziel ändert. -->
+            <p class="hint targets-split-hint">Aufteilung des kcal-Ziels auf die Mahlzeiten:</p>
+            <form id="split-form">
+                <label>Frühstück (%) <input type="number" id="sh-breakfast" step="1" min="0" max="100"></label>
+                <label>Mittagessen (%) <input type="number" id="sh-lunch" step="1" min="0" max="100"></label>
+                <label>Abendessen (%) <input type="number" id="sh-dinner" step="1" min="0" max="100"></label>
+                <label>Snacks (%) <input type="number" id="sh-snack" step="1" min="0" max="100"></label>
+            </form>
             <p class="hint" id="targets-check"></p>
         </details>
     </section>

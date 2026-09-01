@@ -78,7 +78,8 @@ public class FoodService {
                 data.targets().rounded(),
                 consumed.rounded(),
                 data.targets().minus(consumed).rounded(),
-                entries);
+                entries,
+                mealTargets(data));
     }
 
     /**
@@ -201,7 +202,7 @@ public class FoodService {
                 request.meal() == null ? Meal.SNACK : request.meal(),
                 Instant.now(clock)));
 
-        repository.save(new FoodData(data.targets(), dishes, entries));
+        repository.save(new FoodData(data.targets(), data.mealShares(), dishes, entries));
         return day(date);
     }
 
@@ -254,6 +255,44 @@ public class FoodService {
                 known.isPresent()
                         ? "Bekanntes Gericht erkannt - die gespeicherten Nährwerte werden übernommen."
                         : extracted.note());
+    }
+
+    /**
+     * Das kcal-Ziel je Mahlzeit: Tagesziel mal Anteil. Weil die Anteile in Summe
+     * 1 ergeben, summieren sich auch die Mahlzeitenziele genau auf den Tag - das
+     * ist der Grund, ueberhaupt Anteile zu speichern und keine absoluten Werte.
+     */
+    private static Map<Meal, Double> mealTargets(FoodData data) {
+        double kcal = data.targets().kcal();
+        Map<Meal, Double> targets = new LinkedHashMap<>();
+        for (Meal meal : Meal.values()) {
+            double share = data.mealShares().getOrDefault(meal, 0.0);
+            targets.put(meal, Math.round(kcal * share * 10) / 10.0);
+        }
+        return targets;
+    }
+
+    /**
+     * Prueft eine eingereichte Aufteilung. Die Summe muss 100 % ergeben: sonst
+     * stimmen die Mahlzeitenziele nicht mehr mit dem Tagesziel ueberein, und die
+     * Anzeige behauptete etwas, das sich nicht ausgeht.
+     */
+    private static Map<Meal, Double> validShares(Map<Meal, Double> shares) {
+        Map<Meal, Double> checked = new LinkedHashMap<>();
+        double sum = 0;
+        for (Meal meal : Meal.values()) {
+            Double share = shares.get(meal);
+            if (share == null || !Double.isFinite(share) || share < 0) {
+                throw badRequest("mealShares braucht fuer jede Mahlzeit einen Anteil >= 0");
+            }
+            checked.put(meal, share);
+            sum += share;
+        }
+        if (Math.abs(sum - 1.0) > 0.011) {
+            throw badRequest(String.format(
+                    "Die Anteile muessen zusammen 100 %% ergeben, sind aber %.1f %%", sum * 100));
+        }
+        return checked;
     }
 
     /**
@@ -316,7 +355,7 @@ public class FoodService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown entry"));
         List<FoodEntry> entries = new ArrayList<>(data.entries());
         entries.removeIf(e -> e.id() != null && e.id().equals(id));
-        repository.save(new FoodData(data.targets(), data.dishes(), entries));
+        repository.save(new FoodData(data.targets(), data.mealShares(), data.dishes(), entries));
         return day(existing.date());
     }
 
@@ -325,7 +364,7 @@ public class FoodService {
         FoodData data = repository.load();
         List<Dish> dishes = new ArrayList<>(data.dishes());
         Dish dish = upsertDish(dishes, request, null);
-        repository.save(new FoodData(data.targets(), dishes, data.entries()));
+        repository.save(new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
         return dish;
     }
 
@@ -341,7 +380,7 @@ public class FoodService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown dish");
         }
         Dish updated = upsertDish(dishes, request, id);
-        repository.save(new FoodData(data.targets(), dishes, data.entries()));
+        repository.save(new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
         return updated;
     }
 
@@ -352,7 +391,7 @@ public class FoodService {
         if (!dishes.removeIf(d -> d.id().equals(id))) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown dish");
         }
-        repository.save(new FoodData(data.targets(), dishes, data.entries()));
+        repository.save(new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
     }
 
     /** Replaces the daily goals. */
@@ -366,7 +405,10 @@ public class FoodService {
                 requireNonNegative(request.carbsG(), "carbsG", 2_000),
                 requireNonNegative(request.fatG(), "fatG", 2_000));
         FoodData data = repository.load();
-        repository.save(new FoodData(targets, data.dishes(), data.entries()));
+        Map<Meal, Double> shares = request.mealShares() == null
+                ? data.mealShares()
+                : validShares(request.mealShares());
+        repository.save(new FoodData(targets, shares, data.dishes(), data.entries()));
         return targets.rounded();
     }
 

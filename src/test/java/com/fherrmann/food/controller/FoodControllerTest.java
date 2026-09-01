@@ -1,6 +1,7 @@
 package com.fherrmann.food.controller;
 
 import com.fherrmann.food.dto.DaySummary;
+import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.security.SecurityConfig;
 import com.fherrmann.food.service.FoodService;
@@ -65,7 +66,9 @@ class FoodControllerTest {
                 new Nutrients(2300, 200, 235.5, 62),
                 Nutrients.ZERO,
                 new Nutrients(2300, 200, 235.5, 62),
-                List.of());
+                List.of(),
+                java.util.Map.of(Meal.BREAKFAST, 575.0, Meal.LUNCH, 805.0,
+                        Meal.DINNER, 690.0, Meal.SNACK, 230.0));
     }
 
     @Test

@@ -312,6 +312,13 @@ details[open] > summary { margin-bottom: 0.8rem; }
 
 .meal-empty { margin: 0.5rem 0 0; }
 
+/* Verzehrt hervorgehoben, das Ziel daneben gedaempft - die erste Zahl ist die,
+   die sich aendert. */
+.ms-actual { color: var(--text); font-weight: 600; }
+
+.targets-split-hint { margin: 1rem 0 0.6rem; }
+#split-form label { flex: 0 0 9rem; }
+
 .entry-list { display: flex; flex-direction: column; }
 
 /* Eigenes Raster statt Tabelle: ein <tr> laesst sich fuer die Wischgeste nur

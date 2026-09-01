@@ -23,6 +23,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -218,8 +219,46 @@ class FoodServiceTest {
     }
 
     @Test
+    void mealTargetsAddUpToTheDailyTarget() {
+        DaySummary day = service.day(TODAY);
+        // 25/35/30/10 von 2300 kcal.
+        assertThat(day.mealTargets())
+                .containsEntry(Meal.BREAKFAST, 575.0)
+                .containsEntry(Meal.LUNCH, 805.0)
+                .containsEntry(Meal.DINNER, 690.0)
+                .containsEntry(Meal.SNACK, 230.0);
+        assertThat(day.mealTargets().values().stream().mapToDouble(Double::doubleValue).sum())
+                .isEqualTo(day.targets().kcal());
+    }
+
+    @Test
+    void mealTargetsFollowAChangedDailyTarget() {
+        // Der ganze Grund, Anteile statt absoluter Werte zu speichern.
+        service.updateTargets(new TargetsRequest(2000.0, 150.0, 200.0, 65.0, null));
+        assertThat(service.day(TODAY).mealTargets()).containsEntry(Meal.BREAKFAST, 500.0);
+    }
+
+    @Test
+    void aSplitThatDoesNotAddUpIsRejected() {
+        assertThatThrownBy(() -> service.updateTargets(new TargetsRequest(
+                2300.0, 200.0, 235.5, 62.0,
+                Map.of(Meal.BREAKFAST, 0.5, Meal.LUNCH, 0.5, Meal.DINNER, 0.5, Meal.SNACK, 0.5))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("100");
+    }
+
+    @Test
+    void aChangedSplitIsStored() {
+        service.updateTargets(new TargetsRequest(2300.0, 200.0, 235.5, 62.0,
+                Map.of(Meal.BREAKFAST, 0.2, Meal.LUNCH, 0.4, Meal.DINNER, 0.35, Meal.SNACK, 0.05)));
+        assertThat(service.day(TODAY).mealTargets())
+                .containsEntry(Meal.BREAKFAST, 460.0)
+                .containsEntry(Meal.LUNCH, 920.0);
+    }
+
+    @Test
     void targetsCanBeChanged() {
-        var targets = service.updateTargets(new TargetsRequest(2000.0, 150.0, 200.0, 65.0));
+        var targets = service.updateTargets(new TargetsRequest(2000.0, 150.0, 200.0, 65.0, null));
         assertThat(targets.kcal()).isEqualTo(2000.0);
         assertThat(service.day(TODAY).targets().proteinG()).isEqualTo(150.0);
     }

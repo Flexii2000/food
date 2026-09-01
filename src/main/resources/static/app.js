@@ -288,10 +288,17 @@ function buildMealSection(meal, entries) {
 
     const sum = document.createElement('span');
     sum.className = 'meal-sum';
-    // Teilsumme je Abschnitt: an einer Tagesgesamtsumme laesst sich nicht
-    // ablesen, welche Mahlzeit aus dem Rahmen fiel.
+    // Teilsumme gegen das Ziel dieser Mahlzeit: an einer Tagesgesamtsumme laesst
+    // sich nicht ablesen, welche Mahlzeit aus dem Rahmen fiel. Bewusst ohne
+    // Einfaerbung - der grosse Tacho traegt das Urteil ueber den Tag, und vier
+    // weitere Warnflaechen machen die Seite nur zur Nörgelei.
     const kcal = entries.reduce((acc, e) => acc + e.per100g.kcal * e.grams / 100, 0);
-    sum.textContent = entries.length ? `${num(kcal)} kcal` : '';
+    const target = day && day.mealTargets ? day.mealTargets[meal.key] : null;
+    if (target != null) {
+        sum.innerHTML = `<span class="ms-actual">${num(kcal)}</span> von ${num(target)} kcal`;
+    } else if (entries.length) {
+        sum.textContent = `${num(kcal)} kcal`;
+    }
 
     head.append(title, sum);
 
@@ -1462,8 +1469,23 @@ function initEntryForm() {
     });
 }
 
+// Anteile werden als Prozent eingegeben, gespeichert wird der Bruchteil.
+const SHARE_FIELDS = [
+    { id: 'sh-breakfast', key: 'BREAKFAST' },
+    { id: 'sh-lunch', key: 'LUNCH' },
+    { id: 'sh-dinner', key: 'DINNER' },
+    { id: 'sh-snack', key: 'SNACK' },
+];
+
 function fillTargetsForm() {
     if (!day) return;
+    const kcal = day.targets.kcal || 0;
+    SHARE_FIELDS.forEach(field => {
+        const input = document.getElementById(field.id);
+        if (!input || document.activeElement === input) return;
+        const target = day.mealTargets ? day.mealTargets[field.key] : null;
+        input.value = target != null && kcal > 0 ? Math.round(target / kcal * 1000) / 10 : '';
+    });
     const fields = {
         'tg-kcal': day.targets.kcal,
         'tg-protein': day.targets.proteinG,
@@ -1495,16 +1517,20 @@ function updateTargetsCheck() {
     }
     const fromMacros = protein * 4 + carbs * 4 + fat * 9;
     const diff = Math.round(fromMacros - kcal);
+    const shareSum = SHARE_FIELDS.reduce(
+        (acc, f) => acc + (parseFloat(document.getElementById(f.id).value) || 0), 0);
+    const shareRounded = Math.round(shareSum * 10) / 10;
     el.textContent = `Aus den Makros gerechnet: ${num(Math.round(fromMacros))} kcal`
-        + (diff === 0 ? ' – geht genau auf.' : ` (${diff > 0 ? '+' : ''}${num(diff)} kcal gegenüber dem kcal-Ziel).`);
+        + (diff === 0 ? ' – geht genau auf.' : ` (${diff > 0 ? '+' : ''}${num(diff)} kcal gegenüber dem kcal-Ziel).`)
+        + ` · Aufteilung: ${shareRounded.toLocaleString('de-DE')} %`
+        + (Math.abs(shareSum - 100) < 1.1 ? '' : ' – muss 100 % ergeben.');
 }
 
 function initTargetsForm() {
     const form = document.getElementById('targets-form');
     const msg = document.getElementById('targets-msg');
-    ['tg-kcal', 'tg-protein', 'tg-carbs', 'tg-fat'].forEach(id => {
-        document.getElementById(id).addEventListener('input', updateTargetsCheck);
-    });
+    ['tg-kcal', 'tg-protein', 'tg-carbs', 'tg-fat', ...SHARE_FIELDS.map(f => f.id)]
+        .forEach(id => document.getElementById(id).addEventListener('input', updateTargetsCheck));
 
     form.addEventListener('submit', async event => {
         event.preventDefault();
@@ -1517,6 +1543,9 @@ function initTargetsForm() {
                     proteinG: parseFloat(document.getElementById('tg-protein').value),
                     carbsG: parseFloat(document.getElementById('tg-carbs').value),
                     fatG: parseFloat(document.getElementById('tg-fat').value),
+                    // Prozent rein, Bruchteil raus - gespeichert wird der Anteil.
+                    mealShares: Object.fromEntries(SHARE_FIELDS.map(f =>
+                        [f.key, (parseFloat(document.getElementById(f.id).value) || 0) / 100])),
                 }),
             });
             await loadAll();
