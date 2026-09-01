@@ -209,8 +209,36 @@ Der Vorschlag unterscheidet deshalb **vier** Herkünfte je Wert: *gespeichert*,
 *aus dem Text*, *nachgeschlagen* und *geschätzt*. Findet er das Produkt nicht,
 sagt er das (`lookedUp: []`, Grund in der `note`) statt einen Fund vorzutäuschen.
 
-Eine Suche dauert deutlich länger als eine Schätzung — gemessen bis 56 s, daher
-`food.agent.timeout-seconds=180`.
+### Auftrag statt offener Leitung
+
+Eine Auswertung mit Nachschlagen dauert bis zu einer Minute. Sie läuft deshalb
+**als Hintergrundauftrag**, nicht in der HTTP-Anfrage:
+
+| | |
+|---|---|
+| `POST /api/food/quick-capture` | nimmt an, antwortet in ~50 ms mit `202` und einer Auftragsnummer |
+| `GET /api/food/quick-capture/{id}` | Stand: `running` (mit Laufzeit), `done` (mit Vorschlag) oder `failed` (mit Grund) |
+
+Die Oberfläche fragt alle zwei Sekunden nach und zeigt die laufende Sekundenzahl
+im Fortschrittsbalken.
+
+Der Grund ist nicht Eleganz, sondern ein konkreter Ausfall: vorher hing die
+Anfrage bis zu einer Minute am Draht und lief in nginx' Vorgabe von 60 s. Weil
+die Seite HTTP/2 spricht, kam dabei **kein 504** an, sondern ein zurückgesetzter
+Stream — im Browser „Failed to fetch", ohne dass irgendwo ein Fehlerstatus
+auftauchte. Nachgemessen: HTTP 000 nach 60,17 s. Denselben Strick hätte jede
+weitere Zwischenstation gespannt; der Weg geht über eine VPS und einen
+WireGuard-Tunnel, beide mit eigenen Timeouts. Jetzt ist jede einzelne Anfrage
+kurz, und die Frage stellt sich nicht mehr.
+
+Aufträge liegen **nur im Speicher**, einer nach dem anderen (ein Arbeitsthread —
+jede Auswertung kostet Geld, zwei Klicks sollen sich anstellen statt zwei
+Sessions zu bezahlen). Ein Neustart verliert sie; die Oberfläche bekommt dann
+ein `404` und sagt das, statt endlos zu warten. Für eine Auswertung, die eine
+Minute dauert, wäre alles andere unverhältnismäßig.
+
+Der agenteneigene Timeout bleibt bei `food.agent.timeout-seconds=180` — gemessen
+wurden bis 56 s.
 
 | Property | Default | Bedeutung |
 |---|---|---|

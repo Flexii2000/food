@@ -6,12 +6,13 @@ import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.Features;
 import com.fherrmann.food.dto.NewEntryRequest;
 import com.fherrmann.food.dto.QuickCaptureRequest;
-import com.fherrmann.food.dto.QuickCapturePreview;
+import com.fherrmann.food.dto.QuickCaptureJob;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.service.FoodService;
+import com.fherrmann.food.service.QuickCaptureJobs;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,9 +34,11 @@ import java.util.List;
 public class FoodController {
 
     private final FoodService service;
+    private final QuickCaptureJobs quickCaptureJobs;
 
-    public FoodController(FoodService service) {
+    public FoodController(FoodService service, QuickCaptureJobs quickCaptureJobs) {
         this.service = service;
+        this.quickCaptureJobs = quickCaptureJobs;
     }
 
     /** Targets, totals and entries for one day; defaults to today. */
@@ -75,13 +78,23 @@ public class FoodController {
     }
 
     /**
-     * Schnellerfassung: Freitext rein, <b>Vorschlag</b> raus. Schreibt nichts - der
-     * Nutzer bestaetigt ihn anschliessend ueber {@link #addEntry}. Kann Sekunden
-     * dauern, die Oberflaeche zeigt solange einen Fortschritt.
+     * Startet eine Schnellerfassung und gibt <b>sofort</b> eine Auftragsnummer
+     * zurueck. Das Ergebnis wird ueber {@link #quickCaptureStatus} abgeholt.
+     *
+     * <p>Die Auswertung braucht bis zu einer Minute, weil sie Naehrwerte im Netz
+     * nachschlaegt. Eine HTTP-Anfrage so lange offenzuhalten ist gegen jede
+     * Zwischenstation mit eigenem Timeout empfindlich - genau daran ist es
+     * vorher gescheitert, und zwar ohne verwertbaren Fehler.
      */
     @PostMapping("/quick-capture")
-    public QuickCapturePreview quickCapture(@RequestBody QuickCaptureRequest request) {
-        return service.quickCapture(request);
+    public ResponseEntity<QuickCaptureJob> quickCapture(@RequestBody QuickCaptureRequest request) {
+        return ResponseEntity.accepted().body(quickCaptureJobs.start(request));
+    }
+
+    /** Stand einer Schnellerfassung: laeuft noch, fertig, oder fehlgeschlagen. */
+    @GetMapping("/quick-capture/{id}")
+    public QuickCaptureJob quickCaptureStatus(@PathVariable String id) {
+        return quickCaptureJobs.status(id);
     }
 
     /** Logs an amount of a dish and returns the refreshed day. */

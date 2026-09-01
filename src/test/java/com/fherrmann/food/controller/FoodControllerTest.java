@@ -4,6 +4,7 @@ import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.security.SecurityConfig;
 import com.fherrmann.food.service.FoodService;
+import com.fherrmann.food.service.QuickCaptureJobs;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,9 @@ class FoodControllerTest {
 
     @MockitoBean
     private FoodService service;
+
+    @MockitoBean
+    private QuickCaptureJobs quickCaptureJobs;
 
     private MockMvc mockMvc;
 

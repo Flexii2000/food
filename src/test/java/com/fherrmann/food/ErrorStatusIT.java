@@ -39,7 +39,23 @@ class ErrorStatusIT {
 
     /** Roher HTTP-Aufruf ueber den JDK-Client - bewusst ohne Spring-Hilfsmittel,
      *  damit hier wirklich das ankommt, was auch ein Browser bekaeme. */
+    /** Wie {@link #status}, gibt aber den Antwortkoerper zurueck. */
+    private String body(String method, String path, String payload) throws IOException, InterruptedException {
+        return send(method, path, payload).body();
+    }
+
     private int status(String method, String path, String body) throws IOException, InterruptedException {
+        return send(method, path, body).statusCode();
+    }
+
+    /** Zieht die Auftragsnummer aus der Startantwort. */
+    private static String jobId(String json) {
+        int at = json.indexOf("\"id\":\"") + 6;
+        return json.substring(at, json.indexOf('"', at));
+    }
+
+    private HttpResponse<String> send(String method, String path, String body)
+            throws IOException, InterruptedException {
         HttpRequest.BodyPublisher payload = body == null
                 ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(body);
@@ -50,7 +66,7 @@ class ErrorStatusIT {
         if (body != null) {
             request.header("Content-Type", "application/json");
         }
-        return http.send(request.build(), HttpResponse.BodyHandlers.ofString()).statusCode();
+        return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @Test
@@ -69,11 +85,34 @@ class ErrorStatusIT {
     }
 
     @Test
-    void quickCaptureWithoutAnApiKeyReportsThatItIsUnavailable() throws Exception {
-        // Im Test ist kein Schluessel gesetzt - der Endpunkt muss das sagen,
-        // statt wie ein Rechteproblem auszusehen.
+    void anUnconfiguredAgentSurfacesAsAFailedJob() throws Exception {
+        // Im Test ist kein Agent-Kommando gesetzt. Der Start gelingt trotzdem;
+        // dass es nicht eingerichtet ist, steht im Stand des Auftrags - und nicht
+        // als Rechteproblem, wie es frueher ohne den ERROR-Dispatch-Fix aussah.
+        String id = jobId(body("POST", "/api/food/quick-capture", "{\"text\":\"ein Apfel\"}"));
+
+        String state = "";
+        for (int i = 0; i < 50 && !state.contains("\"status\":\"failed\""); i++) {
+            Thread.sleep(100);
+            state = body("GET", "/api/food/quick-capture/" + id, null);
+        }
+        assertThat(state).contains("\"status\":\"failed\"").contains("nicht eingerichtet");
+    }
+
+    @Test
+    void quickCaptureStartsAJobInsteadOfBlocking() throws Exception {
+        // Ohne Agent-Kommando schlaegt die Auswertung fehl - der START muss
+        // trotzdem sofort mit 202 antworten. Genau das ist der Punkt des Umbaus:
+        // keine Anfrage haengt mehr eine Minute am Draht.
+        long before = System.currentTimeMillis();
         assertThat(status("POST", "/api/food/quick-capture", "{\"text\":\"ein Apfel\"}"))
-                .isEqualTo(503);
+                .isEqualTo(202);
+        assertThat(System.currentTimeMillis() - before).isLessThan(5000);
+    }
+
+    @Test
+    void anUnknownJobIsNotFound() throws Exception {
+        assertThat(status("GET", "/api/food/quick-capture/gibtsnicht", null)).isEqualTo(404);
     }
 
     @Test

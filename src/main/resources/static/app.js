@@ -931,6 +931,32 @@ function stopProgressClock() {
         'Gericht wird verarbeitet …';
 }
 
+// Wie oft nachgefragt wird, und wann aufgegeben. Die Obergrenze liegt etwas
+// ueber dem serverseitigen Timeout der Session (food.agent.timeout-seconds),
+// damit im Zweifel dessen Fehlermeldung ankommt und nicht diese hier.
+const POLL_INTERVAL_MS = 2000;
+const POLL_LIMIT_MS = 200000;
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Fragt den Stand eines Auftrags ab, bis er fertig ist.
+ *
+ * <p>Ein 404 bedeutet, dass es den Auftrag nicht mehr gibt - die Auftraege
+ * liegen nur im Speicher, ein Neustart des Dienstes verliert sie. Das wird
+ * gesagt, statt weiter ins Leere zu fragen.
+ */
+async function awaitQuickCapture(id) {
+    const deadline = Date.now() + POLL_LIMIT_MS;
+    while (Date.now() < deadline) {
+        await sleep(POLL_INTERVAL_MS);
+        const job = await fetchJson(`/api/food/quick-capture/${encodeURIComponent(id)}`);
+        if (job.status === 'done') return job.preview;
+        if (job.status === 'failed') throw new Error(job.error || 'Die Auswertung ist fehlgeschlagen.');
+    }
+    throw new Error('Die Auswertung dauert ungewöhnlich lange – bitte noch einmal versuchen.');
+}
+
 function initQuickCapture() {
     const open = document.getElementById('quick-open');
     const panel = document.getElementById('quick-capture');
@@ -976,17 +1002,21 @@ function initQuickCapture() {
         renderProposal();
         progress.hidden = false;
         startProgressClock();
-        // Waehrend der Auswertung nichts anfassbar lassen: der Aufruf dauert
-        // Sekunden, und ein zweites Absenden startet eine zweite Session.
+        // Waehrend der Auswertung nichts anfassbar lassen: sie dauert bis zu
+        // einer Minute, und ein zweites Absenden startet eine zweite Session.
         submit.disabled = true;
         cancel.disabled = true;
         text.disabled = true;
         try {
-            proposal = await fetchJson('/api/food/quick-capture', {
+            // Der Start antwortet sofort mit einer Auftragsnummer; das Ergebnis
+            // wird danach abgefragt. Jede einzelne Anfrage bleibt damit kurz und
+            // laeuft in keinen Timeout unterwegs.
+            const started = await fetchJson('/api/food/quick-capture', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ date: currentDate, text: value, meal: addMeal }),
             });
+            proposal = await awaitQuickCapture(started.id);
             renderProposal();
         } catch (err) {
             msg.textContent = `Fehler: ${err.message}`;

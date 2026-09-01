@@ -219,13 +219,7 @@ public class FoodService {
      * ohnehin nichts - es wird ja nicht geschrieben.
      */
     public QuickCapturePreview quickCapture(QuickCaptureRequest request) {
-        if (request == null || request.text() == null || request.text().isBlank()) {
-            throw badRequest("text is required");
-        }
-        String text = request.text().trim();
-        if (text.length() > MAX_QUICK_CAPTURE_LENGTH) {
-            throw badRequest("text must be at most " + MAX_QUICK_CAPTURE_LENGTH + " characters");
-        }
+        String text = validateQuickCapture(request);
 
         FoodData data = repository.load();
         ExtractedDish extracted = extractor.extract(text, data.targets(), data.dishes());
@@ -260,6 +254,24 @@ public class FoodService {
                 known.isPresent()
                         ? "Bekanntes Gericht erkannt - die gespeicherten Nährwerte werden übernommen."
                         : extracted.note());
+    }
+
+    /**
+     * Prueft die Eingabe und gibt den bereinigten Text zurueck.
+     *
+     * <p>Eigene Methode, weil der Auftragsstart sie vor dem Abschicken braucht:
+     * ein zu langer oder leerer Text soll sofort als 400 ankommen und nicht erst
+     * eine Minute spaeter als fehlgeschlagener Auftrag.
+     */
+    public String validateQuickCapture(QuickCaptureRequest request) {
+        if (request == null || request.text() == null || request.text().isBlank()) {
+            throw badRequest("text is required");
+        }
+        String text = request.text().trim();
+        if (text.length() > MAX_QUICK_CAPTURE_LENGTH) {
+            throw badRequest("text must be at most " + MAX_QUICK_CAPTURE_LENGTH + " characters");
+        }
+        return text;
     }
 
     /**
