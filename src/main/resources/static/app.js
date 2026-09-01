@@ -53,11 +53,28 @@ const MEALS = [
 const UNASSIGNED = { key: null, label: 'Ohne Zuordnung' };
 
 const CHART_COLORS = {
-    kcal: 'rgba(92, 124, 250, 0.75)',
-    kcalOver: 'rgba(239, 83, 80, 0.8)',
+    // Gelb wie im Weight Tracker: dort sind die kcal ebenfalls gelb, das Gewicht
+    // gruen bzw. hellblau. Eine gemeinsame Farbsprache ueber beide Seiten - und
+    // nebenbei kollidierte das fruehere Blau mit der Messwert-Linie.
+    kcal: 'rgba(255, 213, 79, 0.85)',
+    kcalOver: 'rgba(239, 83, 80, 0.9)',
     target: 'rgba(230, 236, 245, 0.45)',
-    weight: '#81c784',
+    // Dieselben Farben wie im Weight Tracker: dort ist das 7-Tage-Mittel gruen
+    // und der Messwert hellblau. Wer beide Seiten benutzt, soll nicht zweimal
+    // lernen muessen, welche Linie was ist.
+    weightAvg7: '#81c784',
+    weightMeasured: '#4fc3f7',
 };
+
+// Die beiden Gewichtsserien. Getrennt schaltbar: das 7-Tage-Mittel zeigt den
+// Trend, der Tageswert die Schwankung - wer nach einem Ausrutscher sucht,
+// braucht den, und wer die Richtung sehen will, stoert er.
+const WEIGHT_SERIES = [
+    { key: 'avg7', label: 'Gewicht (7-Tage-Mittel)', color: CHART_COLORS.weightAvg7,
+      width: 2.5, points: 0, tension: 0.3 },
+    { key: 'measured', label: 'Gewicht (Messwert)', color: CHART_COLORS.weightMeasured,
+      width: 1.5, points: 1.5, tension: 0.15 },
+];
 
 let currentDate = todayIso();
 let dishes = [];
@@ -71,8 +88,9 @@ let historyChart = null;
 let dailyTotals = [];
 // Gewicht wird erst geholt, wenn es jemand einblendet - ein Cross-Origin-Request
 // auf gut Glueck waere unnoetig, und ohne Weight-Cookie schlaegt er ohnehin fehl.
-let showWeight = false;
-let weightByDate = {};
+const showWeight = { avg7: false, measured: false };
+// Je Serie eine Zuordnung Datum -> Wert.
+let weightByDate = { avg7: {}, measured: {} };
 let weightError = null;
 
 function todayIso() {
@@ -145,8 +163,10 @@ function gaugeTick() {
     const deg = 135 + (1 / GAUGE_HEADROOM) * SWEEP * 360;
     const rad = deg * Math.PI / 180;
     const point = distance => [50 + distance * Math.cos(rad), 50 + distance * Math.sin(rad)];
-    const [x1, y1] = point(R - 7.5);
-    const [x2, y2] = point(R + 7.5);
+    // Ausserhalb des Bogens statt quer hindurch: eine Linie mitten durch die
+    // Fuellung zerschneidet sie optisch, eine Kerbe daneben markiert genauso gut.
+    const [x1, y1] = point(R + 5);
+    const [x2, y2] = point(R + 10.5);
     return `<line class="gauge-tick" x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}"
                   x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"></line>`;
 }
@@ -1107,20 +1127,20 @@ async function loadFeatures() {
 // --- Verlauf ----------------------------------------------------------------
 
 /**
- * Holt die 7-Tage-Mittel aus der Weight-App. Bewusst das Mittel und nicht den
- * Tageswert: neben Tagessummen an Kalorien ist die geglaettete Linie die
- * Aussage, die man sehen will - das Tagesgewicht schwankt um mehrere hundert
- * Gramm aus Gruenden, die mit dem Essen nichts zu tun haben.
+ * Holt beide Gewichtsserien aus der Weight-App - Tageswert und 7-Tage-Mittel.
+ * Ein Aufruf liefert ohnehin beides, also wird auch beides abgelegt und die
+ * Auswahl erst beim Zeichnen getroffen.
  */
 async function loadWeightSeries() {
     try {
         const points = await fetchJson(`${WEIGHT_API}/api/weight/last90`, { credentials: 'include' });
-        weightByDate = Object.fromEntries(
-            (points || []).filter(p => p.avg7 != null).map(p => [p.date, p.avg7]));
+        const byKey = key => Object.fromEntries(
+            (points || []).filter(p => p[key] != null).map(p => [p.date, p[key]]));
+        weightByDate = { avg7: byKey('avg7'), measured: byKey('measured') };
         weightError = null;
     } catch (err) {
         // Kein harter Fehler: der kcal-Verlauf steht auch ohne Gewicht.
-        weightByDate = {};
+        weightByDate = { avg7: {}, measured: {} };
         weightError = err.message;
     }
 }
@@ -1130,9 +1150,12 @@ async function loadHistory() {
     // Verlauf ist ein Ueberblick, kein zweiter Blick auf denselben Tag.
     const to = todayIso();
     const from = shiftDate(to, -(historyDays - 1));
+    const wantsWeight = showWeight.avg7 || showWeight.measured;
+    const haveWeight = Object.keys(weightByDate.avg7).length
+        || Object.keys(weightByDate.measured).length;
     const [totals] = await Promise.all([
         fetchJson(`/api/food/daily?from=${from}&to=${to}`),
-        showWeight && !Object.keys(weightByDate).length ? loadWeightSeries() : Promise.resolve(),
+        wantsWeight && !haveWeight ? loadWeightSeries() : Promise.resolve(),
     ]);
     dailyTotals = totals || [];
     renderHistory(from, to);
@@ -1200,21 +1223,26 @@ function renderHistory(from, to) {
         },
     ];
 
-    if (showWeight) {
+    WEIGHT_SERIES.filter(series => showWeight[series.key]).forEach(series => {
+        const values = weightByDate[series.key];
         datasets.push({
             type: 'line',
-            label: 'Gewicht (7-Tage-Mittel)',
-            data: labels.map(d => (d in weightByDate ? weightByDate[d] : null)),
-            borderColor: CHART_COLORS.weight,
-            backgroundColor: CHART_COLORS.weight,
-            borderWidth: 2.5,
-            pointRadius: 0,
+            label: series.label,
+            data: labels.map(d => (d in values ? values[d] : null)),
+            borderColor: series.color,
+            backgroundColor: series.color,
+            borderWidth: series.width,
+            pointRadius: series.points,
+            pointHoverRadius: series.points + 2,
+            // Hier ueberbrueckt: ein nicht gewogener Tag ist eine Luecke in der
+            // Messreihe, keine Aussage - anders als bei den kcal, wo ein Tag
+            // ohne Eintrag bedeutet, dass nichts erfasst wurde.
             spanGaps: true,
-            tension: 0.3,
+            tension: series.tension,
             yAxisID: 'yWeight',
             order: 1,
         });
-    }
+    });
 
     const config = {
         data: { labels, datasets },
@@ -1226,7 +1254,7 @@ function renderHistory(from, to) {
                 y: { position: 'left', beginAtZero: true, title: { display: true, text: 'kcal' } },
                 yWeight: {
                     position: 'right',
-                    display: showWeight,
+                    display: showWeight.avg7 || showWeight.measured,
                     // Eigene Skalierung mit eigenem Gitternetz, das nicht in die
                     // Flaeche gezeichnet wird: die kcal-Achse behaelt so ihre
                     // Grenzen, und es liegen nicht zwei Raster uebereinander.
@@ -1247,19 +1275,42 @@ function renderHistory(from, to) {
         historyChart.update();
     } else {
         historyChart = new Chart(document.getElementById('history-chart'), config);
+        clearHoverOnTouchEnd(historyChart);
     }
 
     // Eingeblendetes Gewicht ohne einen einzigen Punkt im Fenster sieht aus wie
     // ein Defekt - deshalb sagen, dass es an den Daten liegt und nicht am Abruf.
-    const weightPointsInRange = showWeight && labels.some(d => d in weightByDate);
+    const shown = WEIGHT_SERIES.filter(series => showWeight[series.key]);
+    const weightPointsInRange = shown.some(series =>
+        labels.some(d => d in weightByDate[series.key]));
     const msg = document.getElementById('history-msg');
     if (weightError) {
         msg.textContent = `Gewicht nicht verfügbar: ${weightError} (Weight Tracker unter ${WEIGHT_API})`;
-    } else if (showWeight && !weightPointsInRange) {
+    } else if (shown.length && !weightPointsInRange) {
         msg.textContent = 'Für diesen Zeitraum liegen keine Gewichtsdaten vor.';
     } else {
         msg.textContent = '';
     }
+}
+
+/**
+ * Touch-Geraete feuern kein mouseout: Chart.js laesst Tooltip und Hervorhebung
+ * nach einem Tippen stehen, bis man woanders hintippt - die Kurve bleibt also
+ * dauerhaft verdeckt. Beim Loslassen deshalb selbst aufraeumen. preventDefault
+ * unterdrueckt die vom Browser emulierten Maus-Ereignisse, die den Zustand
+ * sonst unmittelbar danach wieder setzen wuerden.
+ */
+function clearHoverOnTouchEnd(chart) {
+    ['touchend', 'touchcancel'].forEach(type => {
+        chart.canvas.addEventListener(type, event => {
+            event.preventDefault();
+            chart.setActiveElements([]);
+            if (chart.tooltip) {
+                chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+            }
+            chart.update('none');
+        }, { passive: false });
+    });
 }
 
 function initHistoryControls() {
@@ -1280,19 +1331,21 @@ function initHistoryControls() {
     });
 
     const toggles = document.getElementById('history-toggles');
-    const label = document.createElement('label');
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = showWeight;
-    checkbox.addEventListener('change', async () => {
-        showWeight = checkbox.checked;
-        await loadHistory();
+    WEIGHT_SERIES.forEach(series => {
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = showWeight[series.key];
+        checkbox.addEventListener('change', async () => {
+            showWeight[series.key] = checkbox.checked;
+            await loadHistory();
+        });
+        const swatch = document.createElement('span');
+        swatch.className = 'swatch';
+        swatch.style.backgroundColor = series.color;
+        label.append(checkbox, swatch, document.createTextNode(series.label));
+        toggles.appendChild(label);
     });
-    const swatch = document.createElement('span');
-    swatch.className = 'swatch';
-    swatch.style.backgroundColor = CHART_COLORS.weight;
-    label.append(checkbox, swatch, document.createTextNode('Körpergewicht'));
-    toggles.appendChild(label);
 }
 
 // --- Laden und Formulare ----------------------------------------------------

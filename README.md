@@ -15,9 +15,15 @@ Oben drei kleine Tachos nebeneinander für die **bisher verzehrten** Makros
 (Eiweiß, Fett, Kohlenhydrate), darunter ein großer Tacho für die **noch übrigen**
 kcal, daneben als bloße Zahl der verzehrte Wert.
 
-Auf jedem Tacho sitzt ein **Zielstrich**. Der Bogen reicht bis 125 % des Ziels,
-die Marke also nicht ans Ende — sonst wäre nicht ablesbar, ob man knapp oder
-weit darüber liegt.
+Auf jedem Tacho sitzt ein **Zielstrich**, als Kerbe neben dem Bogen statt quer
+hindurch — eine Linie mitten durch die Füllung zerschneidet sie optisch. Der
+Bogen reicht bis 125 % des Ziels, die Marke also nicht ans Ende: sonst wäre
+nicht ablesbar, ob man knapp oder weit darüber liegt.
+
+Die Bögen sind mit einem Farbverlauf und einem dezenten Schein in derselben
+Farbe gezeichnet (`<linearGradient>` einmal im Dokument, per `url(#…)`
+referenziert). Das gibt ihnen Tiefe, statt sie wie ausgeschnittene Streifen
+wirken zu lassen.
 
 Die Einfärbung folgt der Richtung, in die das jeweilige Ziel gemeint ist. Eiweiß
 ist ein **Mindestwert**: ab dem Ziel grün, darüber bleibt es grün — mehr ist
@@ -68,13 +74,23 @@ hinweg behaupten, dazwischen sei etwas erfasst worden. Ein Tag, der allein
 zwischen zwei Lücken steht, bekommt einen Punkt; er hätte sonst kein
 Liniensegment und wäre unsichtbar.
 
-Optional lässt sich das **Körpergewicht** einblenden. Das kommt vom
+Optional lässt sich das **Körpergewicht** einblenden, in zwei getrennt
+schaltbaren Serien: das **7-Tage-Mittel** zeigt den Trend, der **Messwert** die
+Schwankung. Wer nach einem Ausrutscher sucht, braucht den Tageswert; wer die
+Richtung sehen will, stört er. Beide kommen vom
 [Weight Tracker](https://github.com/Flexii2000/weight-app)
-(`GET /api/weight/last90`, per CORS für diese Seite freigegeben) und liegt als
-7-Tage-Mittel auf einer eigenen Achse rechts — neben Tagessummen an Kalorien ist
-die geglättete Linie die Aussage, die man sehen will; das Tagesgewicht schwankt
-um mehrere hundert Gramm aus Gründen, die mit dem Essen nichts zu tun haben.
-Geholt wird es erst beim Einblenden, nicht auf Verdacht.
+(`GET /api/weight/last90`, per CORS für diese Seite freigegeben) und liegen auf
+einer eigenen Achse rechts. Ein Aufruf liefert ohnehin beides, also wird auch
+beides abgelegt und die Auswahl erst beim Zeichnen getroffen — geholt aber erst
+beim ersten Einblenden, nicht auf Verdacht.
+
+Die Farben sind dieselben wie drüben: kcal gelb, 7-Tage-Mittel grün, Messwert
+hellblau. Wer beide Seiten benutzt, soll nicht zweimal lernen müssen, welche
+Linie was ist.
+
+Anders als bei den kcal werden die Gewichtslücken **überbrückt**: ein nicht
+gewogener Tag ist eine Lücke in der Messreihe, keine Aussage — während ein Tag
+ohne kcal-Eintrag bedeutet, dass nichts erfasst wurde.
 
 Die beiden Apps zeigen damit dieselbe Beziehung von zwei Seiten: hier die
 Gewichtskurve über den Kalorien, dort die Kalorien unter der Gewichtskurve.
