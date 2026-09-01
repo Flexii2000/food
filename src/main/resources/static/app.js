@@ -570,6 +570,11 @@ function chooseDish(id, label) {
         document.getElementById('nd-name').value = label;
     }
     closeDishOptions();
+    // Fokus abgeben, damit auf dem Handy die Tastatur zugeht. Sie bleibt sonst
+    // stehen, weil der mousedown-Handler oben preventDefault aufruft - genau
+    // das verhindert ja den Fokusverlust, der die Liste zu frueh schliessen
+    // wuerde. Nach der Auswahl ist der Grund dafuer weg.
+    search.blur();
     onDishChange();
 }
 
