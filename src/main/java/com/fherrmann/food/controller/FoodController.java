@@ -2,6 +2,7 @@ package com.fherrmann.food.controller;
 
 import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.dto.DayTotal;
+import com.fherrmann.food.dto.DeviceRegistration;
 import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.Features;
 import com.fherrmann.food.dto.NewEntryRequest;
@@ -11,6 +12,7 @@ import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Nutrients;
+import com.fherrmann.food.push.DeviceTokens;
 import com.fherrmann.food.service.FoodService;
 import com.fherrmann.food.service.QuickCaptureJobs;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -36,7 +38,11 @@ public class FoodController {
     private final FoodService service;
     private final QuickCaptureJobs quickCaptureJobs;
 
-    public FoodController(FoodService service, QuickCaptureJobs quickCaptureJobs) {
+    private final DeviceTokens devices;
+
+    public FoodController(FoodService service, QuickCaptureJobs quickCaptureJobs,
+                          DeviceTokens devices) {
+        this.devices = devices;
         this.service = service;
         this.quickCaptureJobs = quickCaptureJobs;
     }
@@ -135,6 +141,22 @@ public class FoodController {
      * board's cards are: the numbers are already at hand here, and a response arriving
      * at all is the health check.
      */
+    /**
+     * Meldet ein Geraet fuer Benachrichtigungen an.
+     *
+     * <p>Die App ruft das bei jedem Start auf: iOS vergibt die Kennung
+     * gelegentlich neu, und eine veraltete faellt sonst erst auf, wenn eine
+     * Benachrichtigung ins Leere geht.
+     */
+    @PostMapping("/devices")
+    public ResponseEntity<Void> registerDevice(@RequestBody DeviceRegistration request) {
+        if (request == null || request.token() == null || request.token().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        devices.add(request.token().trim());
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/status")
     public StatusInfo status() {
         return service.status();

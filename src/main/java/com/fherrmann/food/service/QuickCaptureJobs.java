@@ -3,6 +3,7 @@ package com.fherrmann.food.service;
 import com.fherrmann.food.dto.QuickCaptureJob;
 import com.fherrmann.food.dto.QuickCapturePreview;
 import com.fherrmann.food.dto.QuickCaptureRequest;
+import com.fherrmann.food.push.PushNotifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -51,9 +52,12 @@ public class QuickCaptureJobs {
     });
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
 
-    public QuickCaptureJobs(FoodService service, Clock clock) {
+    private final PushNotifier notifier;
+
+    public QuickCaptureJobs(FoodService service, Clock clock, PushNotifier notifier) {
         this.service = service;
         this.clock = clock;
+        this.notifier = notifier;
     }
 
     /** Ein Auftrag samt Ergebnis. Veraenderliche Felder, weil der Thread sie nachtraegt. */
@@ -95,6 +99,9 @@ public class QuickCaptureJobs {
                 job.status = QuickCaptureJob.FAILED;
             } finally {
                 job.finishedAt = clock.instant();
+                // Erst nachdem der Stand steht: die Benachrichtigung fuehrt in
+                // die App, und die soll dort ein fertiges Ergebnis vorfinden.
+                notifier.quickCaptureFinished(job.status, job.preview, job.error);
             }
         });
 
