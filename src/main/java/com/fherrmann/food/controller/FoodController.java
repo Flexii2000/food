@@ -10,6 +10,7 @@ import com.fherrmann.food.dto.QuickCaptureRequest;
 import com.fherrmann.food.dto.QuickCaptureJob;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
+import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.push.DeviceTokens;
@@ -107,6 +108,12 @@ public class FoodController {
     @PostMapping("/entries")
     public ResponseEntity<DaySummary> addEntry(@RequestBody NewEntryRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addEntry(request));
+    }
+
+    /** Menge, Mahlzeit oder Tag eines Eintrags berichtigen - das Gericht bleibt. */
+    @PutMapping("/entries/{id}")
+    public DaySummary updateEntry(@PathVariable String id, @RequestBody UpdateEntryRequest request) {
+        return service.updateEntry(id, request);
     }
 
     @DeleteMapping("/entries/{id}")

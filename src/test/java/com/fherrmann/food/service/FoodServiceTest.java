@@ -8,6 +8,7 @@ import com.fherrmann.food.dto.QuickCaptureRequest;
 import com.fherrmann.food.dto.QuickCapturePreview;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
+import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
@@ -183,6 +184,28 @@ class FoodServiceTest {
         service.addEntry(new NewEntryRequest(TODAY.minusDays(5), id, null, 300.0, null));
 
         assertThat(service.dishes().get(0).lastUsedOn()).isEqualTo(TODAY);
+    }
+
+    @Test
+    void anEntryCanBeCorrectedWithoutChangingTheDish() {
+        DaySummary day = service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.LUNCH));
+        String entryId = day.entries().get(0).id();
+        double kcalPer100 = day.entries().get(0).per100g().kcal();
+
+        DaySummary after = service.updateEntry(entryId,
+                new UpdateEntryRequest(150.0, Meal.DINNER, TODAY.minusDays(1)));
+
+        // Der Tag von gestern kommt zurueck - dorthin ist der Eintrag gewandert.
+        assertThat(after.date()).isEqualTo(TODAY.minusDays(1));
+        assertThat(after.entries()).hasSize(1);
+        assertThat(after.entries().get(0).grams()).isEqualTo(150.0);
+        assertThat(after.entries().get(0).meal()).isEqualTo(Meal.DINNER);
+        assertThat(after.entries().get(0).per100g().kcal()).isEqualTo(kcalPer100);
+        assertThat(service.day(TODAY).entries()).isEmpty();
+        // Ohne Mahlzeit und Tag bleiben beide, wie sie waren.
+        DaySummary again = service.updateEntry(entryId, new UpdateEntryRequest(200.0, null, null));
+        assertThat(again.date()).isEqualTo(TODAY.minusDays(1));
+        assertThat(again.entries().get(0).meal()).isEqualTo(Meal.DINNER);
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.fherrmann.food.dto.QuickCaptureRequest;
 import com.fherrmann.food.dto.QuickCapturePreview;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
+import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.FoodData;
 import com.fherrmann.food.model.FoodEntry;
@@ -344,6 +345,33 @@ public class FoodService {
         // Gericht bekannt ist.
         put.accept("grams", "grams");
         return sources;
+    }
+
+    /**
+     * Berichtigt Menge, Mahlzeit oder Tag eines Eintrags. Name und Naehrwerte
+     * je 100 g bleiben, wie sie beim Eintragen waren.
+     *
+     * @return der Tag, auf dem der Eintrag danach liegt
+     */
+    public synchronized DaySummary updateEntry(String id, UpdateEntryRequest request) {
+        if (request == null) {
+            throw badRequest("request body is required");
+        }
+        double grams = requirePositive(request.grams(), "grams", MAX_GRAMS);
+        FoodData data = repository.load();
+        FoodEntry existing = data.entries().stream()
+                .filter(e -> e.id() != null && e.id().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown entry"));
+        LocalDate date = request.date() == null ? existing.date() : request.date();
+        Meal meal = request.meal() == null ? existing.meal() : request.meal();
+        FoodEntry updated = new FoodEntry(existing.id(), date, existing.dishId(), existing.name(),
+                grams, existing.per100g(), meal, existing.createdAt());
+        List<FoodEntry> entries = data.entries().stream()
+                .map(e -> e.id() != null && e.id().equals(id) ? updated : e)
+                .toList();
+        repository.save(new FoodData(data.targets(), data.mealShares(), data.dishes(), entries));
+        return day(date);
     }
 
     /** Removes one entry. Returns the refreshed day it belonged to. */

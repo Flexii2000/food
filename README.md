@@ -409,6 +409,7 @@ vier Zahlen noch zusammenpassen.
 | DELETE  | `/api/food/dishes/{id}`   | Gericht vergessen (Einträge bleiben)                    |
 | POST    | `/api/food/entries`       | Menge eintragen (mit `meal`)                            |
 | DELETE  | `/api/food/entries/{id}`  | Eintrag löschen                                         |
+| PUT | `/api/food/entries/{id}` | `{grams, meal?, date?}` — Menge, Mahlzeit oder Tag berichtigen; Name und Nährwerte je 100 g bleiben, wie sie beim Eintragen waren. Antwort: der Tag, auf dem der Eintrag danach liegt |
 | GET     | `/api/food/targets`       | Tagesziele                                              |
 | PUT     | `/api/food/targets`       | Tagesziele ändern                                       |
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne — liest die Weight-App        |
