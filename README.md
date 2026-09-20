@@ -448,10 +448,13 @@ sagt, ob eine Woche gepasst hat.
 complete}`. Das Fenster ist **zentriert** – drei Tage davor, der Tag, drei
 danach – und damit dasselbe wie beim 7-Tage-Mittel des Weight Trackers: im
 gemeinsamen Diagramm decken beide Kurven dieselben Tage ab. Gemittelt wird
-**nur über Tage mit Eintrag**; ein Tag ohne Eintrag ist unbekannt und zieht
-das Mittel nicht auf null. `days` sagt, wie viele Tage eingegangen sind.
-`complete` ist falsch, solange das Fenster in die Zukunft reicht – der Wert
-der letzten drei Tage kann sich noch ändern, die Oberflächen zeichnen ihn
+**nur über abgeschlossene Tage mit Eintrag**: ein Tag ohne Eintrag ist
+unbekannt und zieht das Mittel nicht auf null, und der **laufende Tag zählt
+nicht mit** – seine Summe wächst bis zum Abend und würde das Mittel bis dahin
+nach unten ziehen; vorerfasste künftige Tage sind ein Plan und zählen ebenso
+nicht. `days` sagt, wie viele Tage eingegangen sind. `complete` ist falsch,
+solange das Fenster bis heute oder darüber hinaus reicht – der Wert der
+letzten vier Tage kann sich noch ändern, die Oberflächen zeichnen ihn
 gepunktet. Gerechnet wird über den ganzen Bestand, nicht nur über den
 angefragten Zeitraum, und nie für Tage nach heute. Tage, in deren Fenster
 gar nichts liegt, fehlen in der Antwort.

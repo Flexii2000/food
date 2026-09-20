@@ -136,24 +136,31 @@ public class FoodService {
      * Das gleitende kcal-Mittel je Tag im Zeitraum - was die Verlaufsdiagramme
      * statt der springenden Tageswerte zeigen. Gerechnet ueber den ganzen
      * Bestand, nicht nur ueber den angefragten Zeitraum: das Fenster des ersten
-     * Tages reicht vor {@code from}. Tage, deren Fenster keinen einzigen
-     * Eintrag enthaelt, fehlen; Tage nach heute ebenfalls - ein Mittel fuer
-     * morgen aus den Werten von gestern waere eine Prognose, die niemand
-     * bestellt hat.
+     * Tages reicht vor {@code from}.
+     *
+     * <p>Mitgezaehlt werden nur <em>abgeschlossene</em> Tage, also Tage vor
+     * heute: der laufende Tag ist erst am Abend vollstaendig und wuerde das
+     * Mittel bis dahin nach unten ziehen, und ein vorerfasster kuenftiger Tag
+     * ist nur ein Plan. Tage, deren Fenster keinen einzigen solchen Eintrag
+     * enthaelt, fehlen; Tage nach heute ebenfalls - ein Mittel fuer morgen aus
+     * den Werten von gestern waere eine Prognose, die niemand bestellt hat.
+     * {@code complete} ist erst gesetzt, wenn auch der letzte Tag des Fensters
+     * abgeschlossen ist - die letzten vier Tage sind also vorlaeufig.
      */
     public List<DayAverage> dailyAverages(LocalDate from, LocalDate to) {
         if (from == null || to == null || to.isBefore(from)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "from and to are required, and to must not precede from");
         }
+        LocalDate today = today();
         Map<LocalDate, Double> kcalByDate = new HashMap<>();
         for (FoodEntry entry : repository.load().entries()) {
-            if (entry.date() != null) {
+            // Nur abgeschlossene Tage: heute und spaeter bleiben draussen.
+            if (entry.date() != null && entry.date().isBefore(today)) {
                 kcalByDate.merge(entry.date(), entry.total().kcal(), Double::sum);
             }
         }
         int before = (AVERAGE_WINDOW_DAYS - 1) / 2;
         int after = AVERAGE_WINDOW_DAYS - 1 - before;
-        LocalDate today = today();
         List<DayAverage> result = new ArrayList<>();
         for (LocalDate day = from; !day.isAfter(to) && !day.isAfter(today); day = day.plusDays(1)) {
             double sum = 0;
@@ -168,7 +175,7 @@ public class FoodService {
             if (days == 0) {
                 continue;
             }
-            boolean complete = !day.plusDays(after).isAfter(today);
+            boolean complete = day.plusDays(after).isBefore(today);
             result.add(new DayAverage(day, Math.round(sum / days), days, complete));
         }
         return result;

@@ -243,37 +243,47 @@ class FoodServiceTest {
     }
 
     @Test
-    void dailyAveragesMeanOnlyTheDaysThatHaveEntries() {
+    void dailyAveragesMeanOnlyTheFinishedDaysThatHaveEntries() {
         kcalOn(TODAY.minusDays(6), 2000);
         kcalOn(TODAY.minusDays(4), 2400);
-        kcalOn(TODAY, 1600);
+        kcalOn(TODAY, 1600);   // laeuft noch - zaehlt nicht
 
         List<DayAverage> averages = service.dailyAverages(TODAY.minusDays(8), TODAY);
 
-        // Jeder Tag, dessen Fenster (3 davor, 3 danach) einen Eintrag enthaelt,
-        // bekommt ein Mittel - und zwar nur ueber die Tage mit Eintrag: die
-        // Luecken dazwischen sind unbekannt, nicht null.
+        // Jeder Tag, dessen Fenster (3 davor, 3 danach) einen abgeschlossenen
+        // Eintrag enthaelt, bekommt ein Mittel - nur ueber diese Tage: die
+        // Luecken dazwischen sind unbekannt, nicht null, und der laufende Tag
+        // ist noch nicht vorbei.
         Map<LocalDate, DayAverage> byDate = averages.stream()
                 .collect(java.util.stream.Collectors.toMap(DayAverage::date, a -> a));
-        assertThat(byDate.get(TODAY.minusDays(3)).kcal()).isEqualTo(2000.0);   // (2000 + 2400 + 1600) / 3
-        assertThat(byDate.get(TODAY.minusDays(3)).days()).isEqualTo(3);
-        assertThat(byDate.get(TODAY.minusDays(3)).complete()).isTrue();          // Fenster endet heute
-        assertThat(byDate.get(TODAY.minusDays(2)).kcal()).isEqualTo(2000.0);   // (2400 + 1600) / 2
-        assertThat(byDate.get(TODAY.minusDays(2)).days()).isEqualTo(2);
-        assertThat(byDate.get(TODAY.minusDays(2)).complete()).isFalse();         // Fenster reicht bis morgen
+        assertThat(byDate.get(TODAY.minusDays(4)).kcal()).isEqualTo(2200.0);   // (2000 + 2400) / 2
+        assertThat(byDate.get(TODAY.minusDays(4)).days()).isEqualTo(2);
+        assertThat(byDate.get(TODAY.minusDays(4)).complete()).isTrue();          // Fenster endet gestern
+        assertThat(byDate.get(TODAY.minusDays(3)).kcal()).isEqualTo(2200.0);   // heute zaehlt nicht mit
+        assertThat(byDate.get(TODAY.minusDays(3)).complete()).isFalse();         // Fenster reicht bis heute
+        assertThat(byDate.get(TODAY.minusDays(2)).kcal()).isEqualTo(2400.0);   // nur noch der Tag -4
+        assertThat(byDate.get(TODAY.minusDays(2)).days()).isEqualTo(1);
         assertThat(byDate.get(TODAY.minusDays(8)).kcal()).isEqualTo(2000.0);   // nur der Tag -6 im Fenster
         assertThat(byDate.get(TODAY.minusDays(8)).days()).isEqualTo(1);
-        assertThat(averages).hasSize(9);
+        // Heute selbst: im Fenster liegt kein abgeschlossener Eintrag mehr.
+        assertThat(byDate).doesNotContainKey(TODAY);
+        assertThat(averages).hasSize(8);
     }
 
     @Test
-    void dailyAveragesStopAtTodayAndSkipEmptyWindows() {
-        kcalOn(TODAY, 1800);
-        List<DayAverage> averages = service.dailyAverages(TODAY.minusDays(20), TODAY.plusDays(5));
-        // Vor dem Fenster des einzigen Eintrags gibt es nichts zu mitteln, und
-        // nach heute wird nicht prognostiziert.
-        assertThat(averages).extracting(DayAverage::date)
-                .containsExactly(TODAY.minusDays(3), TODAY.minusDays(2), TODAY.minusDays(1), TODAY);
+    void dailyAveragesIgnoreTodayAndPreloggedFutureDays() {
+        kcalOn(TODAY.minusDays(1), 2000);
+        kcalOn(TODAY, 5000);                // halber Tag, waechst noch
+        kcalOn(TODAY.plusDays(1), 3000);    // vorerfasst - ein Plan, kein Tag
+
+        List<DayAverage> averages = service.dailyAverages(TODAY.minusDays(10), TODAY.plusDays(5));
+
+        // Gestern ist der einzige abgeschlossene Tag: jedes Fenster, das ihn
+        // enthaelt, mittelt genau ihn - und nach heute wird nichts prognostiziert.
+        assertThat(averages).extracting(DayAverage::date).containsExactly(
+                TODAY.minusDays(4), TODAY.minusDays(3), TODAY.minusDays(2), TODAY.minusDays(1), TODAY);
+        assertThat(averages).extracting(DayAverage::kcal).containsOnly(2000.0);
+        assertThat(averages).extracting(DayAverage::days).containsOnly(1);
         assertThat(service.dailyAverages(TODAY.minusDays(60), TODAY.minusDays(30))).isEmpty();
     }
 
