@@ -1,6 +1,7 @@
 package com.fherrmann.food.service;
 
 import com.fherrmann.food.dto.DaySummary;
+import com.fherrmann.food.dto.DayAverage;
 import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.NewEntryRequest;
@@ -233,6 +234,53 @@ class FoodServiceTest {
         assertThat(totals.get(0).date()).isEqualTo(TODAY.minusDays(2));
         assertThat(totals.get(0).consumed().kcal()).isEqualTo(240.0);
         assertThat(totals.get(1).consumed().kcal()).isEqualTo(370.0);
+    }
+
+    /** Ein Eintrag mit genau {@code kcal} an einem Tag: 1000 g von einem Gericht mit {@code kcal/10} je 100 g. */
+    private void kcalOn(LocalDate date, double kcal) {
+        service.addEntry(new NewEntryRequest(date, null,
+                new DishRequest("Testgericht " + kcal, kcal / 10.0, 0.0, 0.0, 0.0, null), 1000.0, null));
+    }
+
+    @Test
+    void dailyAveragesMeanOnlyTheDaysThatHaveEntries() {
+        kcalOn(TODAY.minusDays(6), 2000);
+        kcalOn(TODAY.minusDays(4), 2400);
+        kcalOn(TODAY, 1600);
+
+        List<DayAverage> averages = service.dailyAverages(TODAY.minusDays(8), TODAY);
+
+        // Jeder Tag, dessen Fenster (3 davor, 3 danach) einen Eintrag enthaelt,
+        // bekommt ein Mittel - und zwar nur ueber die Tage mit Eintrag: die
+        // Luecken dazwischen sind unbekannt, nicht null.
+        Map<LocalDate, DayAverage> byDate = averages.stream()
+                .collect(java.util.stream.Collectors.toMap(DayAverage::date, a -> a));
+        assertThat(byDate.get(TODAY.minusDays(3)).kcal()).isEqualTo(2000.0);   // (2000 + 2400 + 1600) / 3
+        assertThat(byDate.get(TODAY.minusDays(3)).days()).isEqualTo(3);
+        assertThat(byDate.get(TODAY.minusDays(3)).complete()).isTrue();          // Fenster endet heute
+        assertThat(byDate.get(TODAY.minusDays(2)).kcal()).isEqualTo(2000.0);   // (2400 + 1600) / 2
+        assertThat(byDate.get(TODAY.minusDays(2)).days()).isEqualTo(2);
+        assertThat(byDate.get(TODAY.minusDays(2)).complete()).isFalse();         // Fenster reicht bis morgen
+        assertThat(byDate.get(TODAY.minusDays(8)).kcal()).isEqualTo(2000.0);   // nur der Tag -6 im Fenster
+        assertThat(byDate.get(TODAY.minusDays(8)).days()).isEqualTo(1);
+        assertThat(averages).hasSize(9);
+    }
+
+    @Test
+    void dailyAveragesStopAtTodayAndSkipEmptyWindows() {
+        kcalOn(TODAY, 1800);
+        List<DayAverage> averages = service.dailyAverages(TODAY.minusDays(20), TODAY.plusDays(5));
+        // Vor dem Fenster des einzigen Eintrags gibt es nichts zu mitteln, und
+        // nach heute wird nicht prognostiziert.
+        assertThat(averages).extracting(DayAverage::date)
+                .containsExactly(TODAY.minusDays(3), TODAY.minusDays(2), TODAY.minusDays(1), TODAY);
+        assertThat(service.dailyAverages(TODAY.minusDays(60), TODAY.minusDays(30))).isEmpty();
+    }
+
+    @Test
+    void dailyAveragesRejectAnInvertedRange() {
+        assertThatThrownBy(() -> service.dailyAverages(TODAY, TODAY.minusDays(1)))
+                .isInstanceOf(ResponseStatusException.class);
     }
 
     @Test

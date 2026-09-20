@@ -57,6 +57,9 @@ const CHART_COLORS = {
     // gruen bzw. hellblau. Eine gemeinsame Farbsprache ueber beide Seiten - und
     // nebenbei kollidierte das fruehere Blau mit der Messwert-Linie.
     kcal: 'rgba(255, 213, 79, 0.85)',
+    // Der Tageswert, blasser und duenner: er ist die Schwankung hinter dem
+    // Mittel, nicht die Aussage.
+    kcalDay: 'rgba(255, 213, 79, 0.5)',
     kcalOver: 'rgba(239, 83, 80, 0.9)',
     target: 'rgba(230, 236, 245, 0.45)',
     // Dieselben Farben wie im Weight Tracker: dort ist das 7-Tage-Mittel gruen
@@ -86,6 +89,16 @@ let addMeal = MEALS[0].key;
 let historyDays = 30;
 let historyChart = null;
 let dailyTotals = [];
+// Das gleitende 7-Tage-Mittel aus /api/food/daily-average - gerechnet im
+// Server ueber die Tage mit Eintrag, mit Flag, ob das Fenster schon voll ist.
+let dailyAverages = [];
+// Die beiden kcal-Serien. Das Mittel ist die Vorgabe: der Tageswert springt
+// von Mahlzeit zu Mahlzeit, das Mittel zeigt, ob eine Woche gepasst hat.
+const KCAL_SERIES = [
+    { key: 'avg7', label: 'kcal (7-Tage-Mittel)', color: CHART_COLORS.kcal },
+    { key: 'day', label: 'kcal (Tag)', color: CHART_COLORS.kcalDay },
+];
+const showKcal = { avg7: true, day: false };
 // Gewicht wird erst geholt, wenn es jemand einblendet - ein Cross-Origin-Request
 // auf gut Glueck waere unnoetig, und ohne Weight-Cookie schlaegt er ohnehin fehl.
 const showWeight = { avg7: false, measured: false };
@@ -1160,11 +1173,13 @@ async function loadHistory() {
     const wantsWeight = showWeight.avg7 || showWeight.measured;
     const haveWeight = Object.keys(weightByDate.avg7).length
         || Object.keys(weightByDate.measured).length;
-    const [totals] = await Promise.all([
+    const [totals, averages] = await Promise.all([
         fetchJson(`/api/food/daily?from=${from}&to=${to}`),
+        fetchJson(`/api/food/daily-average?from=${from}&to=${to}`),
         wantsWeight && !haveWeight ? loadWeightSeries() : Promise.resolve(),
     ]);
     dailyTotals = totals || [];
+    dailyAverages = averages || [];
     renderHistory(from, to);
 }
 
@@ -1185,25 +1200,54 @@ function renderHistory(from, to) {
     }
 
     const byDate = Object.fromEntries(dailyTotals.map(t => [t.date, t.consumed]));
+    const avgByDate = Object.fromEntries(dailyAverages.map(a => [a.date, a]));
     const target = (day && day.targets.kcal) || 0;
     const kcal = labels.map(d => (d in byDate ? byDate[d].kcal : null));
+    const avg = labels.map(d => (d in avgByDate ? avgByDate[d].kcal : null));
+    const avgComplete = labels.map(d => (d in avgByDate ? avgByDate[d].complete : true));
 
-    const datasets = [
-        {
+    // Abschnitte oberhalb des Ziels rot: die Ziellinie allein sagt es zwar
+    // auch, aber eine Kurve, die dort die Farbe wechselt, faellt schneller
+    // auf als ein Schnittpunkt.
+    const overTarget = base => ctx => (ctx.p0.parsed.y > target || ctx.p1.parsed.y > target
+        ? CHART_COLORS.kcalOver : base);
+
+    const datasets = [];
+    if (showKcal.avg7) {
+        datasets.push({
             type: 'line',
-            label: 'kcal',
-            data: kcal,
+            label: 'kcal ⌀ 7 Tage',
+            data: avg,
             borderColor: CHART_COLORS.kcal,
             backgroundColor: CHART_COLORS.kcal,
             borderWidth: 2.5,
-            // Abschnitte oberhalb des Ziels rot: die Ziellinie allein sagt es
-            // zwar auch, aber eine Kurve, die dort die Farbe wechselt, faellt
-            // schneller auf als ein Schnittpunkt.
             segment: {
-                borderColor: ctx => (ctx.p0.parsed.y > target || ctx.p1.parsed.y > target
-                    ? CHART_COLORS.kcalOver
-                    : CHART_COLORS.kcal),
+                borderColor: overTarget(CHART_COLORS.kcal),
+                // Gepunktet, wo das Fenster noch in die Zukunft reicht - der
+                // Wert kann sich mit den naechsten Eintraegen noch aendern.
+                borderDash: ctx => (avgComplete[ctx.p1DataIndex] === false ? [1, 6] : undefined),
+                borderCapStyle: ctx => (avgComplete[ctx.p1DataIndex] === false ? 'round' : 'butt'),
             },
+            // Das Mittel fehlt nur, wenn sieben Tage am Stueck nichts
+            // eingetragen ist - und das ist dann wirklich eine Luecke.
+            spanGaps: false,
+            pointRadius: ctx => (isolatedPoint(avg, ctx.dataIndex) ? 3 : 0),
+            pointBackgroundColor: CHART_COLORS.kcal,
+            pointHoverRadius: 4,
+            tension: 0.3,
+            yAxisID: 'y',
+            order: 8,
+        });
+    }
+    if (showKcal.day) {
+        datasets.push({
+            type: 'line',
+            label: 'kcal',
+            data: kcal,
+            borderColor: CHART_COLORS.kcalDay,
+            backgroundColor: CHART_COLORS.kcalDay,
+            borderWidth: 1.5,
+            segment: { borderColor: overTarget(CHART_COLORS.kcalDay) },
             // NICHT ueberbruecken: Tage ohne Eintrag sind unbekannt, nicht null.
             spanGaps: false,
             // Ein Tag, der allein zwischen zwei Luecken steht, hat kein
@@ -1211,24 +1255,24 @@ function renderHistory(from, to) {
             pointRadius: ctx => (isolatedPoint(kcal, ctx.dataIndex) ? 3 : 0),
             pointBackgroundColor: ctx => (kcal[ctx.dataIndex] > target
                 ? CHART_COLORS.kcalOver
-                : CHART_COLORS.kcal),
+                : CHART_COLORS.kcalDay),
             pointHoverRadius: 4,
             tension: 0.25,
             yAxisID: 'y',
             order: 10,
-        },
-        {
-            type: 'line',
-            label: 'Tagesziel',
-            data: labels.map(() => target),
-            borderColor: CHART_COLORS.target,
-            borderDash: [6, 4],
-            borderWidth: 1.5,
-            pointRadius: 0,
-            yAxisID: 'y',
-            order: 5,
-        },
-    ];
+        });
+    }
+    datasets.push({
+        type: 'line',
+        label: 'Tagesziel',
+        data: labels.map(() => target),
+        borderColor: CHART_COLORS.target,
+        borderDash: [6, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        yAxisID: 'y',
+        order: 5,
+    });
 
     WEIGHT_SERIES.filter(series => showWeight[series.key]).forEach(series => {
         const values = weightByDate[series.key];
@@ -1338,6 +1382,21 @@ function initHistoryControls() {
     });
 
     const toggles = document.getElementById('history-toggles');
+    KCAL_SERIES.forEach(series => {
+        const label = document.createElement('label');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = showKcal[series.key];
+        checkbox.addEventListener('change', async () => {
+            showKcal[series.key] = checkbox.checked;
+            await loadHistory();
+        });
+        const swatch = document.createElement('span');
+        swatch.className = 'swatch';
+        swatch.style.backgroundColor = series.color;
+        label.append(checkbox, swatch, document.createTextNode(series.label));
+        toggles.appendChild(label);
+    });
     WEIGHT_SERIES.forEach(series => {
         const label = document.createElement('label');
         const checkbox = document.createElement('input');

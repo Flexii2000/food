@@ -1,6 +1,7 @@
 package com.fherrmann.food.service;
 
 import com.fherrmann.food.dto.DaySummary;
+import com.fherrmann.food.dto.DayAverage;
 import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.NewEntryRequest;
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -121,6 +123,55 @@ public class FoodService {
                 .sorted(Map.Entry.comparingByKey())
                 .map(e -> new DayTotal(e.getKey(), e.getValue().rounded()))
                 .toList();
+    }
+
+    /**
+     * Fenster des gleitenden kcal-Mittels in Tagen, zentriert: drei Tage davor,
+     * der Tag, drei danach. Dasselbe Fenster wie das 7-Tage-Mittel des Weight
+     * Trackers, damit beide Kurven im selben Diagramm dieselben Tage abdecken.
+     */
+    public static final int AVERAGE_WINDOW_DAYS = 7;
+
+    /**
+     * Das gleitende kcal-Mittel je Tag im Zeitraum - was die Verlaufsdiagramme
+     * statt der springenden Tageswerte zeigen. Gerechnet ueber den ganzen
+     * Bestand, nicht nur ueber den angefragten Zeitraum: das Fenster des ersten
+     * Tages reicht vor {@code from}. Tage, deren Fenster keinen einzigen
+     * Eintrag enthaelt, fehlen; Tage nach heute ebenfalls - ein Mittel fuer
+     * morgen aus den Werten von gestern waere eine Prognose, die niemand
+     * bestellt hat.
+     */
+    public List<DayAverage> dailyAverages(LocalDate from, LocalDate to) {
+        if (from == null || to == null || to.isBefore(from)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "from and to are required, and to must not precede from");
+        }
+        Map<LocalDate, Double> kcalByDate = new HashMap<>();
+        for (FoodEntry entry : repository.load().entries()) {
+            if (entry.date() != null) {
+                kcalByDate.merge(entry.date(), entry.total().kcal(), Double::sum);
+            }
+        }
+        int before = (AVERAGE_WINDOW_DAYS - 1) / 2;
+        int after = AVERAGE_WINDOW_DAYS - 1 - before;
+        LocalDate today = today();
+        List<DayAverage> result = new ArrayList<>();
+        for (LocalDate day = from; !day.isAfter(to) && !day.isAfter(today); day = day.plusDays(1)) {
+            double sum = 0;
+            int days = 0;
+            for (LocalDate d = day.minusDays(before); !d.isAfter(day.plusDays(after)); d = d.plusDays(1)) {
+                Double kcal = kcalByDate.get(d);
+                if (kcal != null) {
+                    sum += kcal;
+                    days++;
+                }
+            }
+            if (days == 0) {
+                continue;
+            }
+            boolean complete = !day.plusDays(after).isAfter(today);
+            result.add(new DayAverage(day, Math.round(sum / days), days, complete));
+        }
+        return result;
     }
 
     /** Snapshot for the statusboard card. */

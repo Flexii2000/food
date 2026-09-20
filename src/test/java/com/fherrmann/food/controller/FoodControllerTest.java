@@ -132,6 +132,22 @@ class FoodControllerTest {
 
     @Test
     @WithMockUser
+    void dailyAveragesAreReadableFromTheWeightTrackersOrigin() throws Exception {
+        when(service.dailyAverages(any(), any())).thenReturn(List.of(
+                new com.fherrmann.food.dto.DayAverage(java.time.LocalDate.of(2026, 8, 30), 2100, 6, false)));
+        mockMvc.perform(get("/api/food/daily-average")
+                        .param("from", "2026-08-01").param("to", "2026-08-31")
+                        .header("Origin", "https://weight.fherrmann.com"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://weight.fherrmann.com"))
+                .andExpect(jsonPath("$[0].date").value("2026-08-30"))
+                .andExpect(jsonPath("$[0].kcal").value(2100.0))
+                .andExpect(jsonPath("$[0].days").value(6))
+                .andExpect(jsonPath("$[0].complete").value(false));
+    }
+
+    @Test
+    @WithMockUser
     void targetsAreReadableFromTheWeightTrackersOrigin() throws Exception {
         when(service.targets()).thenReturn(new Nutrients(2300, 200, 235.5, 62));
         // Die Weight-App zeichnet die kcal-Ziellinie in ihre Charts und braucht

@@ -413,6 +413,7 @@ vier Zahlen noch zusammenpassen.
 | GET     | `/api/food/targets`       | Tagesziele                                              |
 | PUT     | `/api/food/targets`       | Tagesziele ändern                                       |
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne — liest die Weight-App        |
+| GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
 | GET     | `/api/food/features`      | welche optionalen Funktionen der Server anbietet         |
 | POST    | `/api/food/quick-capture` | Freitext → **Vorschlag** (schreibt nichts)               |
@@ -434,6 +435,29 @@ der Eintrag unter `SNACK` — sonst wäre er in keinem der vier Abschnitte sicht
   "dish": { "name": "Skyr mit Beeren", "kcal": 80, "proteinG": 8, "carbsG": 6, "fatG": 1.3, "portionG": 300 }
 }
 ```
+
+### Das 7-Tage-Mittel
+
+Die Verlaufsdiagramme – hier und im Weight Tracker, im Browser wie in der
+App – zeigen seit September 2026 standardmäßig das **gleitende 7-Tage-Mittel**
+der kcal statt der Tageswerte; der Tageswert bleibt als zweiter, blasserer
+Umschalter da. Der Tageswert springt von Mahlzeit zu Mahlzeit, das Mittel
+sagt, ob eine Woche gepasst hat.
+
+`/api/food/daily-average?from=&to=` liefert je Tag `{date, kcal, days,
+complete}`. Das Fenster ist **zentriert** – drei Tage davor, der Tag, drei
+danach – und damit dasselbe wie beim 7-Tage-Mittel des Weight Trackers: im
+gemeinsamen Diagramm decken beide Kurven dieselben Tage ab. Gemittelt wird
+**nur über Tage mit Eintrag**; ein Tag ohne Eintrag ist unbekannt und zieht
+das Mittel nicht auf null. `days` sagt, wie viele Tage eingegangen sind.
+`complete` ist falsch, solange das Fenster in die Zukunft reicht – der Wert
+der letzten drei Tage kann sich noch ändern, die Oberflächen zeichnen ihn
+gepunktet. Gerechnet wird über den ganzen Bestand, nicht nur über den
+angefragten Zeitraum, und nie für Tage nach heute. Tage, in deren Fenster
+gar nichts liegt, fehlen in der Antwort.
+
+Gerechnet wird **einmal, hier**: vier Oberflächen (zwei Web, zwei iOS) zeigen
+denselben Wert, statt ihn viermal nachzubauen.
 
 `/api/food/daily` liefert **nur Tage mit Einträgen**. Ein Tag ohne Eintrag ist
 „unbekannt", nicht „nichts gegessen" — als 0 kcal in einer Kurve wäre das eine
@@ -468,7 +492,7 @@ Cookie und App-Prüfung nicht auseinanderlaufen können.
 
 ### CORS
 
-Zwei Endpunkte werden von anderen Subdomains gelesen: `/api/food/daily` von
+Drei Endpunkte werden von anderen Subdomains gelesen: `/api/food/daily` und `/api/food/daily-average` von
 `weight.fherrmann.com` (kcal-Overlay in den Charts) und `/api/food/status` von
 `status.fherrmann.com` (Statuskarte). Beide sind derselbe *Site* wie diese hier,
 der Browser schickt den `SameSite=Lax`-Cookie also mit — CORS ist nur nötig,

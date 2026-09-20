@@ -1,6 +1,7 @@
 package com.fherrmann.food.controller;
 
 import com.fherrmann.food.dto.DaySummary;
+import com.fherrmann.food.dto.DayAverage;
 import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DeviceRegistration;
 import com.fherrmann.food.dto.DishRequest;
@@ -140,6 +141,18 @@ public class FoodController {
             @RequestParam(name = "from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(name = "to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return service.dailyTotals(from, to);
+    }
+
+    /**
+     * Gleitendes 7-Tage-Mittel der kcal je Tag (siehe {@link FoodService#dailyAverages}).
+     * Wie {@code /daily} cross-site vom Weight Tracker gelesen - beide Verlaufsdiagramme
+     * zeigen das Mittel statt der Tageswerte.
+     */
+    @GetMapping("/daily-average")
+    public List<DayAverage> dailyAverage(
+            @RequestParam(name = "from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(name = "to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return service.dailyAverages(from, to);
     }
 
     /**

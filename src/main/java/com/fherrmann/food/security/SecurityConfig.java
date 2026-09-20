@@ -55,6 +55,7 @@ public class SecurityConfig {
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/food/daily", config);
+        source.registerCorsConfiguration("/api/food/daily-average", config);
         source.registerCorsConfiguration("/api/food/targets", config);
         source.registerCorsConfiguration("/api/food/status", config);
         return source;
