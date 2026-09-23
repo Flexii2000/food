@@ -15,6 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -80,14 +81,14 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
     }
 
     @Override
-    public ExtractedDish extract(String text, Nutrients targets, List<Dish> known) {
+    public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known) {
         if (!isAvailable()) {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "Schnellerfassung ist auf diesem Server nicht eingerichtet.");
         }
 
-        String output = run(prompt(text, targets, known));
+        String output = run(prompt(text, photo, targets, known));
         return parse(output);
     }
 
@@ -244,7 +245,7 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      * Aufruf zu Aufruf aendert - der Text, die Tagesziele und die schon
      * gespeicherten Gerichte.
      */
-    private String prompt(String text, Nutrients targets, List<Dish> known) {
+    private String prompt(String text, Path photo, Nutrients targets, List<Dish> known) {
         StringBuilder sb = new StringBuilder();
         sb.append("Tagesziele: ")
                 .append(fmt(targets.kcal())).append(" kcal, ")
@@ -268,10 +269,20 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
             sb.append("\n");
         }
 
+        // Das Foto liegt als Datei im Postfach, das der Agent lesen darf -
+        // die einzige Datei, die er sehen kann. Der Pfad ist Angabe der
+        // Anwendung, kein Nutzertext.
+        if (photo != null) {
+            sb.append("Ein Foto der Mahlzeit liegt unter ")
+                    .append(photo.toAbsolutePath())
+                    .append(" - sieh es dir mit dem Werkzeug Read an und schätze daraus Gericht, ")
+                    .append("Menge und Nährwerte. Der Text unten ist Kontext dazu und darf leer sein.\n\n");
+        }
+
         // Der Nutzertext kommt zuletzt und klar abgegrenzt: alles davor sind
         // Angaben der Anwendung, alles danach ist Zitat.
         sb.append("Diese Mahlzeit soll eingetragen werden:\n<beschreibung>\n")
-                .append(text)
+                .append(text == null ? "" : text)
                 .append("\n</beschreibung>\n");
         return sb.toString();
     }

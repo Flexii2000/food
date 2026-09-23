@@ -20,6 +20,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.io.IOException;
+import java.util.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -44,6 +53,8 @@ import java.util.UUID;
 @Service
 public class FoodService {
 
+    private static final Logger log = LoggerFactory.getLogger(FoodService.class);
+
     /** Guards against a typo turning into a nonsense day total. Nothing edible comes close. */
     private static final double MAX_GRAMS = 20_000;
     private static final double MAX_KCAL_PER_100G = 1_000;
@@ -57,7 +68,25 @@ public class FoodService {
     private final NutritionExtractor extractor;
     private final Clock clock;
 
+    /** Hoechstens so gross darf ein Foto sein (dekodiert) - die App schickt ~200 kB. */
+    static final int MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+
+    /**
+     * Wohin ein Foto fuer die Dauer der Auswertung gelegt wird. Unter
+     * {@code data/}, weil der Dienst nur dort schreiben darf
+     * (systemd: ProtectSystem=strict, ReadWritePaths=/opt/food/data); der Agent
+     * hat genau fuer diesen Ordner Leserecht (deploy/agent/.claude/settings.json).
+     */
+    private final Path inbox;
+
     public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock) {
+        this(repository, extractor, clock, Path.of(System.getProperty("java.io.tmpdir"), "food-inbox"));
+    }
+
+    @Autowired
+    public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
+                       @Value("${food.agent.inbox:data/inbox}") Path inbox) {
+        this.inbox = inbox;
         this.repository = repository;
         this.extractor = extractor;
         this.clock = clock;
@@ -279,10 +308,35 @@ public class FoodService {
      * ohnehin nichts - es wird ja nicht geschrieben.
      */
     public QuickCapturePreview quickCapture(QuickCaptureRequest request) {
+        return quickCapture(request, UUID.randomUUID().toString());
+    }
+
+    /**
+     * Wertet aus - mit Foto, wenn eins mitkam: das liegt fuer die Dauer der
+     * Auswertung als {@code <auftrag>.jpg} im Postfach und wird danach
+     * geloescht, ob die Auswertung nun gelang oder nicht.
+     */
+    public QuickCapturePreview quickCapture(QuickCaptureRequest request, String jobId) {
         String text = validateQuickCapture(request);
+        byte[] image = decodeImage(request);
 
         FoodData data = repository.load();
-        ExtractedDish extracted = extractor.extract(text, data.targets(), data.dishes());
+        Path photo = null;
+        ExtractedDish extracted;
+        try {
+            if (image != null) {
+                photo = storePhoto(jobId, image);
+            }
+            extracted = extractor.extract(text, photo, data.targets(), data.dishes());
+        } finally {
+            if (photo != null) {
+                try {
+                    Files.deleteIfExists(photo);
+                } catch (IOException e) {
+                    log.warn("Foto {} liess sich nicht loeschen", photo, e);
+                }
+            }
+        }
 
         // Der Abschnitt, aus dem die Eingabe kam, schlaegt die Vermutung des
         // Agents: wer auf "+" beim Mittagessen tippt, hat schon gesagt, was er
@@ -362,14 +416,75 @@ public class FoodService {
      * eine Minute spaeter als fehlgeschlagener Auftrag.
      */
     public String validateQuickCapture(QuickCaptureRequest request) {
-        if (request == null || request.text() == null || request.text().isBlank()) {
+        if (request == null) {
             throw badRequest("text is required");
         }
-        String text = request.text().trim();
+        String text = request.text() == null ? "" : request.text().trim();
+        // Ohne Foto braucht es einen Text; mit Foto ist der Text Kontext und
+        // darf fehlen.
+        if (text.isEmpty() && !request.hasImage()) {
+            throw badRequest("text is required");
+        }
         if (text.length() > MAX_QUICK_CAPTURE_LENGTH) {
             throw badRequest("text must be at most " + MAX_QUICK_CAPTURE_LENGTH + " characters");
         }
+        if (request.hasImage()) {
+            decodeImage(request);
+        }
         return text;
+    }
+
+    /**
+     * Das Foto aus dem Base64 - ein Data-URL-Praefix ("data:image/jpeg;base64,")
+     * darf davorstehen. Kaputtes Base64 und Riesenbilder sind ein 400, keine
+     * eine Minute spaeter fehlgeschlagene Auswertung.
+     */
+    private static byte[] decodeImage(QuickCaptureRequest request) {
+        if (!request.hasImage()) {
+            return null;
+        }
+        String raw = request.imageJpegBase64().trim();
+        int comma = raw.indexOf(',');
+        if (raw.startsWith("data:") && comma > 0) {
+            raw = raw.substring(comma + 1);
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(raw.replaceAll("\\s", ""));
+        } catch (IllegalArgumentException e) {
+            throw badRequest("imageJpegBase64 is not valid base64");
+        }
+        if (bytes.length == 0 || bytes.length > MAX_IMAGE_BYTES) {
+            throw badRequest("image must be between 1 byte and " + MAX_IMAGE_BYTES / (1024 * 1024) + " MB");
+        }
+        return bytes;
+    }
+
+    /**
+     * Legt das Foto ins Postfach, fuer alle lesbar: der Agent laeuft als anderer
+     * Nutzer. Der Dateiname ist die Auftragsnummer, nichts aus der Anfrage.
+     */
+    private Path storePhoto(String jobId, byte[] image) {
+        try {
+            Files.createDirectories(inbox);
+            trySetPermissions(inbox, "rwxr-xr-x");
+            Path file = inbox.resolve(jobId + ".jpg");
+            Files.write(file, image);
+            trySetPermissions(file, "rw-r--r--");
+            return file;
+        } catch (IOException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "Das Foto liess sich nicht ablegen.", e);
+        }
+    }
+
+    /** POSIX-Rechte setzen, wo es sie gibt; anderswo (Tests auf macOS ohne Bedarf) egal. */
+    private static void trySetPermissions(Path path, String mode) {
+        try {
+            Files.setPosixFilePermissions(path, PosixFilePermissions.fromString(mode));
+        } catch (UnsupportedOperationException | IOException e) {
+            // Kein POSIX oder keine Rechte - dann bleibt es bei der umask.
+        }
     }
 
     /**

@@ -89,8 +89,13 @@ if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
 else
     echo "    User $SERVICE_USER existiert bereits."
 fi
-sudo mkdir -p "$APP_DIR/data"
+sudo mkdir -p "$APP_DIR/data" "$APP_DIR/data/inbox"
 sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
+# Das Postfach fuer Fotos der Schnellerfassung: der Dienst legt sie hier ab,
+# der Agent (flexii) muss sie lesen koennen - deshalb 755 statt der 750 der
+# uebrigen Verzeichnisse. Die Dateien selbst schreibt der Dienst mit 644 und
+# loescht sie nach der Auswertung wieder.
+sudo chmod 755 "$APP_DIR" "$APP_DIR/data" "$APP_DIR/data/inbox"
 
 step "4/10 Token aus $PRIVATE_MODE_CONF uebernehmen"
 # Der Token steht genau einmal auf dem System - in der nginx-Map. Hier wird er

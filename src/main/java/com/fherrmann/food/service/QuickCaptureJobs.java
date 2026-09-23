@@ -88,7 +88,7 @@ public class QuickCaptureJobs {
 
         executor.submit(() -> {
             try {
-                job.preview = service.quickCapture(request);
+                job.preview = service.quickCapture(request, id);
                 job.status = QuickCaptureJob.DONE;
             } catch (ResponseStatusException e) {
                 job.error = e.getReason() == null ? e.getMessage() : e.getReason();

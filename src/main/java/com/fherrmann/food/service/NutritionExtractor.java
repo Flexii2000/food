@@ -3,6 +3,7 @@ package com.fherrmann.food.service;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Nutrients;
 
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -18,11 +19,14 @@ public interface NutritionExtractor {
     boolean isAvailable();
 
     /**
-     * @param text    die Beschreibung, so wie sie eingetippt wurde
+     * @param text    die Beschreibung, so wie sie eingetippt wurde - mit Foto
+     *                darf sie leer sein
+     * @param photo   ein Foto der Mahlzeit als Datei, die der Agent ansehen
+     *                darf, oder {@code null}
      * @param targets die Tagesziele - Kontext dafuer, wie gross eine Portion
      *                bei diesem Nutzer plausibel ist
      * @param known   die bereits gespeicherten Gerichte, damit Bekanntes
      *                wiedererkannt statt als Beinahe-Dublette neu angelegt wird
      */
-    ExtractedDish extract(String text, Nutrients targets, List<Dish> known);
+    ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known);
 }

@@ -3,14 +3,14 @@
     "defaultMode": "default",
     "allow": [
       "WebSearch",
-      "WebFetch"
+      "WebFetch",
+      "Read(//opt/food/data/inbox/**)"
     ],
     "deny": [
       "Bash",
       "Edit",
       "Write",
       "NotebookEdit",
-      "Read",
       "Glob",
       "Grep",
       "Task",

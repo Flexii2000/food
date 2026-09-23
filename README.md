@@ -233,6 +233,21 @@ Das Ergebnis läuft anschließend durch **dieselbe Validierung wie ein Eintrag v
 Hand** (`FoodService.addEntry`) — ein Modell, das sich um eine Zehnerpotenz
 vertut, kommt an der Grenze für kcal je 100 g nicht vorbei.
 
+### Mit Foto
+
+Die iOS-App kann statt oder zusätzlich zum Text ein **Foto der Mahlzeit**
+schicken (`imageJpegBase64`, JPEG als Base64, von der App auf 1280 px und
+unter 700 kB verkleinert). Der Text ist dann Kontext — „die kleine Portion",
+„mit extra Käse" — und darf leer sein.
+
+Der Dienst legt das Bild als `data/inbox/<auftrag>.jpg` ab (nur unter `data/`
+darf er schreiben, siehe `deploy/food.service`), nennt dem Agenten den Pfad
+und löscht die Datei nach der Auswertung — gelungen oder nicht. Der Agent
+darf genau diesen Ordner lesen (`Read(//opt/food/data/inbox/**)` in
+`deploy/agent/.claude/settings.json`), sonst weiterhin keine Datei. Aus dem
+Bild schätzt er Gericht, Menge (Tellergrösse, Füllung) und Nährwerte; alles
+davon kommt als `estimated` zurück, ein Foto ist keine abgelesene Zahl.
+
 ### Nachschlagen statt raten
 
 Nennt die Beschreibung ein konkretes Produkt — „6 Wagner Piccolinis", „Big Mac" —,
@@ -416,7 +431,7 @@ vier Zahlen noch zusammenpassen.
 | GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
 | GET     | `/api/food/features`      | welche optionalen Funktionen der Server anbietet         |
-| POST    | `/api/food/quick-capture` | Freitext → **Vorschlag** (schreibt nichts)               |
+| POST    | `/api/food/quick-capture` | Freitext und/oder Foto → **Vorschlag** (schreibt nichts)  |
 
 POST-Body für einen Eintrag, entweder mit bekanntem Gericht:
 

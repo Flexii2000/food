@@ -24,6 +24,10 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.nio.file.Files;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +57,8 @@ class FoodServiceTest {
         private boolean available = true;
         private String seenText;
         private List<Dish> seenKnown;
+        private Path seenPhoto;
+        private byte[] seenPhotoBytes;
 
         @Override
         public boolean isAvailable() {
@@ -60,9 +66,16 @@ class FoodServiceTest {
         }
 
         @Override
-        public ExtractedDish extract(String text, Nutrients targets, List<Dish> known) {
+        public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known) {
             seenText = text;
             seenKnown = known;
+            seenPhoto = photo;
+            // Waehrend der Auswertung muss die Datei da sein - danach nicht mehr.
+            try {
+                seenPhotoBytes = photo == null ? null : Files.readAllBytes(photo);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
             return next;
         }
     }
@@ -480,6 +493,38 @@ class FoodServiceTest {
                 preview.grams(), preview.meal())))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("kcal");
+    }
+
+    @Test
+    void quickCaptureWithPhotoNeedsNoTextAndCleansUp() {
+        byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 16, 'J', 'F', 'I', 'F'};
+        String base64 = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(jpeg);
+        QuickCapturePreview preview = service.quickCapture(
+                new QuickCaptureRequest(TODAY, "", null, base64), "job-1");
+        assertThat(preview.name()).isEqualTo("Spaghetti Bolognese");
+        assertThat(extractor.seenText).isEmpty();
+        assertThat(extractor.seenPhoto).isNotNull();
+        assertThat(extractor.seenPhoto.getFileName().toString()).isEqualTo("job-1.jpg");
+        assertThat(extractor.seenPhotoBytes).isEqualTo(jpeg);
+        // Nach der Auswertung ist das Foto weg - es diente nur dem Agent.
+        assertThat(Files.exists(extractor.seenPhoto)).isFalse();
+    }
+
+    @Test
+    void quickCaptureRejectsBrokenOrOversizedPhotos() {
+        assertThatThrownBy(() -> service.validateQuickCapture(
+                new QuickCaptureRequest(TODAY, "", null, "kein base64 !!!")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("base64");
+        String huge = Base64.getEncoder().encodeToString(new byte[FoodService.MAX_IMAGE_BYTES + 1]);
+        assertThatThrownBy(() -> service.validateQuickCapture(
+                new QuickCaptureRequest(TODAY, "", null, huge)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("MB");
+        // Ohne Foto bleibt der Text Pflicht.
+        assertThatThrownBy(() -> service.validateQuickCapture(
+                new QuickCaptureRequest(TODAY, "   ", null, null)))
+                .isInstanceOf(ResponseStatusException.class);
     }
 
     @Test
