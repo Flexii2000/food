@@ -72,7 +72,7 @@ nginx_apply() {
     || fail "$BUILD_DIR/deploy/story-agent fehlt - erst ~/scripts/update-food.sh (holt und installiert den neuen Stand)."
 sudo test -f "$FOOD_ENV" || fail "$FOOD_ENV fehlt - ist der Kalorienzaehler eingerichtet (setup-food.sh)?"
 
-step "1/6 Agent-Verzeichnis $AGENT_DIR"
+step "1/7 Agent-Verzeichnis $AGENT_DIR"
 mkdir -p "$AGENT_DIR/.claude"
 cp "$BUILD_DIR/deploy/story-agent/CLAUDE.md" "$AGENT_DIR/CLAUDE.md"
 cp "$BUILD_DIR/deploy/story-agent/run-agent.sh" "$AGENT_DIR/run-agent.sh"
@@ -101,7 +101,7 @@ config.write_text(json.dumps(data, indent=2))
 print(f"    Workspace {agent_dir} als vertrauenswuerdig eingetragen.")
 TRUST
 
-step "2/6 sudo-Regel $SUDOERS_TARGET"
+step "2/7 sudo-Regel $SUDOERS_TARGET"
 # Erst pruefen, dann installieren: eine kaputte Datei unter /etc/sudoers.d/ legt
 # sudo auf dem ganzen System lahm.
 sudo visudo -c -q -f "$BUILD_DIR/deploy/sudoers-story-agent" \
@@ -109,7 +109,7 @@ sudo visudo -c -q -f "$BUILD_DIR/deploy/sudoers-story-agent" \
 sudo install -o root -g root -m 440 "$BUILD_DIR/deploy/sudoers-story-agent" "$SUDOERS_TARGET"
 echo "    $SUDOERS_TARGET installiert."
 
-step "3/6 FOOD_STORY_AGENT_COMMAND in $FOOD_ENV"
+step "3/7 FOOD_STORY_AGENT_COMMAND in $FOOD_ENV"
 # Gegenprobe, ob die Regel wirklich greift - ohne eine (kostende) Session zu
 # starten: run-agent.sh --version zeigt nur die Version von claude, das beweist
 # sudo, Nutzer und Binary auf einmal. Klappt es nicht, bleibt der Entwurf aus und
@@ -126,7 +126,7 @@ fi
 set_env "$FOOD_ENV" FOOD_STORY_AGENT_COMMAND "$AGENT_COMMAND"
 echo "    FOOD_STORY_AGENT_COMMAND=${AGENT_COMMAND:-(leer)}"
 
-step "4/6 nginx: /feature-requests/ unter fherrmann.com"
+step "4/7 nginx: /feature-requests/ unter fherrmann.com"
 if grep -q "location /feature-requests/" "$NGINX_CONF"; then
     echo "    Schon eingebunden."
 else
@@ -147,7 +147,7 @@ PY
     echo "    Eingebunden und nginx neu geladen."
 fi
 
-step "5/6 food neu starten"
+step "5/7 food neu starten"
 # Neu starten, damit der Dienst FOOD_STORY_AGENT_COMMAND aus der env-Datei liest.
 sudo systemctl restart food
 for i in $(seq 1 45); do
@@ -158,7 +158,23 @@ done
 [[ "${code:-000}" != "000" ]] || fail "food antwortet nicht. Log: journalctl -u food -n 50"
 echo "    food laeuft."
 
-step "6/6 Pruefung"
+step "6/7 Kopien in ~/scripts auffrischen"
+# ~/scripts/update-food.sh und setup-food.sh sind Kopien, keine Symlinks:
+# update-food.sh holt per git pull einen neuen Stand ins Repo, und bash liest ein
+# laufendes Skript stueckweise - aenderte sich die Datei waehrenddessen, liefe ein
+# Gemisch aus alter und neuer Fassung. Also hier auffrischen, ausserhalb eines
+# Updates; sonst frischte ein Deploy den Story-Agenten nie mit auf.
+mkdir -p "$HOME/scripts"
+for script in update-food.sh setup-food.sh; do
+    if [[ -f "$HOME/scripts/$script" ]] && cmp -s "$BUILD_DIR/deploy/$script" "$HOME/scripts/$script"; then
+        echo "    ~/scripts/$script ist aktuell."
+    else
+        install -m 755 "$BUILD_DIR/deploy/$script" "$HOME/scripts/$script"
+        echo "    ~/scripts/$script aufgefrischt."
+    fi
+done
+
+step "7/7 Pruefung"
 TOKEN="$(get_env "$FOOD_ENV" FH_PRIVATE_TOKEN)"
 [[ -n "$TOKEN" ]] || fail "Kein FH_PRIVATE_TOKEN in $FOOD_ENV."
 
@@ -200,4 +216,3 @@ fi
 echo
 echo "Fertig. $URL"
 echo "Torben kommt mit seinem health_token hinein (gilt fuer fherrmann.com), Felix mit fh_private."
-echo "Damit jeder Deploy auch den Story-Agenten auffrischt: deploy/update-food.sh nach ~/scripts/ kopieren."
