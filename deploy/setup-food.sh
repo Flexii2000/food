@@ -67,6 +67,24 @@ nginx_apply() {
 
 [[ $EUID -eq 0 ]] && fail "Bitte NICHT mit sudo starten - das Skript ruft sudo selbst auf, wo es noetig ist."
 
+# Eine Zeile KEY=... in /etc/food.env setzen oder anhaengen - nie die Datei neu
+# schreiben: dort stehen inzwischen auch Eintraege, die andere Skripte pflegen
+# (HEALTH_TOKENS, APNs, Firebase, Schnellerfassung, Detailwerte, Story-Agent),
+# und ein zweiter Lauf dieses Skripts (jede nginx-Aenderung) haette sie alle
+# geloescht. Ueber tee statt mv, damit Besitzer und Rechte erhalten bleiben.
+set_env() {
+    local file="$1" key="$2" value="$3" current updated
+    current="$(sudo cat "$file")"
+    if grep -qE "^${key}=" <<<"$current"; then
+        updated="$(awk -v k="$key" -v v="$value" 'index($0, k "=") == 1 { print k "=" v; next } { print }' <<<"$current")"
+    elif [[ -z "$current" ]]; then
+        updated="$key=$value"
+    else
+        updated="$(printf '%s\n%s=%s' "$current" "$key" "$value")"
+    fi
+    printf '%s\n' "$updated" | sudo tee "$file" >/dev/null
+}
+
 step "1/10 Repo holen"
 if [[ -d "$BUILD_DIR/.git" ]]; then
     git -C "$BUILD_DIR" pull --ff-only
@@ -105,10 +123,11 @@ step "4/10 Token aus $PRIVATE_MODE_CONF uebernehmen"
     || fail "$PRIVATE_MODE_CONF nicht lesbar - laeuft der private Modus ueberhaupt?"
 TOKEN="$(sudo grep -oE '"[0-9a-fA-F]{24,}"' "$PRIVATE_MODE_CONF" | head -1 | tr -d '"')"
 [[ -n "$TOKEN" ]] || fail "Kein Token in $PRIVATE_MODE_CONF gefunden."
-printf 'FH_PRIVATE_TOKEN=%s\n' "$TOKEN" | sudo tee /etc/food.env >/dev/null
+sudo touch /etc/food.env
 sudo chown root:"$SERVICE_USER" /etc/food.env
 sudo chmod 640 /etc/food.env
-echo "    /etc/food.env geschrieben (Token ${TOKEN:0:6}…, $(echo -n "$TOKEN" | wc -c) Zeichen)."
+set_env /etc/food.env FH_PRIVATE_TOKEN "$TOKEN"
+echo "    FH_PRIVATE_TOKEN in /etc/food.env gesetzt (Token ${TOKEN:0:6}…, $(echo -n "$TOKEN" | wc -c) Zeichen)."
 
 step "5/10 Agent-Verzeichnis fuer die Schnellerfassung"
 mkdir -p "$AGENT_DIR/.claude"
@@ -164,7 +183,7 @@ step "6/10 Jar installieren"
 sudo install -o "$SERVICE_USER" -g "$SERVICE_USER" -m 644 "$JAR" "$APP_DIR/app.jar"
 
 # Erst hier, weil AGENT_COMMAND aus Schritt 5 kommt.
-printf 'FOOD_AGENT_COMMAND=%s\n' "$AGENT_COMMAND" | sudo tee -a /etc/food.env >/dev/null
+set_env /etc/food.env FOOD_AGENT_COMMAND "$AGENT_COMMAND"
 
 step "7/10 systemd-Unit"
 sudo cp "$BUILD_DIR/deploy/food.service" /etc/systemd/system/food.service
