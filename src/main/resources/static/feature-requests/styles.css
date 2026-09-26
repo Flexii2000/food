@@ -1,0 +1,570 @@
+/* Dieselbe Gestaltung wie die Weboberflaeche des Kalorienzaehlers
+   (static/styles.css): gleiche Tokens, hell als Standard, dunkel nach
+   Systemeinstellung, ein Akzent, Haarlinien, drei Knopfstufen. Eine eigene
+   Kopie statt eines Verweises auf ../styles.css, weil diese Seite auch unter
+   fherrmann.com/feature-requests/ laeuft - dort gehoert ../ der Landing Page.
+   Wer dort an Farben oder Knoepfen dreht, zieht es hier nach. */
+:root {
+    color-scheme: light dark;
+
+    /* Eine Spalte zum Lesen und Schreiben - breiter wird ein Formular nicht besser. */
+    --page: 720px;
+    --gutter: 16px;
+
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --field: #ffffff;
+    --text: #1d1c1a;
+    --text-2: #57534c;
+    --muted: #736f67;
+    --line: rgba(29, 28, 26, 0.1);
+    --line-soft: rgba(29, 28, 26, 0.06);
+    --line-strong: rgba(29, 28, 26, 0.2);
+    --fill: rgba(29, 28, 26, 0.05);
+    --fill-strong: rgba(29, 28, 26, 0.09);
+
+    --accent: #3a5ccc;
+    --accent-fill: rgba(58, 92, 204, 0.1);
+    --focus-ring: rgba(58, 92, 204, 0.3);
+    --ink: #1d1c1a;
+    --ink-hover: #3b3935;
+    --on-ink: #fbfaf7;
+
+    --good: #2a8043;
+    --good-fill: rgba(42, 128, 67, 0.1);
+    --bad: #d33131;
+    --danger-fill: rgba(211, 49, 49, 0.08);
+    --danger-solid: #d23535;
+
+    --track: #e9e6df;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #151514;
+        --surface: #1f1f1d;
+        --field: #262624;
+        --text: #f0eee9;
+        --text-2: #b8b4ac;
+        --muted: #8f8b83;
+        --line: rgba(240, 238, 233, 0.1);
+        --line-soft: rgba(240, 238, 233, 0.06);
+        --line-strong: rgba(240, 238, 233, 0.18);
+        --fill: rgba(240, 238, 233, 0.06);
+        --fill-strong: rgba(240, 238, 233, 0.11);
+
+        --accent: #8aa2ff;
+        --accent-fill: rgba(138, 162, 255, 0.14);
+        --focus-ring: rgba(138, 162, 255, 0.4);
+        --ink: #f0eee9;
+        --ink-hover: #d9d6cf;
+        --on-ink: #151514;
+
+        --good: #6cc983;
+        --good-fill: rgba(108, 201, 131, 0.14);
+        --bad: #ff6f69;
+        --danger-fill: rgba(255, 111, 105, 0.12);
+
+        --track: #2c2c29;
+    }
+}
+
+@media (min-width: 641px) {
+    :root { --gutter: 32px; }
+}
+
+@media (min-width: 1100px) {
+    :root { --gutter: 40px; }
+}
+
+* { box-sizing: border-box; }
+
+/* Ohne !important verliert das hidden-Attribut gegen jede Regel mit eigenem
+   display-Wert (.progress steht auf flex). */
+[hidden] { display: none !important; }
+
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 1rem;
+    line-height: 1.45;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, p, ul, ol, blockquote { margin: 0; }
+
+h2 {
+    font-size: 1.25rem;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+}
+
+/* Symbole sind Striche in der Textfarbe des Knopfes - so nehmen sie Hover,
+   Fokus und das dunkle Schema ohne eigene Regeln mit. */
+button svg {
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* --- Kopfzeile ------------------------------------------------------------ */
+
+.topbar { border-bottom: 1px solid var(--line); }
+
+.topbar-inner {
+    max-width: var(--page);
+    min-height: 64px;
+    margin: 0 auto;
+    padding: 12px max(var(--gutter), env(safe-area-inset-right)) 12px max(var(--gutter), env(safe-area-inset-left));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+}
+
+.topbar h1 {
+    font-size: 1.0625rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
+.topbar h1 a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.icon-button {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.icon-button:hover { background: var(--fill-strong); color: var(--text); }
+.icon-button svg { width: 20px; height: 20px; }
+
+/* --- Knoepfe ------------------------------------------------------------- */
+
+/* Drei Stufen, abzulesen an der Fuellung: primaer (dunkel gefuellt, einer je
+   Ansicht), sekundaer (nur getoent) und leise (erst beim Zeigen hinterlegt). */
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 10px;
+    font: inherit;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.button.primary { background: var(--ink); color: var(--on-ink); }
+.button.primary:hover:not(:disabled) { background: var(--ink-hover); }
+.button.secondary { background: var(--fill); color: var(--text); }
+.button.secondary:hover:not(:disabled) { background: var(--fill-strong); }
+.button.quiet { background: transparent; color: var(--text-2); font-weight: 500; }
+.button.quiet:hover:not(:disabled) { background: var(--fill); color: var(--text); }
+.button:disabled { opacity: 0.45; cursor: default; }
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-top: 20px;
+}
+
+/* --- Formularfelder ------------------------------------------------------ */
+
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+input[type="text"],
+textarea {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: var(--field);
+    color: var(--text);
+    font: inherit;
+    /* 16 px, damit iOS beim Antippen nicht in die Seite zoomt. */
+    font-size: 1rem;
+    font-weight: 400;
+    -webkit-appearance: none;
+    appearance: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Waechst per JavaScript mit dem Text mit (autoGrow) - ein Anfasser zum Ziehen
+   wuerde beim naechsten Tastendruck ohnehin ueberschrieben. Irgendwann ist
+   Schluss, sonst schiebt ein langer Text die Knoepfe aus dem Bild. */
+textarea {
+    display: block;
+    height: auto;
+    min-height: 5.5rem;
+    max-height: 50vh;
+    padding: 10px 12px;
+    line-height: 1.45;
+    resize: none;
+    overflow-y: auto;
+}
+
+.wish-text { min-height: 8.5rem; }
+
+input::placeholder,
+textarea::placeholder { color: var(--muted); opacity: 1; }
+
+input[type="text"]:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+textarea:disabled { opacity: 0.6; }
+
+.group-label {
+    margin: 0 0 8px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-2);
+}
+
+.form-msg {
+    font-size: 0.8125rem;
+    color: var(--text-2);
+}
+
+.form-msg:empty { display: none; }
+.form-msg.ok { color: var(--good); }
+.form-msg.err { color: var(--bad); }
+
+/* --- Seitenaufbau -------------------------------------------------------- */
+
+main {
+    max-width: var(--page);
+    margin: 0 auto;
+    padding: 32px max(var(--gutter), env(safe-area-inset-right)) 72px max(var(--gutter), env(safe-area-inset-left));
+}
+
+/* Zurueck steht vor der Ueberschrift, optisch buendig mit der Textkante:
+   der Knopf ist breiter als sein Pfeil. */
+.view-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    margin: -4px 0 20px -10px;
+}
+
+.view-head .status { margin-left: auto; }
+
+/* --- Liste --------------------------------------------------------------- */
+
+.request-list {
+    margin-top: 16px;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--line);
+}
+
+.request-list li { border-bottom: 1px solid var(--line-soft); }
+
+/* Die ganze Zeile ist der Link - ein Ziel, so gross wie der Eintrag. */
+.request {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-height: 64px;
+    margin: 0 -12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    color: inherit;
+    text-decoration: none;
+    transition: background-color 0.15s ease;
+}
+
+.request:hover { background: var(--fill); }
+.request:focus-visible { outline-offset: -2px; }
+
+.request-main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.request-title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.request-meta {
+    font-size: 0.8125rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Zwei Staende, zwei Toene: offen ist neutral, erledigt gruen wie alles, was
+   im Kalorienzaehler "passt". */
+.status {
+    flex: none;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--fill-strong);
+    color: var(--text-2);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-done { background: var(--good-fill); color: var(--good); }
+
+.empty {
+    padding: 28px 0;
+    font-size: 0.9375rem;
+    color: var(--muted);
+}
+
+/* --- Kartenansicht ------------------------------------------------------- */
+
+.card h2 {
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+    overflow-wrap: anywhere;
+}
+
+.meta {
+    margin-top: 6px;
+    font-size: 0.875rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.story {
+    margin-top: 22px;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.card .group-label { margin-top: 30px; }
+
+.criteria {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 1.25rem;
+    overflow-wrap: anywhere;
+}
+
+.criteria li::marker { color: var(--muted); }
+
+/* Der eigene Text der Person: als Zitat abgesetzt und leiser als die Karte -
+   er ist die Quelle, nicht die Aussage. */
+.quote {
+    padding: 2px 0 2px 14px;
+    border-left: 3px solid var(--line-strong);
+    color: var(--text-2);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* --- Neuer Wunsch -------------------------------------------------------- */
+
+.card-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.card-form .actions { margin-top: 4px; }
+
+.story-text { min-height: 6.5rem; }
+
+.criteria-field {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.criteria-field legend {
+    margin-bottom: 6px;
+    padding: 0;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+.criteria-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+    list-style: none;
+}
+
+/* Oben ausgerichtet: bricht ein langes Kriterium um, bleibt das Entfernen auf
+   Hoehe seiner ersten Zeile. */
+.criterion {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+/* Sieht aus wie ein Eingabefeld, waechst aber mit, wenn das Kriterium umbricht. */
+.criterion textarea {
+    flex: 1 1 auto;
+    min-height: 40px;
+    padding: 8px 12px;
+}
+
+.criterion .icon-button { margin-top: 2px; color: var(--muted); }
+.criterion .icon-button:hover { color: var(--bad); background: var(--danger-fill); }
+
+/* Leise und buendig mit den Feldern darueber - Hinzufuegen ist Nebensache. */
+.add-criterion { margin: 8px 0 0 -12px; }
+.add-criterion svg { width: 18px; height: 18px; }
+
+.progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.progress-bar {
+    flex: 1 1 8rem;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--track);
+    overflow: hidden;
+}
+
+/* Unbestimmter Fortschritt: wie lange Claude braucht, weiss niemand vorher -
+   ein Balken, der einen Prozentsatz behauptet, waere gelogen. */
+.progress-fill {
+    height: 100%;
+    width: 35%;
+    border-radius: 2px;
+    background: var(--accent);
+    animation: progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+    0%   { margin-left: -35%; }
+    100% { margin-left: 100%; }
+}
+
+.progress-label {
+    font-size: 0.8125rem;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- Rueckmeldung -------------------------------------------------------- */
+
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    z-index: 10;
+    max-width: calc(100vw - 32px);
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: var(--danger-solid);
+    color: #fff;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.35);
+    transform: translateX(-50%);
+    animation: toast-in 0.2s ease-out;
+}
+
+.toast:empty { display: none; }
+.toast.ok { background: var(--ink); color: var(--on-ink); }
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translate(-50%, 8px); }
+}
+
+/* --- Handy -------------------------------------------------------------- */
+
+/* Fingerziele: mindestens 44 px, wo getippt wird. */
+@media (pointer: coarse), (max-width: 640px) {
+    .button { height: 44px; }
+    input[type="text"] { height: 44px; }
+    .criterion textarea { min-height: 44px; padding-top: 10px; padding-bottom: 10px; }
+    .criterion .icon-button { margin-top: 0; }
+    .icon-button { width: 44px; height: 44px; }
+    .view-head { gap: 2px; margin-left: -12px; }
+}
+
+@media (max-width: 640px) {
+    main { padding-top: 20px; }
+    .card h2 { font-size: 1.3125rem; }
+    .story { font-size: 1rem; }
+    .request { gap: 12px; }
+    #wish-step .button.primary,
+    .card-form .button.primary { flex: 1 1 100%; }
+}
+
+/* Wer weniger Bewegung eingestellt hat, bekommt keine. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+    /* Ohne Laufbalken bleibt ein ruhiger voller Balken; die Sekunden daneben
+       zeigen, dass es weitergeht. */
+    .progress-fill { width: 100%; margin-left: 0; opacity: 0.5; }
+}

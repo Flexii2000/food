@@ -38,3 +38,4 @@ out/
 
 # Live-Daten: entsteht zur Laufzeit, gehoert nicht ins Repo.
 data/food.json
+data/feature-requests.json

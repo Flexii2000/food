@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Feature Requests</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#151514" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
+    <!-- Relativ, nicht /styles.css: unter fherrmann.com gehoert die Wurzel der
+         Landing Page, nur /feature-requests/ kommt bei diesem Dienst an. -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="topbar-inner">
+        <h1><a href="./" data-nav>Feature Requests</a></h1>
+        <button type="button" id="new-button" class="button primary" hidden>Neuer Wunsch</button>
+    </div>
+</header>
+
+<main>
+    <section id="list-view" aria-labelledby="list-heading" hidden>
+        <h2 id="list-heading">Deine Wünsche</h2>
+        <ul class="request-list" id="request-list"></ul>
+        <p class="empty" id="list-empty" hidden>Noch keine Wünsche.</p>
+    </section>
+
+    <!-- Ein Wunsch in zwei Schritten: erst der eigene Text, dann die Karte, die
+         Claude daraus entworfen hat. Abgeschickt wird erst die freigegebene Karte. -->
+    <section id="new-view" aria-labelledby="new-heading" hidden>
+        <div class="view-head">
+            <button type="button" class="icon-button back" data-back aria-label="Zurück zur Liste">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg>
+            </button>
+            <h2 id="new-heading">Neuer Wunsch</h2>
+        </div>
+
+        <div id="wish-step">
+            <label>Was wünschst du dir?
+                <textarea id="wish-text" class="wish-text" rows="4" maxlength="4000"></textarea>
+            </label>
+            <div class="actions">
+                <button type="button" id="draft-button" class="button primary">Entwurf erstellen</button>
+                <span id="wish-msg" class="form-msg"></span>
+            </div>
+            <div class="progress" id="draft-progress" hidden>
+                <div class="progress-bar"><div class="progress-fill"></div></div>
+                <span class="progress-label" id="draft-progress-label">Entwurf wird erstellt …</span>
+            </div>
+        </div>
+
+        <form id="card-form" class="card-form" novalidate hidden>
+            <p class="form-msg err" id="draft-error"></p>
+            <label>Titel
+                <input type="text" id="card-title" maxlength="120" autocomplete="off">
+            </label>
+            <label>User Story
+                <textarea id="card-story" class="story-text" rows="3" maxlength="2000"
+                          placeholder="Als … möchte ich …, damit …"></textarea>
+            </label>
+            <fieldset class="criteria-field">
+                <legend>Akzeptanzkriterien</legend>
+                <ol class="criteria-edit" id="criteria-edit"></ol>
+                <button type="button" id="add-criterion" class="button quiet add-criterion">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>
+                    Kriterium hinzufügen
+                </button>
+            </fieldset>
+            <div id="card-original-box">
+                <p class="group-label">Dein Text</p>
+                <blockquote class="quote" id="card-original"></blockquote>
+            </div>
+            <div class="actions">
+                <button type="submit" id="submit-button" class="button primary">Absenden</button>
+                <button type="button" id="edit-wish" class="button quiet">Text ändern</button>
+                <span id="card-msg" class="form-msg"></span>
+            </div>
+        </form>
+    </section>
+
+    <!-- Die Kartenseite: dorthin zeigt der Link der Unteraufgabe im To-Do. -->
+    <section id="card-view" hidden>
+        <div class="view-head">
+            <button type="button" class="icon-button back" data-back aria-label="Zurück zur Liste">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg>
+            </button>
+            <span class="status" id="cv-status" hidden></span>
+        </div>
+        <article class="card" id="cv-card" hidden>
+            <h2 id="cv-title"></h2>
+            <p class="meta" id="cv-meta"></p>
+            <p class="story" id="cv-story"></p>
+            <div id="cv-criteria-box">
+                <h3 class="group-label">Akzeptanzkriterien</h3>
+                <ul class="criteria" id="cv-criteria"></ul>
+            </div>
+            <div id="cv-original-box">
+                <h3 class="group-label">Originaltext</h3>
+                <blockquote class="quote" id="cv-original"></blockquote>
+            </div>
+        </article>
+        <p class="empty" id="cv-missing" hidden>Diese Anfrage gibt es nicht.</p>
+    </section>
+</main>
+
+<p class="toast" id="toast" role="status" aria-live="polite"></p>
+
+<script src="app.js"></script>
+</body>
+</html>
