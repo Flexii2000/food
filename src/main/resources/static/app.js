@@ -34,16 +34,15 @@ const MACROS = [
 // Die uebrigen Zeilen der Naehrwerttabelle - nur fuer Personen, die sie
 // erfassen (features.detailedNutrients). Reihenfolge wie auf der Packung, und
 // "davon" gehoert zu seinem Oberbegriff: Zucker zu den Kohlenhydraten, die
-// gesaettigten Fettsaeuren zum Fett. Salz mit zwei Stellen, weil es auf der
-// Packung als "0,03 g" steht. Ein Ziel gibt es fuer keinen dieser Werte.
+// gesaettigten Fettsaeuren zum Fett. Ein Ziel gibt es fuer keinen dieser Werte.
 const DETAILS = [
-    { key: 'saturatedFatG', label: 'davon ges. Fettsäuren', short: 'ges. Fettsäuren', digits: 1,
+    { key: 'saturatedFatG', label: 'davon ges. Fettsäuren', short: 'ges. Fettsäuren',
       css: 'd-satfat', input: 'nd-satfat', after: 'fatG' },
-    { key: 'sugarG', label: 'davon Zucker', short: 'Zucker', digits: 1,
+    { key: 'sugarG', label: 'davon Zucker', short: 'Zucker',
       css: 'd-sugar', input: 'nd-sugar', after: 'carbsG' },
-    { key: 'fiberG', label: 'Ballaststoffe', short: 'Ballaststoffe', digits: 1,
+    { key: 'fiberG', label: 'Ballaststoffe', short: 'Ballaststoffe',
       css: 'd-fiber', input: 'nd-fiber' },
-    { key: 'saltG', label: 'Salz', short: 'Salz', digits: 2,
+    { key: 'saltG', label: 'Salz', short: 'Salz',
       css: 'd-salt', input: 'nd-salt' },
 ];
 
@@ -174,6 +173,20 @@ function num(value, digits = 0) {
         minimumFractionDigits: digits,
         maximumFractionDigits: digits,
     });
+}
+
+/**
+ * Ein Detailwert in Gramm, wie in der Android-App: unter 1 g mit zwei Stellen
+ * ("0,03 g" Salz steht so auf der Packung), darueber mit einer, ohne
+ * angehaengte Nullen. Vorher gerundet wie im Dienst (Math.round auf
+ * Hundertstel bzw. Zehntel) - toLocaleString allein machte aus 10,45 "10,4",
+ * weil die Zahl binaer knapp darunter liegt.
+ */
+function detailGrams(value) {
+    const digits = Math.abs(value) < 1 ? 2 : 1;
+    const scale = 10 ** digits;
+    const rounded = Math.round(value * scale) / scale;
+    return `${rounded.toLocaleString('de-DE', { maximumFractionDigits: digits })} g`;
 }
 
 async function fetchJson(url, options) {
@@ -319,7 +332,7 @@ function renderDetailTotals() {
         const value = day.consumed[detail.key];
         const text = value == null
             ? '–'
-            : `${gaps.includes(detail.key) ? '≥ ' : ''}${num(value, detail.digits)} g`;
+            : `${gaps.includes(detail.key) ? '≥ ' : ''}${detailGrams(value)}`;
         return `<div><dt>${detail.short}</dt><dd>${text}</dd></div>`;
     }).join('');
 }
@@ -467,7 +480,7 @@ function buildEntryRow(entry) {
         details.hidden = true;
         details.innerHTML = DETAILS.map(detail => {
             const value = entry.per100g[detail.key];
-            const text = value == null ? '–' : `${num(value * factor, detail.digits)} g`;
+            const text = value == null ? '–' : detailGrams(value * factor);
             return `<div><dt>${detail.short}</dt><dd>${text}</dd></div>`;
         }).join('');
         // Im Inhalt, nicht daneben: so faehrt die Zeile beim Wischen als Ganzes.
