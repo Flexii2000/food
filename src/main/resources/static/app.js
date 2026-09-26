@@ -31,6 +31,26 @@ const MACROS = [
     { key: 'carbsG', label: 'Kohlenhydrate', unit: 'g', direction: 'ceiling' },
 ];
 
+// Die uebrigen Zeilen der Naehrwerttabelle - nur fuer Personen, die sie
+// erfassen (features.detailedNutrients). Reihenfolge wie auf der Packung, und
+// "davon" gehoert zu seinem Oberbegriff: Zucker zu den Kohlenhydraten, die
+// gesaettigten Fettsaeuren zum Fett. Salz mit zwei Stellen, weil es auf der
+// Packung als "0,03 g" steht. Ein Ziel gibt es fuer keinen dieser Werte.
+const DETAILS = [
+    { key: 'saturatedFatG', label: 'davon ges. Fettsäuren', short: 'ges. Fettsäuren', digits: 1,
+      css: 'd-satfat', input: 'nd-satfat', after: 'fatG' },
+    { key: 'sugarG', label: 'davon Zucker', short: 'Zucker', digits: 1,
+      css: 'd-sugar', input: 'nd-sugar', after: 'carbsG' },
+    { key: 'fiberG', label: 'Ballaststoffe', short: 'Ballaststoffe', digits: 1,
+      css: 'd-fiber', input: 'nd-fiber' },
+    { key: 'saltG', label: 'Salz', short: 'Salz', digits: 2,
+      css: 'd-salt', input: 'nd-salt' },
+];
+
+// Ob diese Person die Detailwerte erfasst. Kommt mit /api/food/features; bis
+// dahin (und fuer alle anderen) sieht die Seite aus wie ohne sie.
+let detailedNutrients = false;
+
 // Die Weight-App liegt auf einer eigenen Subdomain, aber unter derselben Site -
 // der private Cookie reist also mit; credentials:'include' braucht es nur, weil
 // die Origin eine andere ist (dort per CORS genau fuer diese Seite freigegeben).
@@ -52,22 +72,34 @@ const MEALS = [
 ];
 const UNASSIGNED = { key: null, label: 'Ohne Zuordnung' };
 
+// Die Farben selbst stehen als CSS-Variablen in styles.css, je Farbschema in
+// eigener Nuance; hier steht nur, welche Serie welche Variable nimmt. Chart.js
+// kennt keine CSS-Variablen, deshalb loest cssColor() sie beim Zeichnen auf.
 const CHART_COLORS = {
     // Gelb wie im Weight Tracker: dort sind die kcal ebenfalls gelb, das Gewicht
     // gruen bzw. hellblau. Eine gemeinsame Farbsprache ueber beide Seiten - und
     // nebenbei kollidierte das fruehere Blau mit der Messwert-Linie.
-    kcal: 'rgba(255, 213, 79, 0.85)',
+    kcal: '--chart-kcal',
     // Der Tageswert, blasser und duenner: er ist die Schwankung hinter dem
     // Mittel, nicht die Aussage.
-    kcalDay: 'rgba(255, 213, 79, 0.5)',
-    kcalOver: 'rgba(239, 83, 80, 0.9)',
-    target: 'rgba(230, 236, 245, 0.45)',
+    kcalDay: '--chart-kcal-day',
+    kcalOver: '--chart-over',
+    target: '--chart-target',
     // Dieselben Farben wie im Weight Tracker: dort ist das 7-Tage-Mittel gruen
     // und der Messwert hellblau. Wer beide Seiten benutzt, soll nicht zweimal
     // lernen muessen, welche Linie was ist.
-    weightAvg7: '#81c784',
-    weightMeasured: '#4fc3f7',
+    weightAvg7: '--chart-weight-avg',
+    weightMeasured: '--chart-weight-measured',
+    grid: '--chart-grid',
+    tick: '--chart-tick',
+    tooltipBg: '--tooltip-bg',
+    tooltipText: '--tooltip-text',
 };
+
+/** Der aktuelle Wert einer CSS-Variablen - also im gerade gueltigen Farbschema. */
+function cssColor(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
 // Die beiden Gewichtsserien. Getrennt schaltbar: das 7-Tage-Mittel zeigt den
 // Trend, der Tageswert die Schwankung - wer nach einem Ausrutscher sucht,
@@ -88,6 +120,10 @@ let addMeal = MEALS[0].key;
 
 let historyDays = 30;
 let historyChart = null;
+// Das zuletzt gezeichnete Fenster - zum Neuzeichnen, wenn das Farbschema wechselt.
+let historyShown = null;
+// Wer weniger Bewegung eingestellt hat, bekommt das Diagramm ohne Animation.
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
 let dailyTotals = [];
 // Das gleitende 7-Tage-Mittel aus /api/food/daily-average - gerechnet im
 // Server ueber die Tage mit Eintrag, mit Flag, ob das Fenster schon voll ist.
@@ -123,6 +159,13 @@ function fmtDate(iso) {
     if (!iso) return '–';
     const [y, m, d] = iso.split('-');
     return `${d}.${m}.${y.slice(2)}`;
+}
+
+/** Tag und Monat, fuer die Achse des Verlaufs: "28.09." */
+function fmtDayMonth(iso) {
+    if (!iso) return '';
+    const [, m, d] = iso.split('-');
+    return `${d}.${m}.`;
 }
 
 function num(value, digits = 0) {
@@ -198,8 +241,11 @@ function gauge({ ratio, tone, main, sub, mainSize = 20, subSize = 8 }) {
     // Zahl und Beschriftung sitzen als Paar mittig: die Zahl etwas ueber der
     // Mitte, das Label darunter - beide auf y=50 saehen nach unten verrutscht aus.
     const mainY = 50 - subSize * 0.6;
+    // Die viewBox endet knapp unter den Bogenenden (bei 45 Grad liegen sie auf
+    // y = 50 + R * sin 45 = 77, dazu die runde Kappe). Darunter ist der Kreis
+    // offen - der Platz waere nur ein Loch zwischen Tacho und Beschriftung.
     return `
-        <svg class="gauge tone-${tone}" viewBox="0 0 100 100" role="img" aria-label="${main} ${sub}">
+        <svg class="gauge tone-${tone}" viewBox="0 0 100 84" role="img" aria-label="${main} ${sub}">
             <circle class="gauge-track" cx="50" cy="50" r="${R}"
                     stroke-dasharray="${SWEEP * C} ${C}" transform="rotate(135 50 50)"></circle>
             ${value}
@@ -246,12 +292,36 @@ function renderGauges() {
         tone: toneFor(consumed, target, 'ceiling', TOLERANCE.kcal),
         main: num(Math.abs(remaining)),
         sub: remaining < 0 ? 'kcal drüber' : 'kcal übrig',
-        mainSize: 19,
-        subSize: 8,
+        mainSize: 22,
+        subSize: 7.5,
     });
 
     document.getElementById('kcal-consumed').textContent = `${num(consumed)} kcal`;
     document.getElementById('kcal-target').textContent = `von ${num(target)} kcal`;
+    renderDetailTotals();
+}
+
+/**
+ * Die Tagessummen der Detailwerte, knapp unter den Tachos - ohne Ziel und ohne
+ * Tacho, weil es fuer sie kein Ziel gibt. Hat ein Eintrag des Tages keine
+ * Angabe, ist die Summe nur eine Untergrenze (detailGaps) und steht als
+ * "≥ 12 g" da; kennt kein einziger Eintrag den Wert, steht ein Strich.
+ */
+function renderDetailTotals() {
+    const box = document.getElementById('detail-totals');
+    box.hidden = !detailedNutrients || !day;
+    if (box.hidden) {
+        box.replaceChildren();
+        return;
+    }
+    const gaps = day.detailGaps || [];
+    box.innerHTML = DETAILS.map(detail => {
+        const value = day.consumed[detail.key];
+        const text = value == null
+            ? '–'
+            : `${gaps.includes(detail.key) ? '≥ ' : ''}${num(value, detail.digits)} g`;
+        return `<div><dt>${detail.short}</dt><dd>${text}</dd></div>`;
+    }).join('');
 }
 
 // --- Eintraege des Tages ----------------------------------------------------
@@ -264,6 +334,13 @@ const TOUCH_QUERY = window.matchMedia('(pointer: coarse)');
 const SWIPE_TRIGGER_PX = 70;
 const SWIPE_MAX_PX = 96;
 
+// Symbole als Inline-SVG statt Schriftzeichen: "+" und "×" sitzen je nach
+// Schrift verschieden hoch und verschieden dick, ein Pfad steht immer mittig
+// und nimmt die Farbe des Knopfes mit.
+const ICON_PLUS = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>';
+const ICON_REMOVE = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg>';
+const ICON_MORE = '<svg class="e-more" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8"/></svg>';
+
 function renderEntries() {
     const container = document.getElementById('meals');
     container.replaceChildren();
@@ -274,7 +351,6 @@ function renderEntries() {
         : `Gegessen am ${fmtDate(currentDate)}`;
 
     const entries = (day && day.entries) || [];
-    document.getElementById('swipe-hint').hidden = !TOUCH_QUERY.matches || !entries.length;
 
     const sections = [...MEALS];
     // Der Restabschnitt nur, wenn er auch etwas enthaelt.
@@ -320,7 +396,7 @@ function buildMealSection(meal, entries) {
         const add = document.createElement('button');
         add.type = 'button';
         add.className = 'meal-add';
-        add.textContent = '+';
+        add.innerHTML = ICON_PLUS;
         add.title = `Etwas zu ${meal.label} hinzufügen`;
         add.setAttribute('aria-label', `Etwas zu ${meal.label} hinzufügen`);
         add.addEventListener('click', () => openAddDialog(meal));
@@ -344,6 +420,11 @@ function buildMealSection(meal, entries) {
     return section;
 }
 
+/** Ob Naehrwerte mindestens einen Detailwert tragen. */
+function hasDetails(per100g) {
+    return !!per100g && DETAILS.some(detail => per100g[detail.key] != null);
+}
+
 function buildEntryRow(entry) {
     const factor = entry.grams / 100;
     const row = document.createElement('div');
@@ -354,10 +435,17 @@ function buildEntryRow(entry) {
     backdrop.setAttribute('aria-hidden', 'true');
     backdrop.textContent = 'Löschen';
 
+    // Detailwerte zeigt die Liste erst auf Antippen: in jeder Zeile stuenden
+    // sonst acht Zahlen. Aufklappbar ist nur, was auch welche hat.
+    const expandable = detailedNutrients && hasDetails(entry.per100g);
+    const name = expandable
+        ? `<button type="button" class="e-toggle" aria-expanded="false"><span>${escapeHtml(entry.name)}</span>${ICON_MORE}</button>`
+        : escapeHtml(entry.name);
+
     const content = document.createElement('div');
     content.className = 'entry-content';
     content.innerHTML = `
-        <span class="e-name">${escapeHtml(entry.name)}</span>
+        <span class="e-name">${name}</span>
         <span class="e-amount n">${num(entry.grams)} g</span>
         <span class="e-kcal n">${num(entry.per100g.kcal * factor)}</span>
         <span class="e-protein n">${num(entry.per100g.proteinG * factor)}</span>
@@ -367,11 +455,36 @@ function buildEntryRow(entry) {
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'row-remove';
-    remove.textContent = '×';
+    remove.innerHTML = ICON_REMOVE;
     remove.title = 'Eintrag löschen';
     remove.setAttribute('aria-label', `${entry.name} löschen`);
     remove.addEventListener('click', () => deleteEntry(entry.id));
     content.appendChild(remove);
+
+    if (expandable) {
+        const details = document.createElement('dl');
+        details.className = 'entry-details';
+        details.hidden = true;
+        details.innerHTML = DETAILS.map(detail => {
+            const value = entry.per100g[detail.key];
+            const text = value == null ? '–' : `${num(value * factor, detail.digits)} g`;
+            return `<div><dt>${detail.short}</dt><dd>${text}</dd></div>`;
+        }).join('');
+        // Im Inhalt, nicht daneben: so faehrt die Zeile beim Wischen als Ganzes.
+        content.appendChild(details);
+        content.classList.add('expandable');
+
+        const toggle = content.querySelector('.e-toggle');
+        // Die ganze Zeile ist Klickflaeche, der Name der Knopf fuer Tastatur und
+        // Vorlesen - sein Klick landet ueber das Bubbling ebenfalls hier.
+        content.addEventListener('click', event => {
+            if (event.target.closest('.row-remove')) return;
+            const open = details.hidden;
+            details.hidden = !open;
+            row.classList.toggle('expanded', open);
+            toggle.setAttribute('aria-expanded', String(open));
+        });
+    }
 
     row.append(backdrop, content);
     enableSwipeToDelete(row, content, () => deleteEntry(entry.id));
@@ -514,7 +627,7 @@ function onDishChange() {
             .forEach(([label, factor]) => {
                 const button = document.createElement('button');
                 button.type = 'button';
-                button.className = 'ghost';
+                button.className = 'chip';
                 button.textContent = label;
                 button.addEventListener('click', () => {
                     document.getElementById('in-grams').value = Math.round(dish.portionG * factor);
@@ -684,25 +797,41 @@ function renderDishList() {
 function buildDishRow(dish) {
     const row = document.createElement('form');
     row.className = 'dish-row';
+    // Die Beschriftung steht in einem eigenen span: ab der zweiten Zeile blendet
+    // das CSS sie aus (die erste Zeile dient als Kopfzeile), vorgelesen wird sie
+    // weiterhin.
     row.innerHTML = `
-        <label class="grow">Name <input type="text" value="${escapeHtml(dish.name)}" maxlength="80" required></label>
-        <label>kcal <input type="number" step="0.1" min="0" max="1000" value="${dish.per100g.kcal}" required></label>
-        <label>E <input type="number" step="0.1" min="0" max="100" value="${dish.per100g.proteinG}" required></label>
-        <label>KH <input type="number" step="0.1" min="0" max="100" value="${dish.per100g.carbsG}" required></label>
-        <label>F <input type="number" step="0.1" min="0" max="100" value="${dish.per100g.fatG}" required></label>
-        <label>Portion <input type="number" step="1" min="1" max="20000" value="${dish.portionG ?? ''}"></label>`;
+        <label><span class="lbl">Name</span> <input type="text" value="${escapeHtml(dish.name)}" maxlength="80" required></label>
+        <label><span class="lbl">kcal</span> <input type="number" step="0.1" min="0" max="1000" value="${dish.per100g.kcal}" required></label>
+        <label><span class="lbl">E</span> <input type="number" step="0.1" min="0" max="100" value="${dish.per100g.proteinG}" required></label>
+        <label><span class="lbl">KH</span> <input type="number" step="0.1" min="0" max="100" value="${dish.per100g.carbsG}" required></label>
+        <label><span class="lbl">F</span> <input type="number" step="0.1" min="0" max="100" value="${dish.per100g.fatG}" required></label>
+        <label><span class="lbl">Portion</span> <input type="number" step="1" min="1" max="20000" value="${dish.portionG ?? ''}"></label>`;
 
     const [name, kcal, protein, carbs, fat, portion] = row.querySelectorAll('input');
+
+    // Wer Detailwerte erfasst, bekommt sie hier mit - sonst liesse das Speichern
+    // sie verschwinden, weil ein fehlender Wert beim Server "keine Angabe" heisst.
+    if (detailedNutrients) {
+        row.insertAdjacentHTML('beforeend', DETAILS.map(detail => `
+            <label class="detail ${detail.css}"><span class="lbl">${detail.label}</span>
+                <input type="number" step="0.01" min="0" max="100" value="${dish.per100g[detail.key] ?? ''}"></label>`).join(''));
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'dish-actions';
     const save = document.createElement('button');
     save.type = 'submit';
+    save.className = 'button secondary';
     save.textContent = 'Speichern';
     const remove = document.createElement('button');
     remove.type = 'button';
-    remove.className = 'danger';
+    remove.className = 'button danger';
     remove.textContent = 'Löschen';
     const msg = document.createElement('span');
     msg.className = 'form-msg';
-    row.append(save, remove, msg);
+    actions.append(save, remove, msg);
+    row.appendChild(actions);
 
     row.addEventListener('submit', async event => {
         event.preventDefault();
@@ -717,6 +846,7 @@ function buildDishRow(dish) {
                     carbsG: parseFloat(carbs.value),
                     fatG: parseFloat(fat.value),
                     portionG: portion.value === '' ? null : parseFloat(portion.value),
+                    ...detailValues(detail => row.querySelector(`.${detail.css} input`).value),
                 }),
             });
             await loadAll();
@@ -734,6 +864,22 @@ function buildDishRow(dish) {
     });
 
     return row;
+}
+
+/**
+ * Die ausgefuellten Detailwerte, bereit zum Einmischen in ein Gericht. Leere
+ * Felder fehlen ganz: der Server liest ein fehlendes Feld als "keine Angabe",
+ * eine 0 dagegen als Angabe. Ohne Detailerfassung kommt nichts dazu - die
+ * Anfrage sieht dann genau so aus wie immer.
+ */
+function detailValues(readValue) {
+    const values = {};
+    if (!detailedNutrients) return values;
+    DETAILS.forEach(detail => {
+        const raw = readValue(detail);
+        if (raw != null && raw !== '') values[detail.key] = parseFloat(raw);
+    });
+    return values;
 }
 
 /** Fuehrt eine Aktion aus und schreibt Erfolg/Fehler in das mitgegebene Feld. */
@@ -816,6 +962,27 @@ const PROPOSAL_FIELDS = [
     { key: 'fatG', label: 'Fett', unit: ' g', digits: 1 },
 ];
 
+/**
+ * Die Zeilen des Vorschlags: die vier Grundwerte, bei Detailerfassung dazu die
+ * Detailwerte - jeweils direkt unter ihrem Oberbegriff, wie auf der Packung.
+ * Detailwerte sind freiwillig (`optional`): fehlt einer, bleibt das Feld leer.
+ */
+function proposalFields() {
+    if (!detailedNutrients) return PROPOSAL_FIELDS;
+    const fields = [];
+    PROPOSAL_FIELDS.forEach(field => {
+        fields.push(field);
+        DETAILS.filter(detail => detail.after === field.key)
+            .forEach(detail => fields.push({ ...detailField(detail), sub: true }));
+    });
+    DETAILS.filter(detail => !detail.after).forEach(detail => fields.push(detailField(detail)));
+    return fields;
+}
+
+function detailField(detail) {
+    return { key: detail.key, label: detail.label, unit: ' g', digits: 2, optional: true };
+}
+
 // Der zuletzt geholte Vorschlag, bis er bestaetigt oder verworfen wird.
 let proposal = null;
 
@@ -856,10 +1023,13 @@ function renderProposal() {
     // Naehrwerte je 100 g als Eingabefelder, jeweils mit ihrer Herkunft daneben.
     const values = document.getElementById('proposal-values');
     values.replaceChildren();
-    PROPOSAL_FIELDS.forEach(field => {
-        const source = VALUE_SOURCES[proposal.valueSources[field.key]] || VALUE_SOURCES.estimated;
+    proposalFields().forEach(field => {
+        // Ein Detailwert ohne Angabe hat auch keine Herkunft - "geschaetzt"
+        // daneben behauptete eine Schaetzung, die es nicht gibt.
+        const source = VALUE_SOURCES[proposal.valueSources[field.key]]
+            || (field.optional ? null : VALUE_SOURCES.estimated);
         const row = document.createElement('div');
-        row.className = 'proposal-value';
+        row.className = field.sub ? 'proposal-value sub' : 'proposal-value';
 
         const label = document.createElement('label');
         label.className = 'pv-label';
@@ -869,22 +1039,21 @@ function renderProposal() {
         const input = document.createElement('input');
         input.type = 'number';
         input.id = `pf-${field.key}`;
-        input.step = field.digits ? '0.1' : '1';
+        input.step = field.optional ? '0.01' : field.digits ? '0.1' : '1';
         input.min = '0';
         input.max = field.key === 'kcal' ? '1000' : '100';
         input.value = round(proposal.per100g[field.key], field.digits);
 
         const mark = document.createElement('span');
-        mark.className = `pv-source src-${source.tone}`;
-        mark.textContent = source.label;
+        mark.className = source ? `pv-source src-${source.tone}` : 'pv-source';
+        mark.textContent = source ? source.label : '';
         markEditedOnInput(input, mark);
 
         row.append(label, input, mark);
         values.appendChild(row);
     });
 
-    document.getElementById('proposal-unit').textContent =
-        'Angaben je 100 g. Was der Agent geraten hat, lässt sich hier direkt korrigieren.';
+    document.getElementById('proposal-unit').textContent = 'je 100 g';
 
     const grams = document.getElementById('proposal-grams');
     grams.value = Math.round(proposal.grams);
@@ -929,10 +1098,18 @@ function proposalPayload() {
     const portionRaw = document.getElementById('proposal-portion').value;
     const portionG = portionRaw === '' ? null : parseFloat(portionRaw);
 
+    const details = detailValues(detail => document.getElementById(`pf-${detail.key}`).value);
+
     const unchanged = proposal.known
         && name.toLowerCase() === proposal.name.toLowerCase()
         && PROPOSAL_FIELDS.every(field =>
             Math.abs(per100g[field.key] - proposal.per100g[field.key]) < 0.05)
+        // Detailwerte zaehlen mit: auch eine nachgetragene Zuckerangabe ist eine
+        // Korrektur, die ins Gericht gehoert. Leer gegen leer ist unveraendert.
+        && DETAILS.every(detail => (detail.key in details
+            ? proposal.per100g[detail.key] != null
+                && Math.abs(details[detail.key] - proposal.per100g[detail.key]) < 0.005
+            : !detailedNutrients || proposal.per100g[detail.key] == null))
         && (portionG ?? null) === (proposal.portionG == null ? null : Math.round(proposal.portionG));
 
     if (unchanged) {
@@ -947,6 +1124,7 @@ function proposalPayload() {
             carbsG: per100g.carbsG,
             fatG: per100g.fatG,
             portionG,
+            ...details,
         },
     };
 }
@@ -1137,11 +1315,23 @@ async function loadFeatures() {
     try {
         const features = await fetchJson('/api/food/features');
         quickCaptureAvailable = !!(features && features.quickCapture);
+        detailedNutrients = !!(features && features.detailedNutrients);
     } catch (err) {
         quickCaptureAvailable = false;
+        detailedNutrients = false;
     }
     document.getElementById('quick-open').hidden =
         !quickCaptureAvailable || !document.getElementById('quick-capture').hidden;
+    document.querySelectorAll('#new-dish [data-detail]').forEach(field => {
+        field.hidden = !detailedNutrients;
+    });
+    // Die Features kommen parallel zu den Tagesdaten. Waren die schneller, ist
+    // schon ohne Detailwerte gezeichnet - dann einmal nachziehen.
+    if (detailedNutrients && day) {
+        renderGauges();
+        renderEntries();
+        renderDishList();
+    }
 }
 
 // --- Verlauf ----------------------------------------------------------------
@@ -1190,7 +1380,10 @@ function isolatedPoint(values, index) {
 }
 
 function renderHistory(from, to) {
-    document.getElementById('history-heading').textContent = `Verlauf – letzte ${historyDays} Tage`;
+    historyShown = { from, to };
+    // Farben im gerade gueltigen Farbschema (siehe CHART_COLORS).
+    const color = Object.fromEntries(
+        Object.entries(CHART_COLORS).map(([key, name]) => [key, cssColor(name)]));
 
     // Jeden Kalendertag als Label, auch die ohne Eintrag: sonst ruecken Luecken
     // zusammen und der Verlauf sieht dichter aus, als er ist.
@@ -1210,7 +1403,7 @@ function renderHistory(from, to) {
     // auch, aber eine Kurve, die dort die Farbe wechselt, faellt schneller
     // auf als ein Schnittpunkt.
     const overTarget = base => ctx => (ctx.p0.parsed.y > target || ctx.p1.parsed.y > target
-        ? CHART_COLORS.kcalOver : base);
+        ? color.kcalOver : base);
 
     const datasets = [];
     if (showKcal.avg7) {
@@ -1218,11 +1411,11 @@ function renderHistory(from, to) {
             type: 'line',
             label: 'kcal ⌀ 7 Tage',
             data: avg,
-            borderColor: CHART_COLORS.kcal,
-            backgroundColor: CHART_COLORS.kcal,
+            borderColor: color.kcal,
+            backgroundColor: color.kcal,
             borderWidth: 2.5,
             segment: {
-                borderColor: overTarget(CHART_COLORS.kcal),
+                borderColor: overTarget(color.kcal),
                 // Gepunktet, wo das Fenster noch in die Zukunft reicht - der
                 // Wert kann sich mit den naechsten Eintraegen noch aendern.
                 borderDash: ctx => (avgComplete[ctx.p1DataIndex] === false ? [1, 6] : undefined),
@@ -1232,7 +1425,7 @@ function renderHistory(from, to) {
             // eingetragen ist - und das ist dann wirklich eine Luecke.
             spanGaps: false,
             pointRadius: ctx => (isolatedPoint(avg, ctx.dataIndex) ? 3 : 0),
-            pointBackgroundColor: CHART_COLORS.kcal,
+            pointBackgroundColor: color.kcal,
             pointHoverRadius: 4,
             tension: 0.3,
             yAxisID: 'y',
@@ -1244,18 +1437,18 @@ function renderHistory(from, to) {
             type: 'line',
             label: 'kcal',
             data: kcal,
-            borderColor: CHART_COLORS.kcalDay,
-            backgroundColor: CHART_COLORS.kcalDay,
+            borderColor: color.kcalDay,
+            backgroundColor: color.kcalDay,
             borderWidth: 1.5,
-            segment: { borderColor: overTarget(CHART_COLORS.kcalDay) },
+            segment: { borderColor: overTarget(color.kcalDay) },
             // NICHT ueberbruecken: Tage ohne Eintrag sind unbekannt, nicht null.
             spanGaps: false,
             // Ein Tag, der allein zwischen zwei Luecken steht, hat kein
             // Liniensegment und waere sonst unsichtbar.
             pointRadius: ctx => (isolatedPoint(kcal, ctx.dataIndex) ? 3 : 0),
             pointBackgroundColor: ctx => (kcal[ctx.dataIndex] > target
-                ? CHART_COLORS.kcalOver
-                : CHART_COLORS.kcalDay),
+                ? color.kcalOver
+                : color.kcalDay),
             pointHoverRadius: 4,
             tension: 0.25,
             yAxisID: 'y',
@@ -1266,7 +1459,7 @@ function renderHistory(from, to) {
         type: 'line',
         label: 'Tagesziel',
         data: labels.map(() => target),
-        borderColor: CHART_COLORS.target,
+        borderColor: color.target,
         borderDash: [6, 4],
         borderWidth: 1.5,
         pointRadius: 0,
@@ -1280,8 +1473,8 @@ function renderHistory(from, to) {
             type: 'line',
             label: series.label,
             data: labels.map(d => (d in values ? values[d] : null)),
-            borderColor: series.color,
-            backgroundColor: series.color,
+            borderColor: cssColor(series.color),
+            backgroundColor: cssColor(series.color),
             borderWidth: series.width,
             pointRadius: series.points,
             pointHoverRadius: series.points + 2,
@@ -1295,28 +1488,82 @@ function renderHistory(from, to) {
         });
     });
 
+    // Achsen leise, Gitter nur waagerecht und haarfein: die Kurven sind die
+    // Aussage, das Raster nur die Ablesehilfe.
+    const axisFont = { size: 11 };
     const config = {
         data: { labels, datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            ...(REDUCED_MOTION.matches ? { animation: false } : {}),
             interaction: { mode: 'index', intersect: false },
             scales: {
-                y: { position: 'left', beginAtZero: true, title: { display: true, text: 'kcal' } },
+                y: {
+                    position: 'left',
+                    beginAtZero: true,
+                    title: { display: true, text: 'kcal', color: color.tick, font: axisFont },
+                    grid: { color: color.grid, drawTicks: false },
+                    border: { display: false },
+                    ticks: { color: color.tick, font: axisFont, padding: 8, maxTicksLimit: 6 },
+                },
                 yWeight: {
                     position: 'right',
                     display: showWeight.avg7 || showWeight.measured,
                     // Eigene Skalierung mit eigenem Gitternetz, das nicht in die
                     // Flaeche gezeichnet wird: die kcal-Achse behaelt so ihre
                     // Grenzen, und es liegen nicht zwei Raster uebereinander.
-                    grid: { drawOnChartArea: false },
-                    title: { display: true, text: 'kg' },
+                    grid: { drawOnChartArea: false, drawTicks: false },
+                    border: { display: false },
+                    title: { display: true, text: 'kg', color: color.tick, font: axisFont },
+                    ticks: { color: color.tick, font: axisFont, padding: 8 },
                 },
                 // maxRotation: 0 haelt die Datumsbeschriftung waagerecht, damit
                 // das Einblenden des Gewichts nicht den ganzen Chart-Boden umbaut.
-                x: { ticks: { maxTicksLimit: 10, autoSkip: true, maxRotation: 0 } },
+                x: {
+                    grid: { display: false },
+                    border: { color: color.grid },
+                    ticks: {
+                        color: color.tick,
+                        font: axisFont,
+                        padding: 6,
+                        maxTicksLimit: 10,
+                        autoSkip: true,
+                        maxRotation: 0,
+                        // "28.09." statt "2026-09-28": das Jahr steht ohnehin fest.
+                        callback: value => fmtDayMonth(labels[value]),
+                    },
+                },
             },
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: color.tooltipBg,
+                    titleColor: color.tooltipText,
+                    bodyColor: color.tooltipText,
+                    titleFont: { size: 12, weight: '600' },
+                    bodyFont: { size: 12 },
+                    padding: 10,
+                    cornerRadius: 8,
+                    boxWidth: 8,
+                    boxHeight: 8,
+                    boxPadding: 4,
+                    callbacks: {
+                        title: items => (items.length ? fmtDate(labels[items[0].dataIndex]) : ''),
+                        // Ganze kcal und Gewicht auf eine Stelle - das Mittel
+                        // kaeme sonst mit drei Nachkommastellen.
+                        label: ctx => `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'yWeight'
+                            ? `${num(ctx.parsed.y, 1)} kg`
+                            : num(ctx.parsed.y)}`,
+                        // Die Ziellinie ist halbtransparent und verschwaende als
+                        // Farbkaestchen auf dem Tooltip - dort steht sie in Grau.
+                        labelColor: ctx => {
+                            const swatch = ctx.dataset.label === 'Tagesziel' ? color.tick : ctx.dataset.borderColor;
+                            return { borderColor: swatch, backgroundColor: swatch, borderRadius: 2 };
+                        },
+                    },
+                },
+            },
         },
     };
 
@@ -1369,13 +1616,15 @@ function initHistoryControls() {
     HISTORY_RANGES.forEach(days => {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'ghost';
         button.textContent = `${days} Tage`;
         button.classList.toggle('active', days === historyDays);
+        button.setAttribute('aria-pressed', String(days === historyDays));
         button.addEventListener('click', async () => {
             historyDays = days;
-            ranges.querySelectorAll('button').forEach(b =>
-                b.classList.toggle('active', b === button));
+            ranges.querySelectorAll('button').forEach(b => {
+                b.classList.toggle('active', b === button);
+                b.setAttribute('aria-pressed', String(b === button));
+            });
             await loadHistory();
         });
         ranges.appendChild(button);
@@ -1383,7 +1632,6 @@ function initHistoryControls() {
 
     const toggles = document.getElementById('history-toggles');
     KCAL_SERIES.forEach(series => {
-        const label = document.createElement('label');
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = showKcal[series.key];
@@ -1391,14 +1639,9 @@ function initHistoryControls() {
             showKcal[series.key] = checkbox.checked;
             await loadHistory();
         });
-        const swatch = document.createElement('span');
-        swatch.className = 'swatch';
-        swatch.style.backgroundColor = series.color;
-        label.append(checkbox, swatch, document.createTextNode(series.label));
-        toggles.appendChild(label);
+        toggles.appendChild(buildToggle(checkbox, series));
     });
     WEIGHT_SERIES.forEach(series => {
-        const label = document.createElement('label');
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = showWeight[series.key];
@@ -1406,12 +1649,25 @@ function initHistoryControls() {
             showWeight[series.key] = checkbox.checked;
             await loadHistory();
         });
-        const swatch = document.createElement('span');
-        swatch.className = 'swatch';
-        swatch.style.backgroundColor = series.color;
-        label.append(checkbox, swatch, document.createTextNode(series.label));
-        toggles.appendChild(label);
+        toggles.appendChild(buildToggle(checkbox, series));
     });
+}
+
+/**
+ * Ein Umschalter als Pille: Kaestchen (fuer Tastatur und Vorlesen), dahinter
+ * die Linienprobe in der Farbe der Serie und die Beschriftung. Die Farbe kommt
+ * als CSS-Variable, damit sie mit dem Farbschema wechselt.
+ */
+function buildToggle(checkbox, series) {
+    const label = document.createElement('label');
+    const body = document.createElement('span');
+    body.className = 'toggle-body';
+    const swatch = document.createElement('span');
+    swatch.className = 'swatch';
+    swatch.style.setProperty('--swatch', `var(${series.color})`);
+    body.append(swatch, document.createTextNode(series.label));
+    label.append(checkbox, body);
+    return label;
 }
 
 // --- Laden und Formulare ----------------------------------------------------
@@ -1464,7 +1720,9 @@ async function deleteEntry(id) {
         await fetchJson(`/api/food/entries/${encodeURIComponent(id)}`, { method: 'DELETE' });
         await loadAll();
     } catch (err) {
-        document.getElementById('load-msg').textContent = `Fehler: ${err.message}`;
+        const el = document.getElementById('load-msg');
+        el.classList.remove('ok');
+        el.textContent = `Fehler: ${err.message}`;
     }
 }
 
@@ -1499,6 +1757,7 @@ function initEntryForm() {
                 portionG: document.getElementById('nd-portion').value === ''
                     ? null
                     : parseFloat(document.getElementById('nd-portion').value),
+                ...detailValues(detail => document.getElementById(detail.input).value),
             };
         } else if (select.value) {
             body.dishId = select.value;
@@ -1515,7 +1774,8 @@ function initEntryForm() {
                 body: JSON.stringify(body),
             });
             grams.value = '';
-            ['nd-name', 'nd-kcal', 'nd-protein', 'nd-carbs', 'nd-fat', 'nd-portion']
+            ['nd-name', 'nd-kcal', 'nd-protein', 'nd-carbs', 'nd-fat', 'nd-portion',
+                ...DETAILS.map(detail => detail.input)]
                 .forEach(id => { document.getElementById(id).value = ''; });
             resetDishSearch();
             document.getElementById('add-dialog').close();
@@ -1611,6 +1871,13 @@ function initTargetsForm() {
         });
     });
 }
+
+// Wechselt das Farbschema, waehrend die Seite offen ist (etwa abends
+// automatisch), wird das Diagramm neu gezeichnet: Chart.js liest die Farben
+// nur beim Zeichnen, alles andere folgt den CSS-Variablen von selbst.
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (historyChart && historyShown) renderHistory(historyShown.from, historyShown.to);
+});
 
 initDayNav();
 initEntryForm();

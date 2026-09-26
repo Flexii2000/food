@@ -1,18 +1,137 @@
-/* Farben und Grundformen bewusst identisch zur Weight-App (weight.fherrmann.com):
-   die beiden Seiten gehoeren zusammen und sollen sich nicht wie zwei Produkte
-   anfuehlen. */
+/* Zwei Farbschemata ueber dieselben Variablen: hell ist der Standard, dunkel
+   folgt der Systemeinstellung. Flaechen und Schrift sind warme Grautoene, es
+   gibt genau einen Akzent - das Blau des neutralen Tachos. Alles andere, was
+   farbig ist, traegt eine Bedeutung (Tachos, Herkunft eines Werts, Fehler). */
 :root {
-    --measured: #4fc3f7;
-    --bg: #0f1420;
-    --panel: #1a2130;
-    --border: #2a3346;
-    --text: #e6ecf5;
-    --muted: #8b97ab;
-    --accent: #5c7cfa;
-    --good: #66bb6a;
-    --warn: #ffa726;
-    --bad: #ef5350;
-    --track: #253049;
+    color-scheme: light dark;
+
+    --page: 760px;
+    --gutter: 16px;
+
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --field: #ffffff;
+    --text: #1d1c1a;
+    --text-2: #57534c;
+    --muted: #736f67;
+    --line: rgba(29, 28, 26, 0.1);
+    --line-soft: rgba(29, 28, 26, 0.06);
+    --line-strong: rgba(29, 28, 26, 0.2);
+    --fill: rgba(29, 28, 26, 0.05);
+    --fill-strong: rgba(29, 28, 26, 0.09);
+    --segment: #ffffff;
+    --segment-shadow: 0 1px 2px rgba(29, 28, 26, 0.12), 0 0 0 0.5px rgba(29, 28, 26, 0.08);
+
+    --accent: #3a5ccc;
+    --accent-fill: rgba(58, 92, 204, 0.1);
+    --focus-ring: rgba(58, 92, 204, 0.3);
+    --ink: #1d1c1a;
+    --ink-hover: #3b3935;
+    --on-ink: #fbfaf7;
+
+    --good: #2a8043;
+    --good-fill: rgba(42, 128, 67, 0.1);
+    --warn: #c2570c;
+    --bad: #d33131;
+    --danger-fill: rgba(211, 49, 49, 0.08);
+    /* Rote Flaechen mit weisser Schrift (Wisch-Grund, Fehlermeldung): in beiden
+       Schemata dasselbe tiefe Rot - das helle Rot des dunklen Schemas truege
+       weisse Schrift nicht. */
+    --danger-solid: #d23535;
+    --measured: #0b76a8;
+
+    --track: #e9e6df;
+    --backdrop: rgba(29, 28, 26, 0.3);
+    --shadow-pop: 0 1px 2px rgba(29, 28, 26, 0.06), 0 18px 48px -14px rgba(29, 28, 26, 0.28);
+
+    /* Die Toene der Tachos. Hell etwas satter als dunkel: der helle Anfang
+       des Verlaufs verschwaende sonst fast im hellen Grund. */
+    --g-neutral-a: #7390f5;
+    --g-neutral-b: #3a5ccc;
+    --g-good-a: #6cc47d;
+    --g-good-b: #2b9348;
+    --g-warn-a: #ffbf5e;
+    --g-warn-b: #ef8a06;
+    --g-bad-a: #ff8a84;
+    --g-bad-b: #de3a36;
+
+    /* Diagramm: dieselbe Farbsprache wie im Weight Tracker (kcal gelb,
+       7-Tage-Mittel gruen, Messwert hellblau), im hellen Schema dunkler
+       abgestimmt, damit duenne Linien auf hellem Grund noch tragen. */
+    --chart-kcal: #d49c00;
+    --chart-kcal-day: rgba(212, 156, 0, 0.5);
+    --chart-over: #d33131;
+    --chart-target: rgba(29, 28, 26, 0.42);
+    --chart-weight-avg: #37a14b;
+    --chart-weight-measured: #0b93d1;
+    --chart-grid: rgba(29, 28, 26, 0.07);
+    --chart-tick: #86817a;
+    --tooltip-bg: #1d1c1a;
+    --tooltip-text: #fbfaf7;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #151514;
+        --surface: #1f1f1d;
+        --field: #262624;
+        --text: #f0eee9;
+        --text-2: #b8b4ac;
+        --muted: #8f8b83;
+        --line: rgba(240, 238, 233, 0.1);
+        --line-soft: rgba(240, 238, 233, 0.06);
+        --line-strong: rgba(240, 238, 233, 0.18);
+        --fill: rgba(240, 238, 233, 0.06);
+        --fill-strong: rgba(240, 238, 233, 0.11);
+        --segment: #3a3a36;
+        --segment-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+
+        --accent: #8aa2ff;
+        --accent-fill: rgba(138, 162, 255, 0.14);
+        --focus-ring: rgba(138, 162, 255, 0.4);
+        --ink: #f0eee9;
+        --ink-hover: #d9d6cf;
+        --on-ink: #151514;
+
+        --good: #6cc983;
+        --good-fill: rgba(108, 201, 131, 0.14);
+        --warn: #ffab52;
+        --bad: #ff6f69;
+        --danger-fill: rgba(255, 111, 105, 0.12);
+        --measured: #4fc3f7;
+
+        --track: #2c2c29;
+        --backdrop: rgba(0, 0, 0, 0.6);
+        --shadow-pop: 0 0 0 1px rgba(240, 238, 233, 0.08), 0 24px 60px -12px rgba(0, 0, 0, 0.7);
+
+        --g-neutral-a: #8ba3ff;
+        --g-neutral-b: #4c6ef5;
+        --g-good-a: #8ee09b;
+        --g-good-b: #43a75a;
+        --g-warn-a: #ffd68a;
+        --g-warn-b: #f59f26;
+        --g-bad-a: #ff938f;
+        --g-bad-b: #dc3c39;
+
+        --chart-kcal: rgba(255, 213, 79, 0.85);
+        --chart-kcal-day: rgba(255, 213, 79, 0.5);
+        --chart-over: rgba(239, 83, 80, 0.9);
+        --chart-target: rgba(240, 238, 233, 0.45);
+        --chart-weight-avg: #81c784;
+        --chart-weight-measured: #4fc3f7;
+        --chart-grid: rgba(240, 238, 233, 0.07);
+        --chart-tick: #8f8b83;
+        --tooltip-bg: #f0eee9;
+        --tooltip-text: #151514;
+    }
+}
+
+@media (min-width: 1100px) {
+    :root { --page: 1240px; --gutter: 40px; }
+}
+
+@media (min-width: 641px) and (max-width: 1099px) {
+    :root { --gutter: 32px; }
 }
 
 * { box-sizing: border-box; }
@@ -23,60 +142,322 @@
    ausgeblendet hatte. */
 [hidden] { display: none !important; }
 
-body {
-    margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    background: var(--bg);
-    color: var(--text);
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
-header {
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 1rem;
+    line-height: 1.45;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, p { margin: 0; }
+
+h2 {
+    font-size: 1.25rem;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+}
+
+/* Symbole sind Striche in der Textfarbe des Knopfes - so nehmen sie Hover,
+   Fokus und das dunkle Schema ohne eigene Regeln mit. */
+button svg,
+summary svg {
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Tastaturfokus sichtbar, Mausklick nicht: :focus-visible trennt genau das. */
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* --- Kopfzeile ------------------------------------------------------------ */
+
+.topbar { border-bottom: 1px solid var(--line); }
+
+/* Gleiche Breite und gleicher Rand wie der Inhalt darunter, damit Titel und
+   Datum auf einer Flucht mit den Spalten stehen. */
+.topbar-inner {
+    max-width: var(--page);
+    margin: 0 auto;
+    padding: 12px max(var(--gutter), env(safe-area-inset-right)) 12px max(var(--gutter), env(safe-area-inset-left));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 24px;
+}
+
+.topbar h1 {
+    font-size: 1.0625rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
+.day-nav { display: flex; align-items: center; gap: 8px; }
+
+.day-step {
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: 12px;
+    background: var(--fill);
+}
+
+.day-step input[type="date"] {
+    width: 9.5rem;
+    height: 36px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    text-align: center;
+    font-weight: 500;
+}
+
+.day-step input[type="date"]:focus { outline: none; box-shadow: 0 0 0 2px var(--focus-ring); }
+
+/* Das Kalendersymbol bleibt bedienbar, nimmt sich aber zurueck: das Datum ist
+   die Information, das Symbol nur der Griff. */
+.day-step input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.45;
+    cursor: pointer;
+}
+
+/* iOS setzt das Datum sonst linksbuendig in das zentrierte Feld. */
+.day-step input[type="date"]::-webkit-date-and-time-value { text-align: center; }
+
+.icon-button {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.icon-button:hover { background: var(--fill-strong); color: var(--text); }
+.icon-button svg { width: 20px; height: 20px; }
+
+/* --- Knoepfe ------------------------------------------------------------- */
+
+/* Drei Stufen, abzulesen an der Fuellung: primaer (dunkel gefuellt, einer je
+   Formular), sekundaer (nur getoent) und leise (erst beim Zeigen hinterlegt).
+   Mit Rahmen um jeden Knopf sahen alle gleich wichtig aus. */
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 10px;
+    font: inherit;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.button.primary { background: var(--ink); color: var(--on-ink); }
+.button.primary:hover:not(:disabled) { background: var(--ink-hover); }
+.button.secondary { background: var(--fill); color: var(--text); }
+.button.secondary:hover:not(:disabled) { background: var(--fill-strong); }
+.button.quiet { background: transparent; color: var(--text-2); font-weight: 500; }
+.button.quiet:hover:not(:disabled) { background: var(--fill); color: var(--text); }
+.button.danger { background: transparent; color: var(--bad); font-weight: 500; }
+.button.danger:hover:not(:disabled) { background: var(--danger-fill); }
+.button:disabled { opacity: 0.45; cursor: default; }
+
+.actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1.2rem 1.5rem;
-    border-bottom: 1px solid var(--border);
+    gap: 8px 12px;
+    margin-top: 20px;
 }
 
-header h1 { margin: 0; font-size: 1.4rem; }
+/* --- Formularfelder ------------------------------------------------------ */
 
-.day-nav { display: flex; align-items: center; gap: 0.4rem; }
-
-main {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 1.5rem;
+label {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 6px;
+    min-width: 0;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-2);
 }
 
-.panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
+input[type="text"],
+input[type="number"],
+input[type="date"],
+textarea {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
     border-radius: 10px;
-    padding: 1.2rem;
+    background: var(--field);
+    color: var(--text);
+    font: inherit;
+    /* 16 px, damit iOS beim Antippen nicht in die Seite zoomt. */
+    font-size: 1rem;
+    font-weight: 400;
+    -webkit-appearance: none;
+    appearance: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.panel h2 { margin-top: 0; font-size: 1.05rem; }
+input[type="number"] { font-variant-numeric: tabular-nums; }
+
+input::placeholder,
+textarea::placeholder { color: var(--muted); opacity: 1; }
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* Die Pfeilchen im Zahlenfeld sind zu klein zum Treffen und verdecken die
+   Ziffern; Pfeiltasten und Tippen gehen weiter. */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] { -moz-appearance: textfield; }
+
+/* Felder unten buendig: bricht eine Beschriftung in zwei Zeilen um, bleiben
+   die Eingabefelder trotzdem auf einer Linie. */
+.field-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: end;
+    gap: 14px 16px;
+}
+
+.group-label {
+    margin: 22px 0 10px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-2);
+}
+
+.hint {
+    font-size: 0.8125rem;
+    color: var(--muted);
+}
+
+.hint:empty { display: none; }
+
+.form-msg {
+    font-size: 0.8125rem;
+    color: var(--text-2);
+}
+
+.form-msg:empty { display: none; }
+.form-msg.ok { color: var(--good); }
+.form-msg.err { color: var(--bad); }
+
+/* --- Seitenaufbau -------------------------------------------------------- */
+
+main {
+    max-width: var(--page);
+    margin: 0 auto;
+    padding: 24px max(var(--gutter), env(safe-area-inset-right)) 72px max(var(--gutter), env(safe-area-inset-left));
+    display: grid;
+    /* minmax(0, ...) statt 1fr: sonst darf eine Spalte nicht schmaler werden
+       als ihr breitester Inhalt, und die Seite laeuft am Handy seitlich ueber. */
+    grid-template-columns: minmax(0, 1fr);
+    gap: 44px;
+}
+
+/* Ab hier zwei Spalten: links der Tag auf einen Blick, rechts die Liste, aus
+   der er sich zusammensetzt. Verlauf und Einstellungen darunter ueber die
+   ganze Breite - das Diagramm braucht sie. */
+@media (min-width: 1100px) {
+    main {
+        grid-template-columns: 400px minmax(0, 1fr);
+        grid-template-areas:
+            "overview entries"
+            "history history"
+            "settings settings";
+        column-gap: 80px;
+        row-gap: 64px;
+        padding-top: 40px;
+    }
+
+    .overview { grid-area: overview; align-self: start; }
+
+    .day-entries { grid-area: entries; }
+    .history { grid-area: history; }
+    .settings { grid-area: settings; }
+}
 
 /* --- Tachos ------------------------------------------------------------- */
 
-.gauges { display: flex; flex-direction: column; gap: 1.5rem; }
+.overview { display: flex; flex-direction: column; gap: 24px; }
+
+/* Einspaltig auf dem Tablet: die Uebersicht so breit wie spaeter ihre Spalte,
+   mittig - ueber die volle Breite gezogen stuenden Name und Wert der
+   Detailzeilen weit auseinander. */
+@media (min-width: 641px) and (max-width: 1099px) {
+    .overview { width: 100%; max-width: 480px; justify-self: center; }
+}
 
 /* Die drei Makros oben nebeneinander, auf gleicher Hoehe. */
 .macro-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-    justify-items: center;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
 }
 
-.macro { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
-.macro .gauge { width: 130px; }
-.macro-label { color: var(--muted); font-size: 0.85rem; }
+.macro {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.macro .gauge { width: 100%; max-width: 120px; }
+
+.macro-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-2);
+    text-align: center;
+}
 
 /* kcal darunter: grosser Tacho links, der Verzehrt-Wert als blosse Zahl daneben.
    Die Trennlinie gehoert zwischen die beiden Bloecke, sitzt also hier oben. */
@@ -84,263 +465,207 @@ main {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 2.5rem;
-    flex-wrap: wrap;
-    border-top: 1px solid var(--border);
-    padding-top: 1.5rem;
+    gap: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
 }
 
-.kcal-gauge .gauge { width: 230px; }
+.kcal-gauge { flex: none; width: clamp(164px, 50vw, 236px); }
+.kcal-gauge .gauge { width: 100%; }
 
-.kcal-consumed { display: flex; flex-direction: column; gap: 0.25rem; }
-.kcal-consumed .label { color: var(--muted); font-size: 0.85rem; }
-.kcal-consumed .value { font-size: 2.4rem; font-weight: 600; line-height: 1.1; }
-.kcal-consumed .sub { color: var(--muted); font-size: 0.85rem; }
+.kcal-consumed {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.kcal-consumed .label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+.kcal-consumed .value {
+    font-size: clamp(1.375rem, 5.6vw, 1.75rem);
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.kcal-consumed .sub {
+    font-size: 0.875rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Die Detailwerte des Tages (nur wer sie erfasst): vier Zahlen ohne Ziel und
+   ohne Tacho, gesetzt wie eine Naehrwerttabelle - Name links, Wert rechts -
+   und bewusst leiser als alles darueber. */
+.detail-totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 32px;
+    margin: 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 0.875rem;
+}
+
+.detail-totals div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.detail-totals dt { color: var(--text-2); }
+
+.detail-totals dd {
+    margin: 0;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
 
 /* Nimmt keinen Platz: nur der Träger für die Farbverläufe, die die Tachos per
    url(#…) referenzieren. */
 .gauge-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.stop-neutral-a { stop-color: var(--g-neutral-a); }
+.stop-neutral-b { stop-color: var(--g-neutral-b); }
+.stop-good-a { stop-color: var(--g-good-a); }
+.stop-good-b { stop-color: var(--g-good-b); }
+.stop-warn-a { stop-color: var(--g-warn-a); }
+.stop-warn-b { stop-color: var(--g-warn-b); }
+.stop-bad-a { stop-color: var(--g-bad-a); }
+.stop-bad-b { stop-color: var(--g-bad-b); }
 
 .gauge { display: block; height: auto; overflow: visible; }
 
 .gauge-track {
     fill: none;
     stroke: var(--track);
-    stroke-width: 8.5;
+    stroke-width: 7;
     stroke-linecap: round;
 }
 
 .gauge-value {
     fill: none;
-    stroke-width: 8.5;
+    stroke-width: 7;
     stroke-linecap: round;
-    transition: stroke-dasharray 0.45s cubic-bezier(0.22, 1, 0.36, 1), filter 0.2s ease;
+    transition: stroke-dasharray 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Farbverlauf statt Vollton, dazu ein weicher Schein in derselben Farbe: das
-   gibt dem Bogen Tiefe, statt ihn wie einen ausgeschnittenen Streifen wirken
-   zu lassen. Der Schein sitzt bewusst dezent - er soll den Blick fuehren, nicht
-   leuchten. */
+/* Der grosse Bogen feiner, gemessen an seiner Groesse: mit derselben
+   Strichstaerke wie die kleinen wirkte er doppelt so schwer. */
+.kcal-gauge .gauge-track,
+.kcal-gauge .gauge-value { stroke-width: 5.5; }
+
+/* Farbverlauf in der Tonart des Werts. Kein Schein und kein Schatten: die
+   Toenung ist die Information, alles darum herum waere Dekoration. */
 .tone-neutral .gauge-value,
-.tone-near .gauge-value {
-    stroke: url(#gauge-neutral);
-    filter: drop-shadow(0 0 3px rgba(92, 124, 250, 0.28));
-}
-
-.tone-good .gauge-value {
-    stroke: url(#gauge-good);
-    filter: drop-shadow(0 0 3px rgba(102, 187, 106, 0.28));
-}
-
-.tone-warn .gauge-value {
-    stroke: url(#gauge-warn);
-    filter: drop-shadow(0 0 3.5px rgba(255, 167, 38, 0.32));
-}
-
-.tone-bad .gauge-value {
-    stroke: url(#gauge-bad);
-    filter: drop-shadow(0 0 4px rgba(239, 83, 80, 0.36));
-}
+.tone-near .gauge-value { stroke: url(#gauge-neutral); }
+.tone-good .gauge-value { stroke: url(#gauge-good); }
+.tone-warn .gauge-value { stroke: url(#gauge-warn); }
+.tone-bad .gauge-value { stroke: url(#gauge-bad); }
 
 /* Kerbe neben dem Bogen, nicht quer hindurch - siehe gaugeTick() in app.js.
    Kraeftig genug, um als Marke gelesen zu werden: zu duenn und zu blass sieht
    sie aus wie ein Strich, der versehentlich stehengeblieben ist. */
 .gauge-tick {
     stroke: var(--text);
-    stroke-width: 2.5;
+    stroke-width: 2.2;
     stroke-linecap: round;
-    opacity: 0.55;
+    opacity: 0.5;
 }
+
+.kcal-gauge .gauge-tick { stroke-width: 1.6; }
 
 .gauge-main, .gauge-sub {
     text-anchor: middle;
     dominant-baseline: middle;
     font-family: inherit;
+    font-variant-numeric: tabular-nums;
 }
 
 .gauge-main {
     fill: var(--text);
     font-weight: 650;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
 }
 
-.gauge-sub { fill: var(--muted); letter-spacing: 0.01em; }
+.gauge-sub { fill: var(--muted); font-weight: 500; }
 
-.tone-bad .gauge-main { fill: #ff8a86; }
-
-/* --- Formulare ---------------------------------------------------------- */
-
-form {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 1rem;
-}
-
-label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    font-size: 0.85rem;
-    color: var(--muted);
-}
-
-label.grow { flex: 1 1 12rem; }
-
-input, select {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 6px;
-    padding: 0.5rem;
-    font-size: 0.95rem;
-    font-family: inherit;
-    width: 100%;
-}
-
-button {
-    background: var(--accent);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 0.6rem 1.2rem;
-    font-size: 0.95rem;
-    font-family: inherit;
-    cursor: pointer;
-}
-
-button:hover { filter: brightness(1.1); }
-
-button.ghost {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    padding: 0.45rem 0.8rem;
-    font-size: 0.85rem;
-}
-
-button.ghost:hover { color: var(--text); border-color: var(--accent); filter: none; }
-
-button.danger { background: none; border: 1px solid var(--border); color: var(--bad); }
-button.danger:hover { border-color: var(--bad); filter: none; }
-
-.day-nav button:not(.ghost) {
-    padding: 0.45rem 0.7rem;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text);
-}
-
-.day-nav button:not(.ghost):hover { border-color: var(--accent); filter: none; }
-.day-nav input { width: auto; }
-
-.portion-shortcuts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
-
-.dish-hint, .hint {
-    margin: 0.6rem 0 0;
-    font-size: 0.82rem;
-    color: var(--muted);
-}
-
-.new-dish {
-    margin-top: 1rem;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.8rem 1rem 1rem;
-}
-
-.new-dish legend { color: var(--muted); font-size: 0.85rem; padding: 0 0.4rem; }
-.field-row { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.6rem; }
-.field-row label { flex: 1 1 8rem; }
-
-.form-msg { font-size: 0.85rem; color: var(--muted); }
-.form-msg.ok { color: var(--good); }
-.form-msg.err { color: var(--bad); }
-
-.load-msg {
-    margin: 0;
-    min-height: 1rem;
-    font-size: 0.9rem;
-    color: var(--bad);
-}
-
-details > summary {
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 0.9rem;
-}
-
-details > summary:hover { color: var(--text); }
-details[open] > summary { margin-bottom: 0.8rem; }
+.tone-bad .gauge-main { fill: var(--bad); }
 
 /* --- Tagesliste --------------------------------------------------------- */
 
-.meal + .meal { margin-top: 1.4rem; }
+.day-entries h2 { margin-bottom: 4px; }
+
+.meal { padding-top: 20px; }
 
 .meal-head {
     display: flex;
     align-items: center;
-    gap: 0.7rem;
-    padding-bottom: 0.4rem;
-    border-bottom: 1px solid var(--border);
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
 }
 
-.meal-title { font-weight: 600; font-size: 0.95rem; }
+.meal-title { font-size: 1rem; font-weight: 600; }
 
 /* Schiebt den "+" ans rechte Ende und die Teilsumme direkt daneben. */
 .meal-sum {
     margin-left: auto;
+    font-size: 0.9375rem;
     color: var(--muted);
-    font-size: 0.85rem;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
-
-.meal-add {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    border-radius: 6px;
-    width: 1.9rem;
-    height: 1.9rem;
-    padding: 0;
-    font-size: 1.15rem;
-    line-height: 1;
-    cursor: pointer;
-}
-
-.meal-add:hover { border-color: var(--accent); color: var(--text); filter: none; }
-
-.meal-empty { margin: 0.5rem 0 0; }
 
 /* Verzehrt hervorgehoben, das Ziel daneben gedaempft - die erste Zahl ist die,
    die sich aendert. */
 .ms-actual { color: var(--text); font-weight: 600; }
 
-.targets-split-hint { margin: 1rem 0 0.6rem; }
-#split-form label { flex: 0 0 9rem; }
-
-.entry-list { display: flex; flex-direction: column; }
-
-/* Eigenes Raster statt Tabelle: ein <tr> laesst sich fuer die Wischgeste nur
-   unzuverlaessig verschieben, und der rote Grund darunter braucht einen eigenen
-   Kasten. Die Spalten stehen trotzdem untereinander. */
-.entry-content {
+.meal-add {
     display: grid;
-    grid-template-columns: 1fr 4.5rem 5.5rem 4rem 4.5rem 4rem 1.8rem;
-    align-items: center;
-    gap: 0.5rem;
+    place-items: center;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--fill);
+    color: var(--text);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
 }
 
+.meal-add:hover { background: var(--fill-strong); }
+.meal-add svg { width: 18px; height: 18px; }
+
+.meal-empty {
+    padding: 12px 0 2px;
+    font-size: 0.875rem;
+    color: var(--muted);
+}
+
+.entry-list { display: flex; flex-direction: column; }
 
 /* Der Kasten steht still, nur sein Inhalt faehrt beim Wischen zur Seite und gibt
    den roten Grund darunter frei. */
 .entry-row {
     position: relative;
     overflow: hidden;
-    border-bottom: 1px solid var(--border);
 }
 
-.entry-row:last-child { border-bottom: none; }
+.entry-row + .entry-row { border-top: 1px solid var(--line-soft); }
 
 .entry-delete {
     position: absolute;
@@ -348,139 +673,481 @@ details[open] > summary { margin-bottom: 0.8rem; }
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding-right: 1rem;
-    background: var(--bad);
-    color: white;
-    font-size: 0.85rem;
+    padding-right: 18px;
+    background: var(--danger-solid);
+    color: #fff;
+    font-size: 0.875rem;
     font-weight: 600;
 }
 
+/* Eigenes Raster statt Tabelle: ein <tr> laesst sich fuer die Wischgeste nur
+   unzuverlaessig verschieben, und der rote Grund darunter braucht einen eigenen
+   Kasten. Die Spalten stehen trotzdem untereinander. */
 .entry-content {
     position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 4.25rem 5.25rem 3.25rem 3.75rem 3.25rem 2rem;
+    align-items: center;
+    column-gap: 10px;
+    min-height: 44px;
+    padding: 6px 0;
     /* Deckender Hintergrund, sonst schiene der rote Grund durch. */
-    background: var(--panel);
-    padding: 0.55rem 0.5rem;
-    font-size: 0.9rem;
+    background: var(--bg);
+    font-size: 0.9375rem;
     transition: transform 0.2s ease;
     /* Senkrechtes Scrollen bleibt beim Browser, waagerechtes uebernimmt der
        Wisch-Handler in app.js. */
     touch-action: pan-y;
 }
 
-.entry-row.will-delete .entry-delete { background: var(--bad); }
-.entry-row.will-delete .entry-content { box-shadow: -6px 0 12px rgba(0, 0, 0, 0.35); }
+.entry-row.will-delete .entry-content { box-shadow: 6px 0 16px -6px rgba(0, 0, 0, 0.25); }
 .entry-row.removing .entry-content { transform: translateX(-100%); opacity: 0; }
 
 .e-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.entry-content .n { text-align: right; font-variant-numeric: tabular-nums; }
+.entry-content .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.e-amount { color: var(--text-2); }
 
 /* Die Werte beschriften sich selbst. Seit die Tagesliste in Mahlzeiten zerfaellt,
    gaebe es sonst je Abschnitt eine eigene Kopfzeile - viermal dieselben fuenf
    Woerter, nur damit "24 18 4" zuzuordnen ist. */
-.e-kcal::after     { content: ' kcal'; color: var(--muted); }
-.e-protein::before { content: 'E '; color: var(--muted); }
-.e-carbs::before   { content: 'KH '; color: var(--muted); }
-.e-fat::before     { content: 'F '; color: var(--muted); }
+.e-kcal::after { content: ' kcal'; color: var(--muted); }
+
+.e-protein, .e-carbs, .e-fat { color: var(--text-2); }
+
+.e-protein::before { content: 'E\2009'; color: var(--muted); }
+.e-carbs::before   { content: 'KH\2009'; color: var(--muted); }
+.e-fat::before     { content: 'F\2009'; color: var(--muted); }
 
 .row-remove {
-    background: none;
-    border: none;
+    display: grid;
+    place-items: center;
+    justify-self: end;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
     color: var(--muted);
-    font-size: 1.1rem;
-    line-height: 1;
-    padding: 0 0.3rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.row-remove:hover { color: var(--bad); background: var(--danger-fill); }
+/* Die Zeile schneidet ueber (wegen der Wischgeste) - der Ring muss nach innen. */
+.row-remove:focus-visible { outline-offset: -2px; }
+.row-remove svg { width: 16px; height: 16px; }
+
+/* Aufklappbare Zeile (nur mit Detailwerten): ein kleiner Pfeil hinter dem
+   Namen sagt, dass es mehr gibt - ohne die Liste fuer alle anderen zu aendern. */
+.entry-content.expandable { cursor: pointer; }
+
+.e-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
 }
 
-.row-remove:hover { color: var(--bad); filter: none; }
+.e-toggle span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.e-toggle:focus-visible { outline-offset: -2px; }
 
-/* --- Gerichte-Verwaltung ------------------------------------------------ */
-
-.dish-list { display: flex; flex-direction: column; gap: 0.8rem; }
-
-.dish-row {
-    align-items: flex-end;
-    gap: 0.6rem;
-    padding-bottom: 0.8rem;
-    border-bottom: 1px solid var(--border);
+.e-toggle .e-more {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    stroke: var(--muted);
+    transition: transform 0.2s ease;
 }
 
-.dish-row:last-of-type { border-bottom: none; }
-.dish-row label { flex: 0 0 4.5rem; }
-.dish-row label.grow { flex: 1 1 10rem; }
-.dish-row button { padding: 0.5rem 0.9rem; font-size: 0.85rem; }
+.entry-row.expanded .e-more { transform: rotate(180deg); }
 
-/* --- Kopfzeile mit Aktion ------------------------------------------------ */
+.entry-details {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    margin: 2px 0 6px;
+    font-size: 0.8125rem;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
 
-.panel-header {
+.entry-details div { display: flex; gap: 6px; }
+.entry-details dt { color: var(--muted); }
+.entry-details dd { margin: 0; }
+
+/* --- Verlauf ------------------------------------------------------------ */
+
+.section-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
     flex-wrap: wrap;
+    gap: 12px 16px;
+    margin-bottom: 20px;
 }
 
-.panel-header h2 { margin: 0 0 0.8rem; }
-.panel-header > button { margin-bottom: 0.8rem; }
+/* Umschalter mit einer gewaehlten Stelle - ein Zeitraum ist immer aktiv, das
+   soll man ihm ansehen, statt es aus drei gleichen Knoepfen zu erraten. */
+.segmented {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 11px;
+    background: var(--fill);
+}
+
+.segmented button {
+    height: 30px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.segmented button:hover { color: var(--text); }
+
+.segmented button.active {
+    background: var(--segment);
+    color: var(--text);
+    box-shadow: var(--segment-shadow);
+}
+
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 300px;
+}
+
+.chart-container canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.chart-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.chart-toggles label {
+    position: relative;
+    display: inline-flex;
+    /* Muss explizit sein: die globale label-Regel stellt Formularfelder auf
+       column, und eine hoehere Spezifitaet allein aendert nur den display-Wert -
+       die Richtung wuerde sonst geerbt und Kaestchen, Farbe und Text staenden
+       untereinander. */
+    flex-direction: row;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Das Kaestchen bleibt fuer Tastatur und Vorlesen im Dokument, gezeigt wird
+   der Zustand an der Pille daneben. */
+.chart-toggles input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.toggle-body {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 13px 0 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    /* Sonst bricht "Gewicht (7-Tage-Mittel)" mitten im Wort um und der
+       Umschalter steht dreizeilig neben seinem Kaestchen. */
+    white-space: nowrap;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chart-toggles label:hover .toggle-body { color: var(--text); }
+
+.chart-toggles input:checked + .toggle-body {
+    border-color: transparent;
+    background: var(--fill-strong);
+    color: var(--text);
+}
+
+.chart-toggles input:focus-visible + .toggle-body {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Die Linienprobe in der Farbe der Serie; ausgeschaltet nur als Umriss. */
+.swatch {
+    width: 14px;
+    height: 4px;
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1.5px var(--swatch);
+}
+
+.chart-toggles input:checked + .toggle-body .swatch { background: var(--swatch); }
+
+#history-msg { margin-top: 12px; }
+
+/* --- Einstellungen ------------------------------------------------------ */
+
+.settings { border-top: 1px solid var(--line); }
+.settings details { border-bottom: 1px solid var(--line); }
+
+.settings summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 56px;
+    list-style: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.settings summary::-webkit-details-marker { display: none; }
+
+.settings summary:focus-visible { outline-offset: -2px; border-radius: 8px; }
+
+.settings summary .chevron {
+    width: 20px;
+    height: 20px;
+    color: var(--muted);
+    transition: transform 0.2s ease, color 0.15s ease;
+}
+
+.settings summary:hover .chevron { color: var(--text); }
+.settings details[open] > summary .chevron { transform: rotate(180deg); }
+.settings details[open] { padding-bottom: 28px; }
+
+#targets-check { margin-top: 16px; }
+
+/* --- Gerichte-Verwaltung ------------------------------------------------ */
+
+.dish-list { display: flex; flex-direction: column; }
+
+/* Schmal: jedes Gericht ein kleiner Block - Name, darunter die vier Werte,
+   darunter die Detailwerte (Zucker unter Kohlenhydrate, die gesaettigten
+   Fettsaeuren unter Fett, wie auf der Packung), dann Portion und Knoepfe. */
+.dish-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: end;
+    gap: 10px;
+    padding: 16px 0;
+}
+
+.dish-row + .dish-row { border-top: 1px solid var(--line-soft); }
+.dish-row input[type="number"] { text-align: right; }
+.dish-row > label:first-child { grid-column: 1 / -1; }
+
+.dish-row .d-fiber  { grid-row: 3; grid-column: 1; }
+.dish-row .d-salt   { grid-row: 3; grid-column: 2; }
+.dish-row .d-sugar  { grid-row: 3; grid-column: 3; }
+.dish-row .d-satfat { grid-row: 3; grid-column: 4; }
+
+.dish-row label.detail { font-size: 0.75rem; font-weight: 400; color: var(--muted); }
+
+.dish-actions {
+    grid-column: 2 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.dish-actions .form-msg { margin-left: 8px; }
+
+/* Breit (zweispaltige Seite): eine Zeile je Gericht, die Felder als Spalten.
+   Beschriftet ist nur die erste Zeile - darunter liest sich die Liste wie eine
+   Tabelle. Die Detailwerte stehen in einer zweiten Zeile unter ihrem
+   Oberbegriff. */
+@media (min-width: 1100px) {
+    .dish-row {
+        grid-template-columns: minmax(10rem, 1fr) repeat(5, 5.25rem) auto;
+        padding: 12px 0;
+    }
+    .dish-row > label:first-child { grid-column: auto; }
+    .dish-row .d-fiber  { grid-row: 2; grid-column: 2; }
+    .dish-row .d-salt   { grid-row: 2; grid-column: 3; }
+    .dish-row .d-sugar  { grid-row: 2; grid-column: 4; }
+    .dish-row .d-satfat { grid-row: 2; grid-column: 5; }
+    .dish-actions { grid-column: auto; flex-wrap: nowrap; }
+
+    /* Unsichtbar, aber vorgelesen: ab der zweiten Zeile gilt die Kopfzeile. */
+    .dish-row + .dish-row > label:not(.detail) > .lbl {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
 
 /* --- Eingabefenster ----------------------------------------------------- */
 
 .add-dialog {
-    width: min(46rem, calc(100vw - 2rem));
-    max-height: calc(100vh - 4rem);
-    overflow-y: auto;
-    background: var(--panel);
+    width: min(40rem, calc(100vw - 32px));
+    max-width: none;
+    max-height: calc(100vh - 48px);
+    max-height: calc(100dvh - 48px);
+    padding: 0;
+    border: 0;
+    border-radius: 16px;
+    background: var(--surface);
     color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.2rem;
+    box-shadow: var(--shadow-pop);
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
-.add-dialog::backdrop { background: rgba(8, 11, 18, 0.7); }
+.add-dialog::backdrop { background: var(--backdrop); }
 
+.add-dialog[open] { animation: dialog-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.add-dialog[open]::backdrop { animation: fade-in 0.22s ease-out; }
+
+@keyframes dialog-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.985); }
+}
+
+@keyframes fade-in {
+    from { opacity: 0; }
+}
+
+/* Kopf bleibt stehen, wenn das Fenster scrollt: Titel und Schliessen sollen
+   nicht mit dem Inhalt verschwinden. */
 .dialog-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1rem;
+    gap: 12px;
+    padding: 18px 14px 14px 24px;
+    background: var(--surface);
 }
 
-.dialog-head h2 { margin: 0; font-size: 1.05rem; }
+.dialog-head h2 { font-size: 1.125rem; }
 
-.dialog-close {
-    background: none;
-    border: none;
-    color: var(--muted);
-    font-size: 1.4rem;
-    line-height: 1;
-    padding: 0 0.3rem;
+.dialog-close { margin: -4px 0; }
+
+.dialog-body { padding: 0 24px 24px; }
+
+.quick-open { width: 100%; margin-bottom: 20px; }
+
+.entry-form { display: flex; flex-direction: column; }
+
+.dish-hint {
+    margin-top: 8px;
+    font-size: 0.8125rem;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.amount-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px 12px;
+    margin-top: 16px;
+}
+
+.amount-row .amount { flex: 0 0 8.5rem; }
+
+.portion-shortcuts { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.chip {
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
     cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.dialog-close:hover { color: var(--text); filter: none; }
+.chip:hover { background: var(--fill); border-color: transparent; }
 
-.add-dialog #quick-open { margin-bottom: 1rem; }
+.new-dish {
+    min-width: 0;
+    margin: 24px 0 0;
+    padding: 18px 0 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+}
+
+.new-dish legend {
+    float: left;
+    width: 100%;
+    margin-bottom: 14px;
+    padding: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* Name breit, Portion in der Spalte, unter der auch Fett steht - so fluchten
+   die beiden Zeilen. */
+.new-dish .name-row { clear: both; }
+.new-dish .name-row .wide { grid-column: span 3; }
+
+/* Wie auf der Packung: "davon"-Werte unter ihrem Oberbegriff. */
+.new-dish .d-fiber  { grid-row: 2; grid-column: 1; }
+.new-dish .d-salt   { grid-row: 2; grid-column: 2; }
+.new-dish .d-sugar  { grid-row: 2; grid-column: 3; }
+.new-dish .d-satfat { grid-row: 2; grid-column: 4; }
+
+.entry-actions { margin-top: 24px; }
 
 /* --- Schnellerfassung --------------------------------------------------- */
 
 .quick-capture {
-    margin-bottom: 1.2rem;
-    padding: 1rem;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    margin-bottom: 24px;
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--fill);
 }
 
 .quick-capture textarea {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 6px;
-    padding: 0.5rem;
-    font: inherit;
-    font-size: 0.95rem;
+    display: block;
+    height: auto;
+    padding: 10px 12px;
     line-height: 1.45;
-    width: 100%;
     /* Waechst per JavaScript mit dem Text mit (siehe autoGrow) - ein Anfasser
        zum Ziehen wuerde beim naechsten Tastendruck ohnehin ueberschrieben. */
     resize: none;
@@ -491,26 +1158,20 @@ details[open] > summary { margin-bottom: 0.8rem; }
     overflow-y: auto;
 }
 
-.quick-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.8rem;
-    margin-top: 0.8rem;
-}
+.quick-capture .actions { margin-top: 12px; }
 
-.quick-capture button:disabled { opacity: 0.5; cursor: default; filter: none; }
+.quick-capture textarea:disabled { opacity: 0.6; }
 
 .quick-progress {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    margin-top: 0.9rem;
+    gap: 12px;
+    margin-top: 14px;
 }
 
 .progress-bar {
     flex: 1 1 8rem;
-    height: 4px;
+    height: 3px;
     border-radius: 2px;
     background: var(--track);
     overflow: hidden;
@@ -531,7 +1192,11 @@ details[open] > summary { margin-bottom: 0.8rem; }
     100% { margin-left: 100%; }
 }
 
-.progress-label { color: var(--muted); font-size: 0.85rem; }
+.progress-label {
+    font-size: 0.8125rem;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
 
 /* --- Gericht suchen ----------------------------------------------------- */
 
@@ -542,210 +1207,239 @@ details[open] > summary { margin-bottom: 0.8rem; }
        (overflow-y: auto), und eine absolut positionierte Liste wuerde an dessen
        Rand abgeschnitten. Inline schiebt sie den Rest nach unten - das Fenster
        waechst mit und kann nichts abschneiden. */
-    margin-top: 0.3rem;
+    margin-top: 6px;
     max-height: 16rem;
     overflow-y: auto;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.25rem;
+    padding: 4px;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: var(--surface);
 }
 
 .dish-option {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.1rem;
+    justify-content: center;
+    gap: 1px;
     width: 100%;
+    min-height: 44px;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 8px;
     background: none;
-    border: none;
-    border-radius: 6px;
     color: var(--text);
+    font: inherit;
+    font-size: 0.9375rem;
     text-align: left;
-    padding: 0.45rem 0.6rem;
-    font-size: 0.9rem;
     cursor: pointer;
 }
 
 .dish-option:hover,
-.dish-option.highlighted { background: #243049; filter: none; }
+.dish-option.highlighted { background: var(--fill); }
 
-.do-meta { color: var(--muted); font-size: 0.78rem; }
+.do-meta {
+    font-size: 0.8125rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
 
-.dish-option-new { color: var(--accent); }
-.dish-option-empty { margin: 0.4rem 0.6rem; }
+.dish-option-new { color: var(--accent); font-weight: 500; }
+.dish-option-empty { margin: 8px 10px; }
 
 /* --- Vorschlag der Schnellerfassung ------------------------------------- */
 
 .proposal {
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border);
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
 }
 
 .proposal-head {
     display: flex;
     align-items: center;
-    gap: 0.7rem;
     flex-wrap: wrap;
+    gap: 8px 12px;
 }
 
 /* Auch der Name ist ein Eingabefeld - sieht aber wie eine Ueberschrift aus,
    solange niemand hineinklickt. Er ist das Erste, was man korrigieren will. */
-.proposal-name {
+.proposal-head .proposal-name {
     flex: 1 1 12rem;
     width: auto;
-    font-size: 1.05rem;
+    margin-left: -9px;
+    padding: 0 8px;
+    border-color: transparent;
+    background: transparent;
+    font-size: 1.0625rem;
     font-weight: 600;
-    background: none;
-    border: 1px solid transparent;
-    padding: 0.2rem 0.4rem;
 }
 
-.proposal-name:hover { border-color: var(--border); }
-.proposal-name:focus { background: var(--bg); border-color: var(--accent); outline: none; }
+.proposal-head .proposal-name:hover { border-color: var(--line-strong); }
+.proposal-head .proposal-name:focus { border-color: var(--accent); background: var(--field); }
 
 .badge {
-    font-size: 0.72rem;
-    padding: 0.15rem 0.5rem;
+    padding: 4px 9px;
     border-radius: 999px;
-    border: 1px solid var(--border);
-    color: var(--muted);
+    background: var(--fill-strong);
+    color: var(--text-2);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 /* Ein bekanntes Gericht bringt gepflegte Werte mit, ein neues nicht - der
    Unterschied entscheidet, wie genau man hinsehen sollte. */
-.badge-known { border-color: var(--good); color: var(--good); }
-.badge-new { border-color: var(--accent); color: var(--accent); }
+.badge-known { background: var(--good-fill); color: var(--good); }
+.badge-new { background: var(--accent-fill); color: var(--accent); }
 
-.proposal-note { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.proposal-note {
+    margin-top: 6px;
+    font-size: 0.875rem;
+    color: var(--text-2);
+}
 
-.proposal-values { margin-top: 0.8rem; }
+.proposal .group-label { margin-top: 16px; margin-bottom: 4px; }
 
 .proposal-value {
     display: grid;
-    grid-template-columns: 1fr 7rem 8rem;
+    grid-template-columns: minmax(0, 1fr) 6.5rem 7.5rem;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.3rem 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
+    gap: 12px;
+    min-height: 46px;
+    border-bottom: 1px solid var(--line);
 }
 
 .proposal-value label.pv-label {
     flex-direction: row;
-    color: var(--muted);
-    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 400;
+    color: var(--text);
 }
 
+/* "davon"-Zeilen eingerueckt wie auf der Naehrwerttabelle. */
+.proposal-value.sub label.pv-label { padding-left: 14px; color: var(--text-2); }
+
 .proposal-value input {
+    height: 34px;
     text-align: right;
-    font-variant-numeric: tabular-nums;
-    padding: 0.35rem 0.5rem;
 }
 
 .proposal-amounts {
     display: flex;
     align-items: flex-end;
     flex-wrap: wrap;
-    gap: 0.6rem 1rem;
-    margin-top: 1rem;
+    gap: 10px 16px;
+    margin-top: 18px;
 }
 
-.proposal-amounts label { flex: 0 0 8rem; }
+.proposal-amounts label { flex: 0 0 9rem; }
 /* Die Herkunft der Menge steht neben ihrem Feld, auf Hoehe der Eingabezeile. */
-.proposal-amounts .pv-source { padding-bottom: 0.6rem; }
+.proposal-amounts .pv-source { padding-bottom: 12px; }
 
 .pv-source {
-    font-size: 0.75rem;
-    text-align: right;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    white-space: nowrap;
 }
+
+.pv-source::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.pv-source:empty::before { display: none; }
 
 /* Drei Herkuenfte, drei Toene: gespeichert ist belastbar, aus dem Text stand
    wirklich so da, geschaetzt ist geraten - und genau das soll auffallen. */
 .src-stored { color: var(--good); }
-.src-read { color: var(--muted); }
+.src-read { color: var(--text-2); }
 /* Nachgeschlagen ist belastbarer als geschaetzt, aber weniger als eine Zahl aus
    dem Text - eigener Ton, damit der Unterschied ueberhaupt auffaellt. */
-.src-lookedup { color: var(--measured, #4fc3f7); }
+.src-lookedup { color: var(--measured); }
 .src-estimated { color: var(--warn); }
 .src-edited { color: var(--accent); }
 
-/* --- Verlaufsgraph ------------------------------------------------------ */
+/* --- Rueckmeldung ------------------------------------------------------- */
 
-.range-select { display: flex; gap: 0.4rem; }
-.range-select button.active { border-color: var(--accent); color: var(--text); }
-
-.chart-container {
-    position: relative;
-    width: 100%;
-    height: 260px;
+.toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    z-index: 10;
+    max-width: calc(100vw - 32px);
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: var(--danger-solid);
+    color: #fff;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.35);
+    transform: translateX(-50%);
+    animation: toast-in 0.2s ease-out;
 }
 
-.chart-container canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100% !important;
-    height: 100% !important;
+.toast:empty { display: none; }
+.toast.ok { background: var(--ink); color: var(--on-ink); }
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translate(-50%, 8px); }
 }
 
-.chart-toggles {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem 1rem;
-    margin-top: 0.6rem;
-    font-size: 0.9rem;
-}
+/* --- Handy -------------------------------------------------------------- */
 
-.chart-toggles label {
-    display: inline-flex;
-    /* Muss explizit sein: die globale label-Regel stellt Formularfelder auf
-       column, und eine hoehere Spezifitaet allein aendert nur den display-Wert -
-       die Richtung wuerde sonst geerbt und Kaestchen, Farbe und Text staenden
-       untereinander. */
-    flex-direction: row;
-    align-items: center;
-    gap: 0.35rem;
-    cursor: pointer;
-    user-select: none;
-    color: var(--text);
-    /* Sonst bricht "Gewicht (7-Tage-Mittel)" mitten im Wort um und der
-       Umschalter steht dreizeilig neben seinem Kaestchen. */
-    white-space: nowrap;
-}
-
-.chart-toggles input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
-
-.chart-toggles .swatch {
-    display: inline-block;
-    width: 0.75rem;
-    height: 0.75rem;
-    border-radius: 2px;
+/* Fingerziele: mindestens 44 px, wo getippt wird. */
+@media (pointer: coarse), (max-width: 640px) {
+    .button, .chip { height: 44px; }
+    input[type="text"], input[type="number"] { height: 44px; }
+    .icon-button { width: 44px; height: 44px; }
+    .day-step input[type="date"] { height: 44px; }
+    .meal-add { width: 44px; height: 44px; margin: -6px -4px -6px 0; }
+    .row-remove { width: 44px; height: 44px; margin: -6px -7px -6px 0; }
+    .segmented { padding: 2px; }
+    .segmented button { height: 44px; padding: 0 14px; }
+    .toggle-body { height: 44px; }
+    .e-toggle { min-height: 44px; margin: -6px 0; }
 }
 
 @media (max-width: 640px) {
-    main { padding: 1rem; gap: 1rem; }
-    header { padding: 1rem; }
-    /* Im umgeschalteten Spalten-Flex zaehlt flex-basis als HOEHE - ohne das hier
-       zieht sich das Gericht-Feld auf 12rem Hoehe auseinander. */
-    form label.grow { flex: 0 0 auto; }
-    .macro .gauge { width: 100%; max-width: 130px; }
-    .kcal-gauge .gauge { width: 200px; }
-    .kcal-row { gap: 1.2rem; }
-    form { flex-direction: column; align-items: stretch; }
-    .field-row { flex-direction: column; gap: 0.6rem; }
-    .dish-row { flex-direction: row; flex-wrap: wrap; }
-    .chart-container { height: 300px; }
+    main { padding-top: 16px; gap: 40px; }
+
+    /* Titel und "Heute" in einer Zeile, darunter das Datum mit Zurueck und Vor
+       ueber die ganze Breite - dort trifft der Daumen. */
+    .topbar-inner {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas: "title today" "step step";
+        padding-top: 10px;
+        padding-bottom: 12px;
+    }
+
+    .topbar h1 { grid-area: title; }
+    .day-nav { display: contents; }
+    .day-step { grid-area: step; }
+    .day-step input[type="date"] { flex: 1 1 auto; width: auto; }
+    #day-today { grid-area: today; margin-right: -8px; }
+
+    .overview { gap: 20px; }
+    .macro .gauge { max-width: 108px; }
+    .kcal-row { gap: 18px; padding-top: 20px; }
+
+    .detail-totals { column-gap: 24px; }
 
     /* Eine Zeile, nur Name und kcal. Menge und Makros fallen weg: auf einem
        Handydisplay stehen sonst sechs Zahlen nebeneinander, durch die niemand
        im Vorbeigehen liest. Die Teilsumme je Mahlzeit steht ohnehin in der
        Abschnittszeile, die vollen Werte auf dem Desktop. */
     .entry-content {
-        grid-template-columns: 1fr auto 1.8rem;
-        column-gap: 0.6rem;
-        font-size: 0.9rem;
+        grid-template-columns: minmax(0, 1fr) auto 2.25rem;
+        column-gap: 12px;
     }
     .e-name     { grid-column: 1; }
     .e-kcal     { grid-column: 2; }
@@ -754,4 +1448,69 @@ details[open] > summary { margin-bottom: 0.8rem; }
     .e-protein,
     .e-carbs,
     .e-fat { display: none; }
+
+    .chart-container { height: 260px; }
+
+    .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .new-dish .name-row .wide { grid-column: 1 / -1; }
+    .new-dish .d-fiber,
+    .new-dish .d-salt,
+    .new-dish .d-sugar,
+    .new-dish .d-satfat { grid-row: auto; grid-column: auto; }
+
+    .amount-row .amount { flex: 1 1 100%; }
+    .portion-shortcuts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    /* Auf dem Handy als Blatt von unten: dort ist der Daumen, und das Fenster
+       bekommt die volle Breite. */
+    .add-dialog {
+        width: 100%;
+        max-height: calc(100vh - 24px);
+        max-height: calc(100dvh - 24px);
+        margin: auto 0 0;
+        border-radius: 18px 18px 0 0;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .add-dialog[open] { animation: sheet-in 0.26s cubic-bezier(0.2, 0.9, 0.3, 1); }
+
+    .dialog-head { padding: 16px 10px 12px 20px; }
+    .dialog-body { padding: 0 20px 20px; }
+
+    /* Herkunft unter die Beschriftung statt in eine dritte Spalte: sonst
+       bricht "Kohlenhydrate (g)" auf dem Handy in drei Zeilen. */
+    .proposal-value {
+        grid-template-columns: minmax(0, 1fr) 6rem;
+        grid-template-areas: "label input" "source input";
+        column-gap: 12px;
+        row-gap: 0;
+        padding: 6px 0;
+    }
+    .proposal-value label.pv-label { grid-area: label; }
+    .proposal-value input { grid-area: input; }
+    .proposal-value .pv-source { grid-area: source; font-size: 0.75rem; }
+    .proposal-value.sub .pv-source { padding-left: 14px; }
+
+    .entry-actions .button.primary { flex: 1 1 100%; }
+}
+
+@keyframes sheet-in {
+    from { transform: translateY(32px); opacity: 0.4; }
+}
+
+/* Wer weniger Bewegung eingestellt hat, bekommt keine: Fenster, Bogen und
+   Zeilen stehen sofort da. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+    ::backdrop { animation: none !important; }
+    /* Ohne Laufbalken bleibt ein ruhiger voller Balken; die Sekunden daneben
+       zeigen, dass es weitergeht. */
+    .progress-fill { width: 100%; margin-left: 0; opacity: 0.5; }
 }

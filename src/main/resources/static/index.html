@@ -2,57 +2,70 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Kalorienzähler</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <!-- Faerbt die Browserleiste auf dem Handy im Ton der Seite, statt sie
-         hell daneben stehen zu lassen. -->
-    <meta name="theme-color" content="#0f1420">
+         daneben stehen zu lassen - je Farbschema mit dem passenden Grund. -->
+    <meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#151514" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <!-- Farbverläufe der Tachos. Einmal im Dokument, von jedem Tacho per url(#…)
      referenziert - eine eigene Kopie je Tacho wäre reine Wiederholung, und die
-     IDs müssten dann auch noch eindeutig gemacht werden. -->
+     IDs müssten dann auch noch eindeutig gemacht werden. Die Farben der
+     Stopps stehen in styles.css, damit jedes Farbschema seine eigene Nuance
+     bekommt; die Bedeutung (blau, gruen, orange, rot) ist dieselbe wie in den
+     Apps. -->
 <svg class="gauge-defs" aria-hidden="true" focusable="false">
     <defs>
         <linearGradient id="gauge-neutral" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#8ba3ff"/>
-            <stop offset="100%" stop-color="#4c6ef5"/>
+            <stop offset="0%" class="stop-neutral-a"/>
+            <stop offset="100%" class="stop-neutral-b"/>
         </linearGradient>
         <linearGradient id="gauge-good" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#8ee09b"/>
-            <stop offset="100%" stop-color="#43a75a"/>
+            <stop offset="0%" class="stop-good-a"/>
+            <stop offset="100%" class="stop-good-b"/>
         </linearGradient>
         <linearGradient id="gauge-warn" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#ffd68a"/>
-            <stop offset="100%" stop-color="#f59f26"/>
+            <stop offset="0%" class="stop-warn-a"/>
+            <stop offset="100%" class="stop-warn-b"/>
         </linearGradient>
         <linearGradient id="gauge-bad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#ff938f"/>
-            <stop offset="100%" stop-color="#dc3c39"/>
+            <stop offset="0%" class="stop-bad-a"/>
+            <stop offset="100%" class="stop-bad-b"/>
         </linearGradient>
     </defs>
 </svg>
 
-<header>
-    <h1>Kalorienzähler</h1>
-    <div class="day-nav">
-        <button type="button" id="day-prev" aria-label="Tag zurück">&larr;</button>
-        <input type="date" id="day-date" aria-label="Tag">
-        <button type="button" id="day-next" aria-label="Tag vor">&rarr;</button>
-        <button type="button" id="day-today" class="ghost">Heute</button>
+<header class="topbar">
+    <div class="topbar-inner">
+        <h1>Kalorienzähler</h1>
+        <!-- Zurueck, Datum und Vor als ein zusammenhaengendes Bedienelement:
+             die drei gehoeren zusammen, "Heute" steht als Sprung daneben. -->
+        <div class="day-nav">
+            <div class="day-step">
+                <button type="button" id="day-prev" class="icon-button" aria-label="Tag zurück">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg>
+                </button>
+                <input type="date" id="day-date" aria-label="Tag">
+                <button type="button" id="day-next" class="icon-button" aria-label="Tag vor">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5 13 10l-5.5 5.5"/></svg>
+                </button>
+            </div>
+            <button type="button" id="day-today" class="button quiet">Heute</button>
+        </div>
     </div>
 </header>
 
 <main>
-    <p class="load-msg" id="load-msg"></p>
-
     <!-- Makros oben, kcal darunter: die drei kleinen Tachos zeigen das schon
          Verzehrte, der grosse darunter das, was vom Tagesziel noch uebrig ist. -->
-    <section class="panel gauges">
+    <section class="overview" aria-label="Tagesübersicht">
         <div class="macro-row" id="macro-row"></div>
         <div class="kcal-row">
             <div class="kcal-gauge" id="kcal-gauge"></div>
@@ -62,160 +75,193 @@
                 <span class="sub" id="kcal-target">–</span>
             </div>
         </div>
+        <dl class="detail-totals" id="detail-totals" hidden></dl>
     </section>
 
     <!-- Nach Mahlzeiten getrennt: eine einzige Liste wird ueber den Tag hinweg
          unuebersichtlich, und die Frage "war das Fruehstueck zu gross?" laesst
          sich an einer Gesamtsumme nicht beantworten. Jeder Abschnitt hat seinen
          eigenen "+", der das Eingabefenster schon auf diese Mahlzeit stellt. -->
-    <section class="panel">
+    <section class="day-entries" aria-labelledby="entries-heading">
         <h2 id="entries-heading">Heute gegessen</h2>
         <div id="meals"></div>
-        <p class="hint" id="swipe-hint" hidden>Nach links wischen löscht einen Eintrag.</p>
     </section>
 
-    <section class="panel">
-        <div class="panel-header">
+    <section class="history" aria-labelledby="history-heading">
+        <div class="section-head">
             <h2 id="history-heading">Verlauf</h2>
-            <div class="range-select" id="range-select"></div>
+            <div class="segmented" id="range-select" role="group" aria-label="Zeitraum"></div>
         </div>
         <div class="chart-container"><canvas id="history-chart"></canvas></div>
         <div class="chart-toggles" id="history-toggles"></div>
         <p class="hint" id="history-msg"></p>
     </section>
 
-    <section class="panel">
+    <section class="settings">
         <details id="dishes-panel">
-            <summary>Gerichte verwalten</summary>
+            <summary>
+                <span>Gerichte</span>
+                <svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8"/></svg>
+            </summary>
             <div id="dish-list" class="dish-list"></div>
-            <p class="hint">Änderungen gelten für neue Einträge. Bereits eingetragene
-                Portionen behalten die Werte, mit denen sie erfasst wurden.</p>
         </details>
-    </section>
 
-    <section class="panel">
         <details>
-            <summary>Tagesziele anpassen</summary>
-            <form id="targets-form">
+            <summary>
+                <span>Tagesziele</span>
+                <svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8"/></svg>
+            </summary>
+            <form id="targets-form" class="field-grid">
                 <label>kcal <input type="number" id="tg-kcal" step="1" min="1" max="20000" required></label>
                 <label>Eiweiß (g) <input type="number" id="tg-protein" step="0.1" min="0" max="2000" required></label>
                 <label>Kohlenhydrate (g) <input type="number" id="tg-carbs" step="0.1" min="0" max="2000" required></label>
                 <label>Fett (g) <input type="number" id="tg-fat" step="0.1" min="0" max="2000" required></label>
-                <button type="submit">Ziele speichern</button>
-                <span id="targets-msg" class="form-msg"></span>
             </form>
 
             <!-- Aufteilung des kcal-Ziels auf die Mahlzeiten. Als Anteile, damit
                  die Mahlzeitenziele automatisch mitwandern, wenn sich das
-                 Tagesziel ändert. -->
-            <p class="hint targets-split-hint">Aufteilung des kcal-Ziels auf die Mahlzeiten:</p>
-            <form id="split-form">
+                 Tagesziel ändert. Gespeichert wird sie zusammen mit den Zielen,
+                 deshalb steht der eine Knopf erst unter beiden Gruppen. -->
+            <p class="group-label">Aufteilung</p>
+            <form id="split-form" class="field-grid">
                 <label>Frühstück (%) <input type="number" id="sh-breakfast" step="1" min="0" max="100"></label>
                 <label>Mittagessen (%) <input type="number" id="sh-lunch" step="1" min="0" max="100"></label>
                 <label>Abendessen (%) <input type="number" id="sh-dinner" step="1" min="0" max="100"></label>
                 <label>Snacks (%) <input type="number" id="sh-snack" step="1" min="0" max="100"></label>
             </form>
             <p class="hint" id="targets-check"></p>
+            <div class="actions">
+                <button type="submit" form="targets-form" class="button primary">Speichern</button>
+                <span id="targets-msg" class="form-msg"></span>
+            </div>
         </details>
     </section>
 </main>
 
+<!-- Rueckmeldung nach dem Eintragen und Ladefehler. Schwebt unten, weil das
+     Eingabefenster dann schon zu ist und man meist weiter unten auf der Seite
+     steht - eine Zeile ganz oben saehe dort niemand. -->
+<p class="toast" id="load-msg" role="status" aria-live="polite"></p>
+
 <!-- Eingabefenster. Oeffnet sich ueber den "+" eines Abschnitts und weiss dann
      schon, zu welcher Mahlzeit der Eintrag gehoert. -->
-<dialog id="add-dialog" class="add-dialog">
+<dialog id="add-dialog" class="add-dialog" aria-labelledby="add-title">
     <div class="dialog-head">
         <h2 id="add-title">Hinzufügen</h2>
-        <button type="button" id="add-close" class="dialog-close" aria-label="Schließen">×</button>
+        <button type="button" id="add-close" class="icon-button dialog-close" aria-label="Schließen">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg>
+        </button>
     </div>
 
-    <button type="button" id="quick-open" class="ghost" hidden>Schnellerfassung</button>
+    <div class="dialog-body">
+        <button type="button" id="quick-open" class="button secondary quick-open" hidden>Schnellerfassung</button>
 
-    <div class="quick-capture" id="quick-capture" hidden>
-        <label class="grow">Was hast du gegessen?
-            <textarea id="quick-text" rows="3" maxlength="1000"
-                      placeholder="z. B. einen großen Teller Spaghetti Bolognese und einen Becher Skyr"></textarea>
-        </label>
-        <div class="quick-actions">
-            <button type="button" id="quick-submit">Auswerten</button>
-            <button type="button" id="quick-cancel" class="ghost">Zurück</button>
-            <span id="quick-msg" class="form-msg"></span>
+        <div class="quick-capture" id="quick-capture" hidden>
+            <label>Was hast du gegessen?
+                <textarea id="quick-text" rows="3" maxlength="1000"
+                          placeholder="z. B. einen großen Teller Spaghetti Bolognese und einen Becher Skyr"></textarea>
+            </label>
+            <div class="actions">
+                <button type="button" id="quick-submit" class="button primary">Auswerten</button>
+                <button type="button" id="quick-cancel" class="button quiet">Zurück</button>
+                <span id="quick-msg" class="form-msg"></span>
+            </div>
+            <div class="quick-progress" id="quick-progress" hidden>
+                <div class="progress-bar"><div class="progress-fill"></div></div>
+                <span class="progress-label">Gericht wird verarbeitet …</span>
+            </div>
+
+            <!-- Der Vorschlag. Eingetragen wird erst nach dem Bestaetigen: eine
+                 geschaetzte Zahl, die ungefragt im Tagebuch landet, sieht dort
+                 hinterher genauso aus wie eine abgelesene. -->
+            <div class="proposal" id="proposal" hidden>
+                <div class="proposal-head">
+                    <input type="text" id="proposal-name" class="proposal-name"
+                           maxlength="80" aria-label="Name des Gerichts">
+                    <span class="badge" id="proposal-badge"></span>
+                </div>
+                <p class="proposal-note" id="proposal-note"></p>
+
+                <!-- Alles editierbar. Der Vorschlag ist ein Vorschlag: was der Agent
+                     geraten hat, korrigiert man hier, nicht hinterher an zwei
+                     Stellen. Rechts steht je Wert, woher er stammt. -->
+                <p class="group-label" id="proposal-unit"></p>
+                <div class="proposal-values" id="proposal-values"></div>
+
+                <div class="proposal-amounts">
+                    <label>Menge (g)
+                        <input type="number" id="proposal-grams" step="1" min="1" max="20000">
+                    </label>
+                    <span class="pv-source" id="proposal-grams-source"></span>
+                    <label>Portion (g, optional)
+                        <input type="number" id="proposal-portion" step="1" min="1" max="20000">
+                    </label>
+                </div>
+
+                <div class="actions">
+                    <button type="button" id="proposal-confirm" class="button primary">Übernehmen</button>
+                    <button type="button" id="proposal-discard" class="button quiet">Verwerfen</button>
+                    <span id="proposal-msg" class="form-msg"></span>
+                </div>
+            </div>
         </div>
-        <div class="quick-progress" id="quick-progress" hidden>
-            <div class="progress-bar"><div class="progress-fill"></div></div>
-            <span class="progress-label">Gericht wird verarbeitet …</span>
-        </div>
 
-        <!-- Der Vorschlag. Eingetragen wird erst nach dem Bestaetigen: eine
-             geschaetzte Zahl, die ungefragt im Tagebuch landet, sieht dort
-             hinterher genauso aus wie eine abgelesene. -->
-        <div class="proposal" id="proposal" hidden>
-            <div class="proposal-head">
-                <input type="text" id="proposal-name" class="proposal-name"
-                       maxlength="80" aria-label="Name des Gerichts">
-                <span class="badge" id="proposal-badge"></span>
-            </div>
-            <p class="proposal-note" id="proposal-note"></p>
+        <form id="entry-form" class="entry-form">
+            <!-- Suchfeld statt Auswahlliste: mit ein paar Dutzend Gerichten wird
+                 ein <select> zum Scrollmarathon. Das sichtbare Feld traegt den
+                 Suchtext, die eigentliche Auswahl steht im versteckten Feld. -->
+            <label>Gericht
+                <div class="combo">
+                    <input type="text" id="dish-search" autocomplete="off" role="combobox"
+                           aria-expanded="false" aria-controls="dish-options" aria-autocomplete="list"
+                           placeholder="Suchen …">
+                    <input type="hidden" id="in-dish">
+                    <div class="dish-options" id="dish-options" role="listbox" hidden></div>
+                </div>
+            </label>
+            <p class="dish-hint" id="dish-hint" hidden></p>
 
-            <!-- Alles editierbar. Der Vorschlag ist ein Vorschlag: was der Agent
-                 geraten hat, korrigiert man hier, nicht hinterher an zwei
-                 Stellen. Rechts steht je Wert, woher er stammt. -->
-            <div class="proposal-values" id="proposal-values"></div>
-            <p class="hint" id="proposal-unit"></p>
-
-            <div class="proposal-amounts">
-                <label>Menge (g)
-                    <input type="number" id="proposal-grams" step="1" min="1" max="20000">
+            <div class="amount-row">
+                <label class="amount">Menge (g)
+                    <input type="number" id="in-grams" step="1" min="1" max="20000" required>
                 </label>
-                <span class="pv-source" id="proposal-grams-source"></span>
-                <label>Portion (g, optional)
-                    <input type="number" id="proposal-portion" step="1" min="1" max="20000">
-                </label>
+                <div class="portion-shortcuts" id="portion-shortcuts" hidden></div>
             </div>
+        </form>
 
-            <div class="quick-actions">
-                <button type="button" id="proposal-confirm">Übernehmen</button>
-                <button type="button" id="proposal-discard" class="ghost">Verwerfen</button>
-                <span id="proposal-msg" class="form-msg"></span>
+        <!-- Bewusst ausserhalb des Formulars: die Felder werden beim Absenden
+             per ID gelesen, und die Pruefung ihrer Pflichtangaben macht der
+             Server - wie bisher. -->
+        <fieldset class="new-dish" id="new-dish" hidden>
+            <legend>Neues Gericht</legend>
+            <div class="field-grid name-row">
+                <label class="wide">Name <input type="text" id="nd-name" maxlength="80"></label>
+                <label>Portion (g, optional) <input type="number" id="nd-portion" step="1" min="1" max="20000"></label>
             </div>
+            <p class="group-label">je 100 g</p>
+            <div class="field-grid">
+                <label>kcal <input type="number" id="nd-kcal" step="0.1" min="0" max="1000"></label>
+                <label>Eiweiß (g) <input type="number" id="nd-protein" step="0.1" min="0" max="100"></label>
+                <label>Kohlenhydrate (g) <input type="number" id="nd-carbs" step="0.1" min="0" max="100"></label>
+                <label>Fett (g) <input type="number" id="nd-fat" step="0.1" min="0" max="100"></label>
+                <!-- Detailwerte, nur fuer Personen, die sie erfassen (siehe
+                     loadFeatures). Freiwillig: ein leeres Feld wird nicht
+                     gesendet, auch nicht als 0. -->
+                <label class="d-sugar" data-detail hidden>davon Zucker (g) <input type="number" id="nd-sugar" step="0.01" min="0" max="100"></label>
+                <label class="d-satfat" data-detail hidden>davon ges. Fettsäuren (g) <input type="number" id="nd-satfat" step="0.01" min="0" max="100"></label>
+                <label class="d-fiber" data-detail hidden>Ballaststoffe (g) <input type="number" id="nd-fiber" step="0.01" min="0" max="100"></label>
+                <label class="d-salt" data-detail hidden>Salz (g) <input type="number" id="nd-salt" step="0.01" min="0" max="100"></label>
+            </div>
+        </fieldset>
+
+        <!-- Der Knopf gehoert per form-Attribut zum Formular oben und steht
+             trotzdem am Ende - nach dem Block fuer ein neues Gericht, dessen
+             Felder man vor dem Eintragen ausfuellt. -->
+        <div class="actions entry-actions">
+            <button type="submit" form="entry-form" class="button primary">Eintragen</button>
+            <span id="entry-msg" class="form-msg"></span>
         </div>
     </div>
-
-    <form id="entry-form">
-        <!-- Suchfeld statt Auswahlliste: mit ein paar Dutzend Gerichten wird
-             ein <select> zum Scrollmarathon. Das sichtbare Feld traegt den
-             Suchtext, die eigentliche Auswahl steht im versteckten Feld. -->
-        <label class="grow">Gericht
-            <div class="combo">
-                <input type="text" id="dish-search" autocomplete="off" role="combobox"
-                       aria-expanded="false" aria-controls="dish-options" aria-autocomplete="list"
-                       placeholder="tippen zum Suchen …">
-                <input type="hidden" id="in-dish">
-                <div class="dish-options" id="dish-options" role="listbox" hidden></div>
-            </div>
-        </label>
-        <label>Menge (g)
-            <input type="number" id="in-grams" step="1" min="1" max="20000" required>
-        </label>
-        <button type="submit">Eintragen</button>
-        <span id="entry-msg" class="form-msg"></span>
-    </form>
-
-    <div class="portion-shortcuts" id="portion-shortcuts" hidden></div>
-    <p class="dish-hint" id="dish-hint" hidden></p>
-
-    <fieldset class="new-dish" id="new-dish" hidden>
-        <legend>Neues Gericht</legend>
-        <div class="field-row">
-            <label class="grow">Name <input type="text" id="nd-name" maxlength="80"></label>
-            <label>Portion (g, optional) <input type="number" id="nd-portion" step="1" min="1" max="20000"></label>
-        </div>
-        <div class="field-row">
-            <label>kcal / 100 g <input type="number" id="nd-kcal" step="0.1" min="0" max="1000"></label>
-            <label>Eiweiß / 100 g <input type="number" id="nd-protein" step="0.1" min="0" max="100"></label>
-            <label>Kohlenhydrate / 100 g <input type="number" id="nd-carbs" step="0.1" min="0" max="100"></label>
-            <label>Fett / 100 g <input type="number" id="nd-fat" step="0.1" min="0" max="100"></label>
-        </div>
-    </fieldset>
 </dialog>
 
 <script src="app.js"></script>
