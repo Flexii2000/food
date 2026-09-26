@@ -4,13 +4,16 @@ import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Nutrients;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Gegen ein Skript, das statt der Claude-Session antwortet: geprueft wird, was in den
@@ -78,5 +81,21 @@ class ClaudeSessionNutritionExtractorTest {
                 .extract("Pasta", null, new Nutrients(2800, 180, 300, 90), KNOWN, true);
 
         assertThat(dish.estimatedFields()).contains("kcalPer100g", "sugarPer100g", "saltPer100g");
+    }
+
+    /** Eine Session, die nicht endet, darf den Auftrag nicht festhalten - das Zeitlimit muss greifen. */
+    @Test
+    void aHangingSessionRunsIntoTheTimeout() throws Exception {
+        Path script = tempDir.resolve("hanging.sh");
+        Files.writeString(script, "#!/bin/sh\ncat > /dev/null\nexec sleep 30\n");
+        script.toFile().setExecutable(true);
+        ClaudeSessionNutritionExtractor hanging =
+                new ClaudeSessionNutritionExtractor(script.toString(), 1, new ObjectMapper());
+
+        long start = System.nanoTime();
+        assertThatThrownBy(() -> hanging.extract("Pasta", null, new Nutrients(2300, 200, 235.5, 62), KNOWN, false))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode().value()).isEqualTo(504));
+        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(10));
     }
 }

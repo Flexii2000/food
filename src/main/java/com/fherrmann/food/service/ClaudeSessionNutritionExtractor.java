@@ -18,7 +18,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Wertet die Freitext-Schnellerfassung durch eine <b>Claude-Code-Session auf dem
@@ -107,33 +110,56 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                     HttpStatus.SERVICE_UNAVAILABLE, "Agent-Skript nicht startbar.", e);
         }
 
+        // Die Ausgabe nebenher lesen, nicht vor dem Warten: readAllBytes kehrt erst
+        // zurueck, wenn die Session endet - eine haengende Session hielte sonst den
+        // Auftrag fest, und das Zeitlimit griffe nie.
+        FutureTask<String> output = new FutureTask<>(
+                () -> new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
+        Thread.ofVirtual().name("food-agent-output").start(output);
+
         try {
             try (OutputStream stdin = process.getOutputStream()) {
                 stdin.write(prompt.getBytes(StandardCharsets.UTF_8));
             }
-            String output = new String(
-                    process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
+                stop(process);
                 throw new ResponseStatusException(
                         HttpStatus.GATEWAY_TIMEOUT,
                         "Die Auswertung hat länger als " + timeoutSeconds + " Sekunden gebraucht.");
             }
+            String text = output.get(10, TimeUnit.SECONDS);
             if (process.exitValue() != 0) {
-                log.warn("Agent beendet mit {}: {}", process.exitValue(), tail(output));
+                log.warn("Agent beendet mit {}: {}", process.exitValue(), tail(text));
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY, "Die Auswertung ist fehlgeschlagen.");
             }
-            return output;
-        } catch (IOException e) {
-            process.destroyForcibly();
+            return text;
+        } catch (IOException | ExecutionException | TimeoutException e) {
+            stop(process);
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY, "Der Agent hat nicht geantwortet.", e);
         } catch (InterruptedException e) {
-            process.destroyForcibly();
+            stop(process);
             Thread.currentThread().interrupt();
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE, "Auswertung abgebrochen.", e);
+        }
+    }
+
+    /**
+     * Erst SIGTERM, dann SIGKILL. Der Prozess ist {@code sudo}, und sudo reicht
+     * SIGTERM an die Session weiter - ein SIGKILL traefe nur sudo, die Session
+     * liefe als Waise weiter und zaehlte auf Felix' Kontingent.
+     */
+    private static void stop(Process process) {
+        process.destroy();
+        try {
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+            }
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
         }
     }
 
