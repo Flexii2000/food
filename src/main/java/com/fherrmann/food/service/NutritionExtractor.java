@@ -27,6 +27,8 @@ public interface NutritionExtractor {
      *                bei diesem Nutzer plausibel ist
      * @param known   die bereits gespeicherten Gerichte, damit Bekanntes
      *                wiedererkannt statt als Beinahe-Dublette neu angelegt wird
+     * @param detailed ob diese Person auch die Detailwerte erfasst (gesaettigte
+     *                Fettsaeuren, Zucker, Ballaststoffe, Salz) - nur dann danach fragen
      */
-    ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known);
+    ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed);
 }

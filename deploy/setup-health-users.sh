@@ -9,7 +9,7 @@ set -euo pipefail
 # Aufruf VOM LAPTOP aus - das -t ist noetig, sonst kann sudo nicht nach dem
 # Passwort fragen:
 #
-#     ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh torben'
+#     ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --detailed torben'
 #
 # Mit Push an Android (Firebase-Dienstkonto vorher per scp nach ~ kopiert):
 #
@@ -19,6 +19,9 @@ set -euo pipefail
 #     --fcm-key <datei>      Firebase-Dienstkonto nach /etc/fcm-healthy.json legen
 #     --no-quick-capture     die genannten Personen bekommen KEINE Schnellerfassung
 #                            (sie laeuft auf Felix' Claude-Login)
+#     --detailed             die genannten Personen erfassen die ganze
+#                            Naehrwerttabelle (ges. Fettsaeuren, Zucker,
+#                            Ballaststoffe, Salz) statt nur kcal und Makros
 #
 # Idempotent: vorhandene Token bleiben, wie sie sind; nur wer noch keinen hat,
 # bekommt einen. Ohne Namen richtet es nur Verzeichnis, nginx und ggf. Firebase
@@ -45,11 +48,13 @@ fail() { echo "FEHLER: $*" >&2; exit 1; }
 
 FCM_KEY=""
 QUICK_CAPTURE=1
+DETAILED=0
 PEOPLE=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --fcm-key) FCM_KEY="${2:-}"; [[ -n "$FCM_KEY" ]] || fail "--fcm-key braucht eine Datei"; shift 2 ;;
         --no-quick-capture) QUICK_CAPTURE=0; shift ;;
+        --detailed) DETAILED=1; shift ;;
         -*) fail "Unbekannte Option $1" ;;
         *) PEOPLE+=("$1"); shift ;;
     esac
@@ -125,7 +130,7 @@ set_env "$FOOD_ENV" HEALTH_TOKENS "$JOINED"
 set_env "$WEIGHT_ENV" HEALTH_TOKENS "$JOINED"
 echo "    HEALTH_TOKENS in $FOOD_ENV und $WEIGHT_ENV: ${#TOKENS[@]} Person(en)."
 
-step "2/6 Schnellerfassung"
+step "2/6 Schnellerfassung und Detailwerte"
 ALLOWED="$(get_env "$FOOD_ENV" FOOD_QUICK_CAPTURE)"
 ALLOWED="${ALLOWED:-$OWNER}"
 if [[ "$ALLOWED" != "*" && $QUICK_CAPTURE -eq 1 ]]; then
@@ -135,6 +140,19 @@ if [[ "$ALLOWED" != "*" && $QUICK_CAPTURE -eq 1 ]]; then
 fi
 set_env "$FOOD_ENV" FOOD_QUICK_CAPTURE "$ALLOWED"
 echo "    freigeschaltet: $ALLOWED"
+
+# Detailwerte: nur hinzufuegen, nie wegnehmen - wer schon detailliert erfasst,
+# bleibt dabei, auch wenn das Skript spaeter fuer jemand anderen laeuft.
+DETAILED_PEOPLE="$(get_env "$FOOD_ENV" FOOD_DETAILED_NUTRIENTS)"
+if [[ "$DETAILED_PEOPLE" != "*" && $DETAILED -eq 1 ]]; then
+    for person in "${PEOPLE[@]}"; do
+        [[ ",$DETAILED_PEOPLE," == *",$person,"* ]] || DETAILED_PEOPLE+="${DETAILED_PEOPLE:+,}$person"
+    done
+fi
+if [[ -n "$DETAILED_PEOPLE" ]]; then
+    set_env "$FOOD_ENV" FOOD_DETAILED_NUTRIENTS "$DETAILED_PEOPLE"
+    echo "    ganze Naehrwerttabelle: $DETAILED_PEOPLE"
+fi
 
 step "3/6 Verzeichnis fuer die Android-App"
 # Gehoert flexii, damit das Veroeffentlichen ohne sudo geht (scp); der Dienst

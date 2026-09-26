@@ -81,15 +81,15 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
     }
 
     @Override
-    public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known) {
+    public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed) {
         if (!isAvailable()) {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "Schnellerfassung ist auf diesem Server nicht eingerichtet.");
         }
 
-        String output = run(prompt(text, photo, targets, known));
-        return parse(output);
+        String output = run(prompt(text, photo, targets, known, detailed));
+        return parse(output, detailed);
     }
 
     /** Startet die Session, schiebt den Prompt hinein und gibt aus, was zurueckkam. */
@@ -142,7 +142,7 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      * steckt die Antwort in {@code result}) oder die blanke Antwort. Beides wird
      * akzeptiert, damit ein Wechsel des Ausgabeformats im Wrapper nichts bricht.
      */
-    private ExtractedDish parse(String output) {
+    private ExtractedDish parse(String output, boolean detailed) {
         String payload = output;
         JsonNode envelope = tryReadJson(output);
         if (envelope != null && envelope.has("result")) {
@@ -173,7 +173,18 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                 readFieldList(node.path("lookedUp")),
                 readEstimatedFields(node.path("estimated")),
                 node.path("note").asString("").trim(),
-                readMeal(node.path("meal").asString("")));
+                readMeal(node.path("meal").asString("")),
+                // Nur wer detailliert erfasst, bekommt Detailwerte - auch wenn der
+                // Agent sie ungefragt liefert, gehoeren sie nicht in Felix' Tagebuch.
+                detailed ? optionalValue(node.path("saturatedFatPer100g")) : null,
+                detailed ? optionalValue(node.path("sugarPer100g")) : null,
+                detailed ? optionalValue(node.path("fiberPer100g")) : null,
+                detailed ? optionalValue(node.path("saltPer100g")) : null);
+    }
+
+    /** Eine Zahl, oder null, wenn sie fehlt oder keine ist - fehlend ist keine 0. */
+    private static Double optionalValue(JsonNode node) {
+        return node.isNumber() && node.asDouble() >= 0 ? node.asDouble() : null;
     }
 
     /**
@@ -245,7 +256,7 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      * Aufruf zu Aufruf aendert - der Text, die Tagesziele und die schon
      * gespeicherten Gerichte.
      */
-    private String prompt(String text, Path photo, Nutrients targets, List<Dish> known) {
+    private String prompt(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed) {
         StringBuilder sb = new StringBuilder();
         sb.append("Tagesziele: ")
                 .append(fmt(targets.kcal())).append(" kcal, ")
@@ -264,9 +275,20 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                     .append(fmt(d.per100g().proteinG())).append(" g E, ")
                     .append(fmt(d.per100g().carbsG())).append(" g KH, ")
                     .append(fmt(d.per100g().fatG())).append(" g F")
+                    .append(detailed ? details(d.per100g()) : "")
                     .append(d.portionG() == null ? "" : ", Portion " + fmt(d.portionG()) + " g")
                     .append("\n"));
             sb.append("\n");
+        }
+
+        // Nur fuer Personen, die die ganze Naehrwerttabelle erfassen. Bei allen
+        // anderen fragt der Auftrag gar nicht erst danach - sonst kostete jede
+        // Auswertung Aufwand fuer Zahlen, die niemand sehen will.
+        if (detailed) {
+            sb.append("Diese Person erfasst die ganze Naehrwerttabelle. Gib zusaetzlich ")
+                    .append("saturatedFatPer100g, sugarPer100g, fiberPer100g und saltPer100g an ")
+                    .append("(je 100 g, wie auf einer Packung in der EU) und fuehre sie in lookedUp ")
+                    .append("bzw. estimated wie die uebrigen Werte.\n\n");
         }
 
         // Das Foto liegt als Datei im Postfach, das der Agent lesen darf -
@@ -285,6 +307,23 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                 .append(text == null ? "" : text)
                 .append("\n</beschreibung>\n");
         return sb.toString();
+    }
+
+    /** Die Detailwerte eines gespeicherten Gerichts fuer die Liste im Auftrag. */
+    private static String details(Nutrients n) {
+        StringBuilder sb = new StringBuilder();
+        if (n.saturatedFatG() != null) sb.append(", davon ges. ").append(fmt2(n.saturatedFatG())).append(" g");
+        if (n.sugarG() != null) sb.append(", Zucker ").append(fmt2(n.sugarG())).append(" g");
+        if (n.fiberG() != null) sb.append(", Ballaststoffe ").append(fmt2(n.fiberG())).append(" g");
+        if (n.saltG() != null) sb.append(", Salz ").append(fmt2(n.saltG())).append(" g");
+        return sb.toString();
+    }
+
+    /** Zwei Stellen: Salz steht als "0,13 g" auf der Packung, eine Stelle machte daraus 0,1. */
+    private static String fmt2(double value) {
+        return value == Math.rint(value)
+                ? String.valueOf((long) value)
+                : String.valueOf(Math.round(value * 100) / 100.0);
     }
 
     private static String fmt(double value) {

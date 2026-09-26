@@ -21,6 +21,10 @@ import java.util.List;
  *                  beiden Listen steht, stand als Zahl im Text
  * @param note      ein Satz zur Herleitung, auf Deutsch
  * @param meal      die aus dem Text erschlossene Mahlzeit, oder {@code null}
+ * @param saturatedFatG gesaettigte Fettsaeuren je 100 g, nur bei detaillierter Erfassung
+ * @param sugarG    Zucker je 100 g, dito
+ * @param fiberG    Ballaststoffe je 100 g, dito
+ * @param saltG     Salz je 100 g, dito
  */
 public record ExtractedDish(
         String name,
@@ -33,10 +37,22 @@ public record ExtractedDish(
         List<String> lookedUpFields,
         List<String> estimatedFields,
         String note,
-        Meal meal) {
+        Meal meal,
+        Double saturatedFatG,
+        Double sugarG,
+        Double fiberG,
+        Double saltG) {
 
     public ExtractedDish {
         lookedUpFields = lookedUpFields == null ? List.of() : List.copyOf(lookedUpFields);
         estimatedFields = estimatedFields == null ? List.of() : List.copyOf(estimatedFields);
+    }
+
+    /** Ohne Detailwerte - so antwortet der Agent, wenn niemand danach fragt. */
+    public ExtractedDish(String name, double kcal, double proteinG, double carbsG, double fatG, double grams,
+                         Double portionG, List<String> lookedUpFields, List<String> estimatedFields,
+                         String note, Meal meal) {
+        this(name, kcal, proteinG, carbsG, fatG, grams, portionG, lookedUpFields, estimatedFields, note, meal,
+                null, null, null, null);
     }
 }

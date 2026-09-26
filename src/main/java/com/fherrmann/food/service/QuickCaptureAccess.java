@@ -4,7 +4,6 @@ import com.fherrmann.food.security.HealthUsers;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
@@ -19,29 +18,13 @@ import java.util.Set;
 @Component
 public class QuickCaptureAccess {
 
-    private final boolean everyone;
-    private final Set<String> people = new LinkedHashSet<>();
+    private final PeopleSelection people;
 
     public QuickCaptureAccess(HealthUsers users, @Value("${food.agent.people:}") String configured) {
-        String value = configured == null ? "" : configured.trim();
-        this.everyone = value.equals("*");
-        if (value.isEmpty()) {
-            people.add(users.owner());
-        } else if (!everyone) {
-            for (String part : value.split(",")) {
-                String name = part.trim();
-                if (name.isEmpty()) {
-                    continue;
-                }
-                if (!HealthUsers.isValidName(name)) {
-                    throw new IllegalStateException("food.agent.people: ungueltiger Name '" + name + "'");
-                }
-                people.add(name);
-            }
-        }
+        this.people = PeopleSelection.parse(configured, Set.of(users.owner()), "food.agent.people");
     }
 
     public boolean allows(String user) {
-        return everyone || people.contains(user);
+        return people.contains(user);
     }
 }

@@ -46,7 +46,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * der echte Filter, kein {@code @WithMockUser}.
  */
 @WebMvcTest({FoodController.class, SetupController.class})
-@Import({SecurityConfig.class, HealthUsers.class, QuickCaptureAccess.class})
+@Import({SecurityConfig.class, HealthUsers.class, QuickCaptureAccess.class,
+        com.fherrmann.food.service.DetailedNutrition.class})
 @TestPropertySource(properties = {
         "food.security.token=private-token",
         "food.cors.allowed-origins=https://weight.fherrmann.com",
@@ -54,6 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "health.tokens=torben:" + FoodAccessTest.TORBEN,
         "health.cookie-domain=fherrmann.com",
         "food.agent.people=felix",
+        "food.detailed-people=torben",
 })
 class FoodAccessTest {
 
@@ -137,11 +139,13 @@ class FoodAccessTest {
         mockMvc.perform(get("/api/food/features").header("Authorization", "Bearer " + TORBEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.me").value("torben"))
-                .andExpect(jsonPath("$.quickCapture").value(false));
+                .andExpect(jsonPath("$.quickCapture").value(false))
+                .andExpect(jsonPath("$.detailedNutrients").value(true));
         mockMvc.perform(get("/api/food/features").cookie(new Cookie("fh_private", "private-token")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.me").value("felix"))
-                .andExpect(jsonPath("$.quickCapture").value(true));
+                .andExpect(jsonPath("$.quickCapture").value(true))
+                .andExpect(jsonPath("$.detailedNutrients").value(false));
     }
 
     @Test

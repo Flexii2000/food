@@ -44,6 +44,34 @@ willkürlich.
 Unterhalb des Ziels passiert bewusst **nichts**: ein Tacho, der schon bei 85 %
 warnt, warnt an jedem normalen Tag und wird dadurch bedeutungslos.
 
+## Detailwerte je Person
+
+Für alle gibt es kcal und die drei Makros. Wer mehr will, bekommt die ganze
+**Nährwerttabelle der EU** dazu: davon gesättigte Fettsäuren, davon Zucker,
+Ballaststoffe, Salz — eingestellt je Person (`FOOD_DETAILED_NUTRIENTS=torben`,
+`setup-health-users.sh --detailed`). `/api/food/features` sagt den Oberflächen
+mit `detailedNutrients`, ob sie die Felder anbieten.
+
+Im Datenmodell sind das vier **optionale** Felder an `Nutrients`. Sie hängen am
+Gericht (je 100 g) und wandern wie die übrigen Werte in die Kopie am Eintrag;
+fehlen sie, stehen sie auch im JSON nicht. Felix' Tagebuch hat sie nie — seine
+Antworten, seine iPhone-App und alles, was mitliest (Weight Tracker, Habits,
+Statusboard), sehen dieselben vier Zahlen wie vorher.
+
+- **Kein Ziel, kein Rest:** Detailwerte werden summiert, aber nicht gegen ein
+  Tagesziel gerechnet — danach hat niemand gefragt.
+- **Lücken werden gesagt:** hat ein Eintrag des Tages keine Angabe, steht der
+  Feldname in `DaySummary.detailGaps`, und die Summe ist dort eine Untergrenze.
+  Ein einziger Apfel ohne Angabe soll nicht den ganzen Tag Zucker wegwerfen,
+  aber auch nicht als vollständig durchgehen.
+- **Freiwillig, aber geprüft:** jeder Wert 0–100 g je 100 g; leer bleibt leer
+  statt 0.
+- **Schnellerfassung:** für diese Personen fragt der Auftrag die vier Werte mit
+  ab (siehe `deploy/agent/CLAUDE.md`), mit derselben Herkunftsangabe je Wert.
+  Bei allen anderen fragt er nicht und liest auch nichts, was ungefragt kommt.
+- **Rundung:** Detailwerte auf zwei Stellen — Salz steht als „0,03 g" auf der
+  Packung.
+
 ## Gramm-basiert, mit optionaler Portion
 
 Ein Gericht speichert seine Nährwerte **je 100 g** — so stehen sie auf der
@@ -467,7 +495,7 @@ vier Zahlen noch zusammenpassen.
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne — liest die Weight-App        |
 | GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
-| GET     | `/api/food/features`      | `{quickCapture, me}` — was dieser Person angeboten wird, und wer sie ist |
+| GET     | `/api/food/features`      | `{quickCapture, me, detailedNutrients}` — was dieser Person angeboten wird, und wer sie ist |
 | POST    | `/api/food/quick-capture` | Freitext und/oder Foto → **Vorschlag** (schreibt nichts); 403, wenn für diese Person nicht freigeschaltet |
 | GET     | `/api/food/quick-capture/{id}` | Stand eines Auftrags; der einer anderen Person ist 404 |
 | POST    | `/api/food/devices`       | Push-Kennung anmelden, `{token, platform?}`             |
@@ -637,6 +665,7 @@ In `src/main/resources/application.properties`:
 | `health.tokens`             | leer (env: `HEALTH_TOKENS`)                         | Weitere Personen, `name:token,…`    |
 | `health.cookie-domain`      | `fherrmann.com` (env: `HEALTH_COOKIE_DOMAIN`)       | Domain des `health_token`-Cookies   |
 | `food.agent.people`         | leer = Eigentümerin (env: `FOOD_QUICK_CAPTURE`)     | Wer die Schnellerfassung benutzen darf |
+| `food.detailed-people`      | leer = niemand (env: `FOOD_DETAILED_NUTRIENTS`)     | Wer die ganze Nährwerttabelle erfasst |
 | `food.fcm.service-account-file` | leer (env: `FCM_SERVICE_ACCOUNT_FILE`)          | Firebase-Dienstkonto für Push an Android |
 | `food.android.dir`          | leer (env: `FOOD_ANDROID_DIR`)                      | Verzeichnis mit `healthy.apk` + `latest.json` |
 

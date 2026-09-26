@@ -1,5 +1,6 @@
 package com.fherrmann.food.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fherrmann.food.model.FoodEntry;
 import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
@@ -21,6 +22,11 @@ import java.util.Map;
  * @param mealTargets kcal-Ziel je Mahlzeit, aus dem Tagesziel und der
  *                    hinterlegten Aufteilung gerechnet. Summiert sich damit
  *                    immer auf {@code targets.kcal()}
+ * @param detailGaps  die Detailwerte (Feldnamen aus {@link Nutrients#DETAIL_FIELDS}),
+ *                    bei denen mindestens ein Eintrag des Tages keine Angabe hat - dort
+ *                    ist die Summe in {@code consumed} eine Untergrenze. Leer, und dann
+ *                    gar nicht im JSON, wenn es keine Luecke gibt oder der Tag ueberhaupt
+ *                    keine Detailwerte kennt (Felix' Tagebuch)
  */
 public record DaySummary(
         LocalDate date,
@@ -28,5 +34,11 @@ public record DaySummary(
         Nutrients consumed,
         Nutrients remaining,
         List<FoodEntry> entries,
-        Map<Meal, Double> mealTargets) {
+        Map<Meal, Double> mealTargets,
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> detailGaps) {
+
+    public DaySummary(LocalDate date, Nutrients targets, Nutrients consumed, Nutrients remaining,
+                      List<FoodEntry> entries, Map<Meal, Double> mealTargets) {
+        this(date, targets, consumed, remaining, entries, mealTargets, List.of());
+    }
 }

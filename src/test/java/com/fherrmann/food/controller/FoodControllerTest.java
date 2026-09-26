@@ -60,6 +60,9 @@ class FoodControllerTest {
     @MockitoBean
     private QuickCaptureAccess quickCaptureAccess;
 
+    @MockitoBean
+    private com.fherrmann.food.service.DetailedNutrition detailedNutrition;
+
     private MockMvc mockMvc;
 
     @BeforeEach

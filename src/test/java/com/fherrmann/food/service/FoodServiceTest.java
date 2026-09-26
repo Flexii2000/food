@@ -65,6 +65,7 @@ class FoodServiceTest {
         private boolean available = true;
         private String seenText;
         private List<Dish> seenKnown;
+        private boolean seenDetailed;
         private Path seenPhoto;
         private byte[] seenPhotoBytes;
 
@@ -74,9 +75,11 @@ class FoodServiceTest {
         }
 
         @Override
-        public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known) {
+        public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known,
+                                     boolean detailed) {
             seenText = text;
             seenKnown = known;
+            seenDetailed = detailed;
             seenPhoto = photo;
             // Waehrend der Auswertung muss die Datei da sein - danach nicht mehr.
             try {
@@ -598,5 +601,108 @@ class FoodServiceTest {
         service.createDish(ME, new DishRequest("Banane", 89.0, 1.1, 23.0, 0.3, 120.0));
         service.quickCapture("torben", new QuickCaptureRequest(TODAY, "eine Banane", null));
         assertThat(extractor.seenKnown).isEmpty();
+    }
+
+    // --- Detailwerte (gesaettigte Fettsaeuren, Zucker, Ballaststoffe, Salz) -----
+
+    /** Skyr laut Packung, mit der ganzen Naehrwerttabelle. */
+    private static DishRequest skyrDetailed() {
+        return new DishRequest("Skyr natur", 63.0, 11.0, 4.0, 0.2, 150.0, 0.1, 4.0, 0.0, 0.13);
+    }
+
+    @Test
+    void detailsAreStoredScaledAndSummed() {
+        service.createDish("torben", skyrDetailed());
+        String id = service.dishes("torben").get(0).id();
+        DaySummary day = service.addEntry("torben", new NewEntryRequest(TODAY, id, null, 200.0, Meal.BREAKFAST));
+
+        assertThat(service.dishes("torben").get(0).per100g().sugarG()).isEqualTo(4.0);
+        assertThat(day.consumed().sugarG()).isEqualTo(8.0);
+        assertThat(day.consumed().saltG()).isEqualTo(0.26);
+        assertThat(day.consumed().fiberG()).isEqualTo(0.0);
+        // Alle Eintraege haben alle Werte - keine Luecke.
+        assertThat(day.detailGaps()).isEmpty();
+        // Fuer Detailwerte gibt es kein Ziel, also auch keinen Rest.
+        assertThat(day.remaining().sugarG()).isNull();
+    }
+
+    /**
+     * Ein Eintrag ohne Angabe macht die Summe zur Untergrenze - und das sagt der Tag,
+     * statt einen Zucker-Wert vorzutaeuschen, der vollstaendig aussieht.
+     */
+    @Test
+    void aDayWithAnEntryWithoutDetailsReportsTheGaps() {
+        service.createDish("torben", skyrDetailed());
+        String id = service.dishes("torben").get(0).id();
+        service.addEntry("torben", new NewEntryRequest(TODAY, id, null, 100.0, Meal.BREAKFAST));
+        DaySummary day = service.addEntry("torben", new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.SNACK));
+
+        assertThat(day.detailGaps()).containsExactly("saturatedFatG", "sugarG", "fiberG", "saltG");
+        assertThat(day.consumed().sugarG()).isEqualTo(4.0);
+    }
+
+    /** Felix' Tagebuch: nie ein Detailwert, also auch keine Luecke und kein neues Feld. */
+    @Test
+    void aDayWithoutAnyDetailsLooksExactlyAsBefore() throws Exception {
+        DaySummary day = service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        assertThat(day.detailGaps()).isEmpty();
+        assertThat(day.consumed().hasDetails()).isFalse();
+
+        String json = new ObjectMapper().writeValueAsString(day);
+        assertThat(json).doesNotContain("saturatedFatG", "sugarG", "fiberG", "saltG", "detailGaps");
+        assertThat(new ObjectMapper().writeValueAsString(service.dishes(ME))).doesNotContain("sugarG");
+    }
+
+    @Test
+    void detailsAreOptionalButChecked() {
+        assertThatThrownBy(() -> service.createDish("torben",
+                new DishRequest("Kaputt", 100.0, 1.0, 1.0, 1.0, null, null, -1.0, null, null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("sugarG");
+        assertThatThrownBy(() -> service.createDish("torben",
+                new DishRequest("Kaputt", 100.0, 1.0, 1.0, 1.0, null, null, null, null, 101.0)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("saltG");
+        // Nur einer von vier gesetzt ist in Ordnung - leer bleibt leer.
+        service.createDish("torben", new DishRequest("Apfel", 52.0, 0.3, 14.0, 0.2, 150.0, null, 10.0, null, null));
+        Dish apple = service.dishes("torben").get(0);
+        assertThat(apple.per100g().sugarG()).isEqualTo(10.0);
+        assertThat(apple.per100g().fiberG()).isNull();
+    }
+
+    @Test
+    void quickCaptureAsksForDetailsOnlyForPeopleWhoTrackThem() {
+        FoodRepository repository = new FoodRepository(tempDir.resolve("food2.json").toString(), new ObjectMapper(), FILES);
+        Clock clock = Clock.fixed(TODAY.atStartOfDay(ZoneId.of("UTC")).toInstant(), ZoneId.of("UTC"));
+        FoodService detailedService = new FoodService(repository, extractor, clock, new DetailedNutrition("torben"));
+
+        detailedService.quickCapture("torben", new QuickCaptureRequest(TODAY, "ein Teller Pasta", null));
+        assertThat(extractor.seenDetailed).isTrue();
+        detailedService.quickCapture(ME, new QuickCaptureRequest(TODAY, "ein Teller Pasta", null));
+        assertThat(extractor.seenDetailed).isFalse();
+    }
+
+    @Test
+    void theProposalCarriesDetailsWithTheirSources() {
+        extractor.next = new ExtractedDish("Pasta", 150, 5, 30, 1, 400, 350.0, List.of("sugarPer100g"),
+                List.of("kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams", "saltPer100g"),
+                "geschaetzt", Meal.DINNER, null, 2.0, null, 0.4);
+        QuickCapturePreview preview = service.quickCapture("torben", new QuickCaptureRequest(TODAY, "Pasta", null));
+        assertThat(preview.per100g().sugarG()).isEqualTo(2.0);
+        assertThat(preview.per100g().saltG()).isEqualTo(0.4);
+        assertThat(preview.per100g().saturatedFatG()).isNull();
+        assertThat(preview.valueSources()).containsEntry("sugarG", "lookedUp").containsEntry("saltG", "estimated")
+                .doesNotContainKey("fiberG");
+    }
+
+    /** Ein bekanntes Gericht bringt seine gespeicherten Detailwerte mit. */
+    @Test
+    void aKnownDishKeepsItsStoredDetails() {
+        service.createDish("torben", skyrDetailed());
+        extractor.next = new ExtractedDish("Skyr natur", 70, 10, 5, 1, 150, null, List.of(), List.of(), "", Meal.SNACK);
+        QuickCapturePreview preview = service.quickCapture("torben", new QuickCaptureRequest(TODAY, "Skyr", null));
+        assertThat(preview.known()).isTrue();
+        assertThat(preview.per100g().sugarG()).isEqualTo(4.0);
+        assertThat(preview.valueSources()).containsEntry("sugarG", "stored");
     }
 }

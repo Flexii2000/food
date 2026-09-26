@@ -83,17 +83,27 @@ public class FoodService {
      */
     private final Path inbox;
 
+    /** Wer die Detailwerte erfasst - danach richtet sich, was die Schnellerfassung schaetzt. */
+    private final DetailedNutrition detailed;
+
     public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock) {
-        this(repository, extractor, clock, Path.of(System.getProperty("java.io.tmpdir"), "food-inbox"));
+        this(repository, extractor, clock, Path.of(System.getProperty("java.io.tmpdir"), "food-inbox"),
+                DetailedNutrition.none());
+    }
+
+    public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
+                       DetailedNutrition detailed) {
+        this(repository, extractor, clock, Path.of(System.getProperty("java.io.tmpdir"), "food-inbox"), detailed);
     }
 
     @Autowired
     public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
-                       @Value("${food.agent.inbox:data/inbox}") Path inbox) {
+                       @Value("${food.agent.inbox:data/inbox}") Path inbox, DetailedNutrition detailed) {
         this.inbox = inbox;
         this.repository = repository;
         this.extractor = extractor;
         this.clock = clock;
+        this.detailed = detailed;
     }
 
     /** Ob die Schnellerfassung eingerichtet ist - siehe {@link NutritionExtractor}. */
@@ -115,7 +125,24 @@ public class FoodService {
                 consumed.rounded(),
                 data.targets().minus(consumed).rounded(),
                 entries,
-                mealTargets(data));
+                mealTargets(data),
+                detailGaps(entries));
+    }
+
+    /**
+     * Welche Detailwerte am Tag nicht vollstaendig sind: mindestens ein Eintrag hat
+     * keine Angabe, die Summe ist dort also eine Untergrenze. Kennt kein einziger
+     * Eintrag des Tages einen Detailwert, gibt es auch keine Luecke - dann erfasst
+     * hier niemand Details, und die Antwort bleibt, wie sie immer war.
+     */
+    static List<String> detailGaps(List<FoodEntry> entries) {
+        boolean anyDetails = entries.stream().anyMatch(e -> e.per100g() != null && e.per100g().hasDetails());
+        if (!anyDetails) {
+            return List.of();
+        }
+        return Nutrients.DETAIL_FIELDS.stream()
+                .filter(field -> entries.stream().anyMatch(e -> e.per100g() == null || e.per100g().detail(field) == null))
+                .toList();
     }
 
     /**
@@ -331,7 +358,7 @@ public class FoodService {
             if (image != null) {
                 photo = storePhoto(jobId, image);
             }
-            extracted = extractor.extract(text, photo, data.targets(), data.dishes());
+            extracted = extractor.extract(text, photo, data.targets(), data.dishes(), detailed.isDetailed(user));
         } finally {
             if (photo != null) {
                 try {
@@ -358,7 +385,9 @@ public class FoodService {
 
         Nutrients per100g = known.map(Dish::per100g).orElseGet(
                 () -> new Nutrients(extracted.kcal(), extracted.proteinG(),
-                        extracted.carbsG(), extracted.fatG()));
+                        extracted.carbsG(), extracted.fatG(),
+                        extracted.saturatedFatG(), extracted.sugarG(),
+                        extracted.fiberG(), extracted.saltG()));
 
         return new QuickCapturePreview(
                 known.isPresent(),
@@ -368,7 +397,7 @@ public class FoodService {
                 known.map(Dish::portionG).orElseGet(extracted::portionG),
                 extracted.grams(),
                 meal == null ? Meal.SNACK : meal,
-                valueSources(extracted, known.isPresent()),
+                valueSources(extracted, known.map(Dish::per100g).orElse(null)),
                 known.isPresent()
                         ? "Bekanntes Gericht erkannt - die gespeicherten Nährwerte werden übernommen."
                         : extracted.note());
@@ -496,7 +525,8 @@ public class FoodService {
      * Bestaetigen sehen muss: eine geschaetzte Zahl von einer abgelesenen zu
      * unterscheiden, ist die eine Pruefung, die er selbst nicht nachholen kann.
      */
-    private static Map<String, String> valueSources(ExtractedDish extracted, boolean known) {
+    private static Map<String, String> valueSources(ExtractedDish extracted, Nutrients stored) {
+        boolean known = stored != null;
         Map<String, String> sources = new LinkedHashMap<>();
         // Reihenfolge ist Absicht: nachgeschlagen schlaegt geschaetzt, und was in
         // keiner Liste steht, stand als Zahl im Text. Meldet der Agent ein Feld in
@@ -511,12 +541,21 @@ public class FoodService {
             // Aus der Gerichteliste, also weder geraten noch aus dem Text.
             List.of("kcal", "proteinG", "carbsG", "fatG", "portionG")
                     .forEach(field -> sources.put(field, "stored"));
+            // Detailwerte nur, wo das gespeicherte Gericht sie hat - ein leeres Feld
+            // als "gespeichert" auszugeben, behauptete eine Angabe, die es nicht gibt.
+            Nutrients.DETAIL_FIELDS.stream()
+                    .filter(field -> stored.detail(field) != null)
+                    .forEach(field -> sources.put(field, "stored"));
         } else {
             put.accept("kcal", "kcalPer100g");
             put.accept("proteinG", "proteinPer100g");
             put.accept("carbsG", "carbsPer100g");
             put.accept("fatG", "fatPer100g");
             put.accept("portionG", "portionG");
+            if (extracted.saturatedFatG() != null) put.accept("saturatedFatG", "saturatedFatPer100g");
+            if (extracted.sugarG() != null) put.accept("sugarG", "sugarPer100g");
+            if (extracted.fiberG() != null) put.accept("fiberG", "fiberPer100g");
+            if (extracted.saltG() != null) put.accept("saltG", "saltPer100g");
         }
         // Die Menge steht im Text oder eben nicht - unabhaengig davon, ob das
         // Gericht bekannt ist.
@@ -655,7 +694,12 @@ public class FoodService {
                 requireNonNegative(request.kcal(), "kcal", MAX_KCAL_PER_100G),
                 requireNonNegative(request.proteinG(), "proteinG", MAX_MACRO_PER_100G),
                 requireNonNegative(request.carbsG(), "carbsG", MAX_MACRO_PER_100G),
-                requireNonNegative(request.fatG(), "fatG", MAX_MACRO_PER_100G));
+                requireNonNegative(request.fatG(), "fatG", MAX_MACRO_PER_100G),
+                // Freiwillig: leer bleibt leer, statt als 0 eine Angabe vorzutaeuschen.
+                optionalNonNegative(request.saturatedFatG(), "saturatedFatG", MAX_MACRO_PER_100G),
+                optionalNonNegative(request.sugarG(), "sugarG", MAX_MACRO_PER_100G),
+                optionalNonNegative(request.fiberG(), "fiberG", MAX_MACRO_PER_100G),
+                optionalNonNegative(request.saltG(), "saltG", MAX_MACRO_PER_100G));
         Double portionG = request.portionG() == null
                 ? null
                 : requirePositive(request.portionG(), "portionG", MAX_GRAMS);
@@ -706,6 +750,10 @@ public class FoodService {
             throw badRequest(field + " must be greater than 0");
         }
         return result;
+    }
+
+    private static Double optionalNonNegative(Double value, String field, double max) {
+        return value == null ? null : requireNonNegative(value, field, max);
     }
 
     private static double requireNonNegative(Double value, String field, double max) {

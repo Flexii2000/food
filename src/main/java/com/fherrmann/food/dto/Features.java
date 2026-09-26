@@ -8,6 +8,13 @@ package com.fherrmann.food.dto;
  * @param quickCapture Schnellerfassung per Freitext - nur verfuegbar, wenn der Agent
  *                     eingerichtet und sie fuer diese Person freigeschaltet ist
  * @param me           der Name zum Token, mit dem gefragt wurde
+ * @param detailedNutrients ob diese Person die Detailwerte erfasst (gesaettigte
+ *                     Fettsaeuren, Zucker, Ballaststoffe, Salz) - dann bieten die
+ *                     Oberflaechen die Felder an
  */
-public record Features(boolean quickCapture, String me) {
+public record Features(boolean quickCapture, String me, boolean detailedNutrients) {
+
+    public Features(boolean quickCapture, String me) {
+        this(quickCapture, me, false);
+    }
 }

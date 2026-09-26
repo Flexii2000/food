@@ -84,6 +84,31 @@ Codeblock-Zäune:
   zwischen 0 und 100, `grams` zwischen 1 und 20000. Werte außerhalb weist die
   App ohnehin zurück.
 
+## Wenn der Auftrag nach der ganzen Nährwerttabelle fragt
+
+Manche Personen erfassen mehr als kcal und die drei Makros. Dann steht im
+Auftrag ausdrücklich, dass du vier weitere Werte angeben sollst — **nur dann**,
+sonst lässt du sie weg:
+
+```
+  "saturatedFatPer100g": 1.5,
+  "sugarPer100g": 3,
+  "fiberPer100g": 2,
+  "saltPer100g": 0.8,
+```
+
+- Genau die Zeilen einer Nährwerttabelle in der EU, **je 100 g**:
+  „davon gesättigte Fettsäuren", „davon Zucker", „Ballaststoffe", „Salz".
+  Salz, nicht Natrium (Salz = Natrium × 2,5).
+- Gesättigte Fettsäuren sind ein Teil des Fetts, Zucker ein Teil der
+  Kohlenhydrate — sie sind nie größer als der Wert, zu dem sie gehören.
+- Für die Herkunft gelten dieselben Listen: nachgeschlagen in `lookedUp`,
+  geschätzt in `estimated`, mit den Feldnamen `saturatedFatPer100g`,
+  `sugarPer100g`, `fiberPer100g`, `saltPer100g`. Bei einem Produkt mit Marke
+  stehen diese Werte fast immer auf der Herstellerseite — dort nachsehen.
+- Passt die Beschreibung auf ein gespeichertes Gericht, das Detailwerte hat,
+  nimm auch die exakt so.
+
 ## Wenn ein Foto dabei ist
 
 Nennt der Auftrag ein Foto, sieh es dir mit `Read` an, bevor du antwortest.
