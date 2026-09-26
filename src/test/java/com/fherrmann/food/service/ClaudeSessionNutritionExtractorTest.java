@@ -26,8 +26,12 @@ class ClaudeSessionNutritionExtractorTest {
             """;
 
     private ClaudeSessionNutritionExtractor extractor(Path promptCopy) throws Exception {
+        return extractor(promptCopy, ANSWER);
+    }
+
+    private ClaudeSessionNutritionExtractor extractor(Path promptCopy, String answer) throws Exception {
         Path script = tempDir.resolve("agent.sh");
-        Files.writeString(script, "#!/bin/sh\ncat > " + promptCopy + "\ncat <<'JSON'\n" + ANSWER + "JSON\n");
+        Files.writeString(script, "#!/bin/sh\ncat > " + promptCopy + "\ncat <<'JSON'\n" + answer + "JSON\n");
         script.toFile().setExecutable(true);
         return new ClaudeSessionNutritionExtractor(script.toString(), 10, new ObjectMapper());
     }
@@ -59,5 +63,20 @@ class ClaudeSessionNutritionExtractorTest {
         assertThat(dish.sugarG()).isNull();
         assertThat(dish.saltG()).isNull();
         assertThat(dish.kcal()).isEqualTo(150);
+    }
+
+    /**
+     * Fehlt die Liste der Schaetzungen, gilt alles als geschaetzt - auch die Detailwerte.
+     * Sonst stuenden sie im Vorschlag, als haetten sie so im Text gestanden.
+     */
+    @Test
+    void withoutAnEstimatedListTheDetailsCountAsEstimatedToo() throws Exception {
+        String answer = ANSWER.replace(",\\\"estimated\\\":[\\\"kcalPer100g\\\"]", "");
+        assertThat(answer).isNotEqualTo(ANSWER);
+
+        ExtractedDish dish = extractor(tempDir.resolve("prompt.txt"), answer)
+                .extract("Pasta", null, new Nutrients(2800, 180, 300, 90), KNOWN, true);
+
+        assertThat(dish.estimatedFields()).contains("kcalPer100g", "sugarPer100g", "saltPer100g");
     }
 }

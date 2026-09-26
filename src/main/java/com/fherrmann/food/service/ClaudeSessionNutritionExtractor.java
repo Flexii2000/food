@@ -49,7 +49,8 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
 
     /** Feldnamen, die der Agent schaetzen kann - Rueckfallwert, siehe unten. */
     private static final List<String> ALL_ESTIMATABLE = List.of(
-            "kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams", "portionG");
+            "kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams", "portionG",
+            "saturatedFatPer100g", "sugarPer100g", "fiberPer100g", "saltPer100g");
 
     private final List<String> command;
     private final long timeoutSeconds;
