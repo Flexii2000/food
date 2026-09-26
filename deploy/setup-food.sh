@@ -198,7 +198,7 @@ else
         || fail "certbot fehlgeschlagen. Haeufigste Gruende: DNS fuer $DOMAIN fehlt, oder der taegliche certbot-Lauf haelt gerade die Sperre (dann einfach dieses Skript nochmal starten)."
 fi
 
-step "9/10 nginx vollstaendig (mit Privat-Gate)"
+step "9/10 nginx vollstaendig"
 sudo cp "$BUILD_DIR/deploy/nginx-food.fherrmann.com.conf" "/etc/nginx/sites-available/$DOMAIN"
 sudo ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
 nginx_apply
@@ -224,5 +224,6 @@ echo "    Auth mit dem privaten Cookie funktioniert (HTTP 200)."
 
 echo
 echo "Fertig. https://$DOMAIN ist erreichbar, sobald der Browser den"
-echo "fh_private-Cookie hat (einmalig https://fherrmann.com/setup?token=… oeffnen)."
-echo "Spaetere Updates: sudo ~/scripts/update-food.sh"
+echo "fh_private-Cookie hat (einmalig https://fherrmann.com/setup?token=… oeffnen)"
+echo "oder einen persoenlichen Token (deploy/setup-health-users.sh)."
+echo "Spaetere Updates: ~/scripts/update-food.sh"

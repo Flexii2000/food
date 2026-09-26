@@ -15,7 +15,9 @@ import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.push.DeviceTokens;
+import com.fherrmann.food.push.DeviceTokens.Platform;
 import com.fherrmann.food.service.FoodService;
+import com.fherrmann.food.service.QuickCaptureAccess;
 import com.fherrmann.food.service.QuickCaptureJobs;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -30,59 +32,68 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.security.Principal;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Every endpoint works on the diary of the person behind the token - the auth filter puts
+ * their name into the {@link Principal}.
+ */
 @RestController
 @RequestMapping("/api/food")
 public class FoodController {
 
     private final FoodService service;
     private final QuickCaptureJobs quickCaptureJobs;
+    private final QuickCaptureAccess quickCaptureAccess;
 
     private final DeviceTokens devices;
 
     public FoodController(FoodService service, QuickCaptureJobs quickCaptureJobs,
-                          DeviceTokens devices) {
+                          QuickCaptureAccess quickCaptureAccess, DeviceTokens devices) {
         this.devices = devices;
         this.service = service;
         this.quickCaptureJobs = quickCaptureJobs;
+        this.quickCaptureAccess = quickCaptureAccess;
     }
 
     /** Targets, totals and entries for one day; defaults to today. */
     @GetMapping("/day")
     public DaySummary day(
             @RequestParam(name = "date", required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return service.day(date);
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            Principal principal) {
+        return service.day(principal.getName(), date);
     }
 
     /** The remembered dish library, most recently used first. */
     @GetMapping("/dishes")
-    public List<Dish> dishes() {
-        return service.dishes();
+    public List<Dish> dishes(Principal principal) {
+        return service.dishes(principal.getName());
     }
 
     @PostMapping("/dishes")
-    public ResponseEntity<Dish> createDish(@RequestBody DishRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.createDish(request));
+    public ResponseEntity<Dish> createDish(@RequestBody DishRequest request, Principal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createDish(principal.getName(), request));
     }
 
     @PutMapping("/dishes/{id}")
-    public Dish updateDish(@PathVariable String id, @RequestBody DishRequest request) {
-        return service.updateDish(id, request);
+    public Dish updateDish(@PathVariable String id, @RequestBody DishRequest request, Principal principal) {
+        return service.updateDish(principal.getName(), id, request);
     }
 
     @DeleteMapping("/dishes/{id}")
-    public ResponseEntity<Void> deleteDish(@PathVariable String id) {
-        service.deleteDish(id);
+    public ResponseEntity<Void> deleteDish(@PathVariable String id, Principal principal) {
+        service.deleteDish(principal.getName(), id);
         return ResponseEntity.noContent().build();
     }
 
-    /** Welche optionalen Funktionen dieser Server anbietet. */
+    /** Welche optionalen Funktionen dieser Server dieser Person anbietet - und wer sie ist. */
     @GetMapping("/features")
-    public Features features() {
-        return new Features(service.quickCaptureAvailable());
+    public Features features(Principal principal) {
+        String user = principal.getName();
+        return new Features(service.quickCaptureAvailable() && quickCaptureAccess.allows(user), user);
     }
 
     /**
@@ -95,41 +106,43 @@ public class FoodController {
      * vorher gescheitert, und zwar ohne verwertbaren Fehler.
      */
     @PostMapping("/quick-capture")
-    public ResponseEntity<QuickCaptureJob> quickCapture(@RequestBody QuickCaptureRequest request) {
-        return ResponseEntity.accepted().body(quickCaptureJobs.start(request));
+    public ResponseEntity<QuickCaptureJob> quickCapture(@RequestBody QuickCaptureRequest request,
+                                                        Principal principal) {
+        return ResponseEntity.accepted().body(quickCaptureJobs.start(principal.getName(), request));
     }
 
     /** Stand einer Schnellerfassung: laeuft noch, fertig, oder fehlgeschlagen. */
     @GetMapping("/quick-capture/{id}")
-    public QuickCaptureJob quickCaptureStatus(@PathVariable String id) {
-        return quickCaptureJobs.status(id);
+    public QuickCaptureJob quickCaptureStatus(@PathVariable String id, Principal principal) {
+        return quickCaptureJobs.status(principal.getName(), id);
     }
 
     /** Logs an amount of a dish and returns the refreshed day. */
     @PostMapping("/entries")
-    public ResponseEntity<DaySummary> addEntry(@RequestBody NewEntryRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.addEntry(request));
+    public ResponseEntity<DaySummary> addEntry(@RequestBody NewEntryRequest request, Principal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.addEntry(principal.getName(), request));
     }
 
     /** Menge, Mahlzeit oder Tag eines Eintrags berichtigen - das Gericht bleibt. */
     @PutMapping("/entries/{id}")
-    public DaySummary updateEntry(@PathVariable String id, @RequestBody UpdateEntryRequest request) {
-        return service.updateEntry(id, request);
+    public DaySummary updateEntry(@PathVariable String id, @RequestBody UpdateEntryRequest request,
+                                  Principal principal) {
+        return service.updateEntry(principal.getName(), id, request);
     }
 
     @DeleteMapping("/entries/{id}")
-    public DaySummary deleteEntry(@PathVariable String id) {
-        return service.deleteEntry(id);
+    public DaySummary deleteEntry(@PathVariable String id, Principal principal) {
+        return service.deleteEntry(principal.getName(), id);
     }
 
     @GetMapping("/targets")
-    public Nutrients targets() {
-        return service.targets();
+    public Nutrients targets(Principal principal) {
+        return service.targets(principal.getName());
     }
 
     @PutMapping("/targets")
-    public Nutrients updateTargets(@RequestBody TargetsRequest request) {
-        return service.updateTargets(request);
+    public Nutrients updateTargets(@RequestBody TargetsRequest request, Principal principal) {
+        return service.updateTargets(principal.getName(), request);
     }
 
     /**
@@ -139,8 +152,9 @@ public class FoodController {
     @GetMapping("/daily")
     public List<DayTotal> daily(
             @RequestParam(name = "from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(name = "to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return service.dailyTotals(from, to);
+            @RequestParam(name = "to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            Principal principal) {
+        return service.dailyTotals(principal.getName(), from, to);
     }
 
     /**
@@ -151,8 +165,31 @@ public class FoodController {
     @GetMapping("/daily-average")
     public List<DayAverage> dailyAverage(
             @RequestParam(name = "from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(name = "to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return service.dailyAverages(from, to);
+            @RequestParam(name = "to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            Principal principal) {
+        return service.dailyAverages(principal.getName(), from, to);
+    }
+
+    /**
+     * Meldet ein Geraet fuer Benachrichtigungen an - fuer die Person zum Token.
+     *
+     * <p>Die Apps rufen das bei jedem Start auf: iOS und Firebase vergeben die
+     * Kennung gelegentlich neu, und eine veraltete faellt sonst erst auf, wenn
+     * eine Benachrichtigung ins Leere geht.
+     */
+    @PostMapping("/devices")
+    public ResponseEntity<Void> registerDevice(@RequestBody DeviceRegistration request, Principal principal) {
+        if (request == null || request.token() == null || request.token().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        Platform platform;
+        try {
+            platform = Platform.parse(request.platform());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+        devices.add(principal.getName(), platform, request.token().trim());
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -161,24 +198,8 @@ public class FoodController {
      * board's cards are: the numbers are already at hand here, and a response arriving
      * at all is the health check.
      */
-    /**
-     * Meldet ein Geraet fuer Benachrichtigungen an.
-     *
-     * <p>Die App ruft das bei jedem Start auf: iOS vergibt die Kennung
-     * gelegentlich neu, und eine veraltete faellt sonst erst auf, wenn eine
-     * Benachrichtigung ins Leere geht.
-     */
-    @PostMapping("/devices")
-    public ResponseEntity<Void> registerDevice(@RequestBody DeviceRegistration request) {
-        if (request == null || request.token() == null || request.token().isBlank()) {
-            return ResponseEntity.badRequest().build();
-        }
-        devices.add(request.token().trim());
-        return ResponseEntity.noContent().build();
-    }
-
     @GetMapping("/status")
-    public StatusInfo status() {
-        return service.status();
+    public StatusInfo status(Principal principal) {
+        return service.status(principal.getName());
     }
 }

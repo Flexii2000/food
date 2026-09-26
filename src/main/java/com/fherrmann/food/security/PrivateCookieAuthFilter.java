@@ -11,27 +11,54 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * Authenticates requests carrying a valid {@link PrivateCookie#NAME} cookie, and leaves
- * everything else unauthenticated.
+ * Meldet an, wer einen gueltigen Token mitbringt, und setzt den Namen der Person
+ * als Principal - Controller und Service lesen daran ab, wessen Tagebuch gemeint ist.
+ *
+ * <p>Drei Wege, in dieser Reihenfolge:
+ * <ol>
+ *   <li>{@code Authorization: Bearer <token>} - die Android-App</li>
+ *   <li>Cookie {@link HealthCookie#NAME} - ein Browser, eingerichtet ueber einen
+ *       Healthy-Setup-Link</li>
+ *   <li>Cookie {@link PrivateCookie#NAME} - der Privat-Cookie von fherrmann.com:
+ *       Felix' Browser, die iPhone-App, Habits und das Statusboard; das ist die
+ *       Eigentuemerin</li>
+ * </ol>
+ * Der persoenliche Token schlaegt den Privat-Cookie: den hat Felix' Browser
+ * immer, und sonst liesse sich dort nie pruefen, was eine andere Person sieht.
+ * Alles andere bleibt unangemeldet.
  */
 public class PrivateCookieAuthFilter extends OncePerRequestFilter {
 
-    private final String token;
+    private static final String BEARER = "Bearer ";
 
-    public PrivateCookieAuthFilter(String token) {
+    private final String token;
+    private final HealthUsers users;
+
+    public PrivateCookieAuthFilter(String token, HealthUsers users) {
         this.token = token;
+        this.users = users;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        if (hasValidCookie(request)) {
-            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                    "device", null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
-        }
+        Optional<String> person = fromBearer(request)
+                .or(() -> cookies(request, HealthCookie.NAME).stream()
+                        .map(users::nameFor)
+                        .flatMap(Optional::stream)
+                        .findFirst())
+                .or(() -> cookies(request, PrivateCookie.NAME).stream()
+                        .anyMatch(value -> PrivateCookie.matches(value, token))
+                        ? Optional.of(users.owner())
+                        : Optional.empty());
+        person.ifPresent(name -> SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        name, null, List.of(new SimpleGrantedAuthority("ROLE_USER")))));
         chain.doFilter(request, response);
     }
 
@@ -50,16 +77,30 @@ public class PrivateCookieAuthFilter extends OncePerRequestFilter {
         return false;
     }
 
-    private boolean hasValidCookie(HttpServletRequest request) {
+    private Optional<String> fromBearer(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith(BEARER)) {
+            return Optional.empty();
+        }
+        return users.nameFor(header.substring(BEARER.length()).trim());
+    }
+
+    /**
+     * Alle Werte eines Cookies. Es kann mehrere gleichnamige geben (eins fuer den
+     * Host, eins fuer die Domain) - gezaehlt wird jedes, das passt, nicht nur das
+     * erste.
+     */
+    private static List<String> cookies(HttpServletRequest request, String name) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
-            return false;
+            return List.of();
         }
+        List<String> values = new ArrayList<>();
         for (Cookie cookie : cookies) {
-            if (PrivateCookie.NAME.equals(cookie.getName()) && PrivateCookie.matches(cookie.getValue(), token)) {
-                return true;
+            if (name.equals(cookie.getName()) && cookie.getValue() != null) {
+                values.add(cookie.getValue());
             }
         }
-        return false;
+        return values;
     }
 }

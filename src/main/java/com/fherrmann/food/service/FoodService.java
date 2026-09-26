@@ -45,10 +45,14 @@ import java.util.UUID;
 /**
  * The rules around dishes, entries and daily totals.
  *
+ * <p>Every method takes the person whose diary it works on - the name the auth filter
+ * put into the principal. There is no shared data between people: each has their own
+ * targets, dish library and entries.
+ *
  * <p>Every mutating method is {@code synchronized}: each one is a read-modify-write
  * cycle over the whole JSON file, and two of them interleaving would lose the earlier
  * change. The repository's own locking only covers a single read or write, not the
- * pair. Contention is a non-issue here - this is a single person's food diary.
+ * pair. One lock for everyone is plenty - a handful of people typing into food diaries.
  */
 @Service
 public class FoodService {
@@ -100,8 +104,8 @@ public class FoodService {
     // --- reading ------------------------------------------------------------
 
     /** Targets, totals and entries for one day. */
-    public DaySummary day(LocalDate date) {
-        FoodData data = repository.load();
+    public DaySummary day(String user, LocalDate date) {
+        FoodData data = repository.load(user);
         LocalDate day = date == null ? today() : date;
         List<FoodEntry> entries = entriesOn(data, day);
         Nutrients consumed = sum(entries);
@@ -119,16 +123,16 @@ public class FoodService {
      * group alphabetical. The picker is a flat list, so the sort is the only thing
      * keeping the handful of things eaten every week within reach.
      */
-    public List<Dish> dishes() {
-        List<Dish> dishes = new ArrayList<>(repository.load().dishes());
+    public List<Dish> dishes(String user) {
+        List<Dish> dishes = new ArrayList<>(repository.load(user).dishes());
         dishes.sort(Comparator
                 .comparing(Dish::lastUsedOn, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(d -> d.name().toLowerCase()));
         return dishes;
     }
 
-    public Nutrients targets() {
-        return repository.load().targets().rounded();
+    public Nutrients targets(String user) {
+        return repository.load(user).targets().rounded();
     }
 
     /**
@@ -136,12 +140,12 @@ public class FoodService {
      * without any entry are left out rather than returned as zero: nothing logged means
      * "unknown", and drawing that as a 0 kcal day would be a lie in the chart.
      */
-    public List<DayTotal> dailyTotals(LocalDate from, LocalDate to) {
+    public List<DayTotal> dailyTotals(String user, LocalDate from, LocalDate to) {
         if (from == null || to == null || to.isBefore(from)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "from and to are required, and to must not precede from");
         }
         Map<LocalDate, Nutrients> byDate = new LinkedHashMap<>();
-        for (FoodEntry entry : repository.load().entries()) {
+        for (FoodEntry entry : repository.load(user).entries()) {
             LocalDate date = entry.date();
             if (date == null || date.isBefore(from) || date.isAfter(to)) {
                 continue;
@@ -176,13 +180,13 @@ public class FoodService {
      * {@code complete} ist erst gesetzt, wenn auch der letzte Tag des Fensters
      * abgeschlossen ist - die letzten vier Tage sind also vorlaeufig.
      */
-    public List<DayAverage> dailyAverages(LocalDate from, LocalDate to) {
+    public List<DayAverage> dailyAverages(String user, LocalDate from, LocalDate to) {
         if (from == null || to == null || to.isBefore(from)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "from and to are required, and to must not precede from");
         }
         LocalDate today = today();
         Map<LocalDate, Double> kcalByDate = new HashMap<>();
-        for (FoodEntry entry : repository.load().entries()) {
+        for (FoodEntry entry : repository.load(user).entries()) {
             // Nur abgeschlossene Tage: heute und spaeter bleiben draussen.
             if (entry.date() != null && entry.date().isBefore(today)) {
                 kcalByDate.merge(entry.date(), entry.total().kcal(), Double::sum);
@@ -211,10 +215,10 @@ public class FoodService {
     }
 
     /** Snapshot for the statusboard card. */
-    public StatusInfo status() {
+    public StatusInfo status(String user) {
         LocalDate today = today();
         try {
-            FoodData data = repository.load();
+            FoodData data = repository.load(user);
             List<FoodEntry> todays = entriesOn(data, today);
             LocalDate lastEntry = data.entries().stream()
                     .map(FoodEntry::date)
@@ -243,14 +247,14 @@ public class FoodService {
      * through, which is the whole "the server remembers it" behaviour - there is no
      * separate step for adding a dish before it can be eaten.
      */
-    public synchronized DaySummary addEntry(NewEntryRequest request) {
+    public synchronized DaySummary addEntry(String user, NewEntryRequest request) {
         if (request == null) {
             throw badRequest("request body is required");
         }
         double grams = requirePositive(request.grams(), "grams", MAX_GRAMS);
         LocalDate date = request.date() == null ? today() : request.date();
 
-        FoodData data = repository.load();
+        FoodData data = repository.load(user);
         List<Dish> dishes = new ArrayList<>(data.dishes());
 
         Dish dish;
@@ -290,8 +294,8 @@ public class FoodService {
                 request.meal() == null ? Meal.SNACK : request.meal(),
                 Instant.now(clock)));
 
-        repository.save(new FoodData(data.targets(), data.mealShares(), dishes, entries));
-        return day(date);
+        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, entries));
+        return day(user, date);
     }
 
     /**
@@ -307,8 +311,8 @@ public class FoodService {
      * und solange muss niemand auf das Tagebuch warten. Zu warten gaebe es hier
      * ohnehin nichts - es wird ja nicht geschrieben.
      */
-    public QuickCapturePreview quickCapture(QuickCaptureRequest request) {
-        return quickCapture(request, UUID.randomUUID().toString());
+    public QuickCapturePreview quickCapture(String user, QuickCaptureRequest request) {
+        return quickCapture(user, request, UUID.randomUUID().toString());
     }
 
     /**
@@ -316,11 +320,11 @@ public class FoodService {
      * Auswertung als {@code <auftrag>.jpg} im Postfach und wird danach
      * geloescht, ob die Auswertung nun gelang oder nicht.
      */
-    public QuickCapturePreview quickCapture(QuickCaptureRequest request, String jobId) {
+    public QuickCapturePreview quickCapture(String user, QuickCaptureRequest request, String jobId) {
         String text = validateQuickCapture(request);
         byte[] image = decodeImage(request);
 
-        FoodData data = repository.load();
+        FoodData data = repository.load(user);
         Path photo = null;
         ExtractedDish extracted;
         try {
@@ -526,12 +530,12 @@ public class FoodService {
      *
      * @return der Tag, auf dem der Eintrag danach liegt
      */
-    public synchronized DaySummary updateEntry(String id, UpdateEntryRequest request) {
+    public synchronized DaySummary updateEntry(String user, String id, UpdateEntryRequest request) {
         if (request == null) {
             throw badRequest("request body is required");
         }
         double grams = requirePositive(request.grams(), "grams", MAX_GRAMS);
-        FoodData data = repository.load();
+        FoodData data = repository.load(user);
         FoodEntry existing = data.entries().stream()
                 .filter(e -> e.id() != null && e.id().equals(id))
                 .findFirst()
@@ -543,29 +547,29 @@ public class FoodService {
         List<FoodEntry> entries = data.entries().stream()
                 .map(e -> e.id() != null && e.id().equals(id) ? updated : e)
                 .toList();
-        repository.save(new FoodData(data.targets(), data.mealShares(), data.dishes(), entries));
-        return day(date);
+        repository.save(user, new FoodData(data.targets(), data.mealShares(), data.dishes(), entries));
+        return day(user, date);
     }
 
     /** Removes one entry. Returns the refreshed day it belonged to. */
-    public synchronized DaySummary deleteEntry(String id) {
-        FoodData data = repository.load();
+    public synchronized DaySummary deleteEntry(String user, String id) {
+        FoodData data = repository.load(user);
         FoodEntry existing = data.entries().stream()
                 .filter(e -> e.id() != null && e.id().equals(id))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown entry"));
         List<FoodEntry> entries = new ArrayList<>(data.entries());
         entries.removeIf(e -> e.id() != null && e.id().equals(id));
-        repository.save(new FoodData(data.targets(), data.mealShares(), data.dishes(), entries));
-        return day(existing.date());
+        repository.save(user, new FoodData(data.targets(), data.mealShares(), data.dishes(), entries));
+        return day(user, existing.date());
     }
 
     /** Adds a dish to the library without logging it. */
-    public synchronized Dish createDish(DishRequest request) {
-        FoodData data = repository.load();
+    public synchronized Dish createDish(String user, DishRequest request) {
+        FoodData data = repository.load(user);
         List<Dish> dishes = new ArrayList<>(data.dishes());
         Dish dish = upsertDish(dishes, request, null);
-        repository.save(new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
+        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
         return dish;
     }
 
@@ -574,29 +578,29 @@ public class FoodService {
      * values they were logged with (see {@link FoodEntry}), so this changes what future
      * entries will use, not the past.
      */
-    public synchronized Dish updateDish(String id, DishRequest request) {
-        FoodData data = repository.load();
+    public synchronized Dish updateDish(String user, String id, DishRequest request) {
+        FoodData data = repository.load(user);
         List<Dish> dishes = new ArrayList<>(data.dishes());
         if (dishes.stream().noneMatch(d -> d.id().equals(id))) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown dish");
         }
         Dish updated = upsertDish(dishes, request, id);
-        repository.save(new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
+        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
         return updated;
     }
 
     /** Forgets a dish. Entries that used it stay untouched, name and values included. */
-    public synchronized void deleteDish(String id) {
-        FoodData data = repository.load();
+    public synchronized void deleteDish(String user, String id) {
+        FoodData data = repository.load(user);
         List<Dish> dishes = new ArrayList<>(data.dishes());
         if (!dishes.removeIf(d -> d.id().equals(id))) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown dish");
         }
-        repository.save(new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
+        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
     }
 
     /** Replaces the daily goals. */
-    public synchronized Nutrients updateTargets(TargetsRequest request) {
+    public synchronized Nutrients updateTargets(String user, TargetsRequest request) {
         if (request == null) {
             throw badRequest("request body is required");
         }
@@ -605,11 +609,11 @@ public class FoodService {
                 requireNonNegative(request.proteinG(), "proteinG", 2_000),
                 requireNonNegative(request.carbsG(), "carbsG", 2_000),
                 requireNonNegative(request.fatG(), "fatG", 2_000));
-        FoodData data = repository.load();
+        FoodData data = repository.load(user);
         Map<Meal, Double> shares = request.mealShares() == null
                 ? data.mealShares()
                 : validShares(request.mealShares());
-        repository.save(new FoodData(targets, shares, data.dishes(), data.entries()));
+        repository.save(user, new FoodData(targets, shares, data.dishes(), data.entries()));
         return targets.rounded();
     }
 

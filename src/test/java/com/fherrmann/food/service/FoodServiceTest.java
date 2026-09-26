@@ -14,6 +14,9 @@ import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.repository.FoodRepository;
+import com.fherrmann.food.security.HealthUsers;
+import com.fherrmann.food.security.UserFiles;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,6 +38,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class FoodServiceTest {
+
+    /** Die Eigentuemerin - ihre Datei liegt, wo sie immer lag. */
+    private static final String ME = "felix";
+    private static final UserFiles FILES = new UserFiles(
+            new HealthUsers(ME, "torben:0123456789abcdef0123456789abcdef"));
 
     private static final LocalDate TODAY = LocalDate.of(2026, 8, 31);
 
@@ -83,7 +91,7 @@ class FoodServiceTest {
     @BeforeEach
     void setUp() {
         FoodRepository repository = new FoodRepository(
-                tempDir.resolve("food.json").toString(), new ObjectMapper());
+                tempDir.resolve("food.json").toString(), new ObjectMapper(), FILES);
         Clock clock = Clock.fixed(TODAY.atStartOfDay(ZoneId.of("UTC")).toInstant(), ZoneId.of("UTC"));
         extractor = new FakeExtractor();
         service = new FoodService(repository, extractor, clock);
@@ -97,14 +105,14 @@ class FoodServiceTest {
     @Test
     void defaultTargetsAddUpToTheConfiguredCalories() {
         // 200 g Eiweiß und 62 g Fett, Kohlenhydrate fuellen den Rest exakt auf.
-        var targets = service.targets();
+        var targets = service.targets(ME);
         assertThat(targets.proteinG() * 4 + targets.carbsG() * 4 + targets.fatG() * 9)
                 .isEqualTo(targets.kcal());
     }
 
     @Test
     void loggingAnUnknownDishRemembersItAndCountsTheAmount() {
-        DaySummary day = service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        DaySummary day = service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
 
         assertThat(day.date()).isEqualTo(TODAY);
         assertThat(day.entries()).hasSize(1);
@@ -114,55 +122,55 @@ class FoodServiceTest {
         assertThat(day.consumed().fatG()).isEqualTo(3.9);
         assertThat(day.remaining().kcal()).isEqualTo(2060.0);
 
-        assertThat(service.dishes()).singleElement()
+        assertThat(service.dishes(ME)).singleElement()
                 .extracting(Dish::name, Dish::portionG, Dish::lastUsedOn)
                 .containsExactly("Skyr mit Beeren", 300.0, TODAY);
     }
 
     @Test
     void aRememberedDishCanBeLoggedAgainById() {
-        service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
-        String id = service.dishes().get(0).id();
+        service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        String id = service.dishes(ME).get(0).id();
 
-        DaySummary day = service.addEntry(new NewEntryRequest(TODAY, id, null, 150.0, null));
+        DaySummary day = service.addEntry(ME, new NewEntryRequest(TODAY, id, null, 150.0, null));
 
         assertThat(day.entries()).hasSize(2);
         assertThat(day.consumed().kcal()).isEqualTo(360.0);
-        assertThat(service.dishes()).hasSize(1);
+        assertThat(service.dishes(ME)).hasSize(1);
     }
 
     @Test
     void editingADishLeavesAlreadyLoggedEntriesUntouched() {
-        service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
-        String id = service.dishes().get(0).id();
+        service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        String id = service.dishes(ME).get(0).id();
 
-        service.updateDish(id, new DishRequest("Skyr mit Beeren", 200.0, 8.0, 6.0, 1.3, 300.0));
+        service.updateDish(ME, id, new DishRequest("Skyr mit Beeren", 200.0, 8.0, 6.0, 1.3, 300.0));
 
         // Der Eintrag von heute rechnet weiter mit den 80 kcal/100 g von damals.
-        assertThat(service.day(TODAY).consumed().kcal()).isEqualTo(240.0);
-        assertThat(service.dishes().get(0).per100g().kcal()).isEqualTo(200.0);
+        assertThat(service.day(ME, TODAY).consumed().kcal()).isEqualTo(240.0);
+        assertThat(service.dishes(ME).get(0).per100g().kcal()).isEqualTo(200.0);
     }
 
     @Test
     void deletingADishKeepsTheHistoryThatUsedIt() {
-        service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
-        service.deleteDish(service.dishes().get(0).id());
+        service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        service.deleteDish(ME, service.dishes(ME).get(0).id());
 
-        assertThat(service.dishes()).isEmpty();
-        assertThat(service.day(TODAY).entries()).singleElement()
+        assertThat(service.dishes(ME)).isEmpty();
+        assertThat(service.day(ME, TODAY).entries()).singleElement()
                 .extracting(e -> e.name()).isEqualTo("Skyr mit Beeren");
-        assertThat(service.day(TODAY).consumed().kcal()).isEqualTo(240.0);
+        assertThat(service.day(ME, TODAY).consumed().kcal()).isEqualTo(240.0);
     }
 
     @Test
     void enteringAKnownNameAgainUpdatesTheDishInsteadOfDuplicatingIt() {
-        service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
-        service.addEntry(new NewEntryRequest(TODAY, null,
+        service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        service.addEntry(ME, new NewEntryRequest(TODAY, null,
                 new DishRequest("skyr MIT beeren", 90.0, 9.0, 6.0, 1.0, 250.0), 100.0, null));
 
-        assertThat(service.dishes()).hasSize(1);
-        assertThat(service.dishes().get(0).per100g().kcal()).isEqualTo(90.0);
-        assertThat(service.dishes().get(0).portionG()).isEqualTo(250.0);
+        assertThat(service.dishes(ME)).hasSize(1);
+        assertThat(service.dishes(ME).get(0).per100g().kcal()).isEqualTo(90.0);
+        assertThat(service.dishes(ME).get(0).portionG()).isEqualTo(250.0);
     }
 
     @Test
@@ -170,43 +178,43 @@ class FoodServiceTest {
         // Ueber die Verwaltung angelegte Gerichte haben kein lastUsedOn. Sie
         // danach unter demselben Namen einzutragen lief in eine NPE, weil
         // findFirst() ueber einem null-Element ausloest.
-        service.createDish(skyr());
+        service.createDish(ME, skyr());
 
-        DaySummary day = service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.BREAKFAST));
+        DaySummary day = service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.BREAKFAST));
 
         assertThat(day.consumed().kcal()).isEqualTo(240.0);
-        assertThat(service.dishes()).singleElement()
+        assertThat(service.dishes(ME)).singleElement()
                 .extracting(Dish::lastUsedOn).isEqualTo(TODAY);
     }
 
     @Test
     void renamingOntoAnExistingNameIsRejected() {
-        service.createDish(skyr());
-        service.createDish(new DishRequest("Haferflocken", 370.0, 13.0, 59.0, 7.0, null));
-        String id = service.dishes().stream()
+        service.createDish(ME, skyr());
+        service.createDish(ME, new DishRequest("Haferflocken", 370.0, 13.0, 59.0, 7.0, null));
+        String id = service.dishes(ME).stream()
                 .filter(d -> d.name().equals("Haferflocken")).findFirst().orElseThrow().id();
 
-        assertThatThrownBy(() -> service.updateDish(id, skyr()))
+        assertThatThrownBy(() -> service.updateDish(ME, id, skyr()))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("409");
     }
 
     @Test
     void backfillingAnOlderDayDoesNotMoveTheDishToTheTopOfThePicker() {
-        service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
-        String id = service.dishes().get(0).id();
-        service.addEntry(new NewEntryRequest(TODAY.minusDays(5), id, null, 300.0, null));
+        service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        String id = service.dishes(ME).get(0).id();
+        service.addEntry(ME, new NewEntryRequest(TODAY.minusDays(5), id, null, 300.0, null));
 
-        assertThat(service.dishes().get(0).lastUsedOn()).isEqualTo(TODAY);
+        assertThat(service.dishes(ME).get(0).lastUsedOn()).isEqualTo(TODAY);
     }
 
     @Test
     void anEntryCanBeCorrectedWithoutChangingTheDish() {
-        DaySummary day = service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.LUNCH));
+        DaySummary day = service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.LUNCH));
         String entryId = day.entries().get(0).id();
         double kcalPer100 = day.entries().get(0).per100g().kcal();
 
-        DaySummary after = service.updateEntry(entryId,
+        DaySummary after = service.updateEntry(ME, entryId,
                 new UpdateEntryRequest(150.0, Meal.DINNER, TODAY.minusDays(1)));
 
         // Der Tag von gestern kommt zurueck - dorthin ist der Eintrag gewandert.
@@ -215,19 +223,19 @@ class FoodServiceTest {
         assertThat(after.entries().get(0).grams()).isEqualTo(150.0);
         assertThat(after.entries().get(0).meal()).isEqualTo(Meal.DINNER);
         assertThat(after.entries().get(0).per100g().kcal()).isEqualTo(kcalPer100);
-        assertThat(service.day(TODAY).entries()).isEmpty();
+        assertThat(service.day(ME, TODAY).entries()).isEmpty();
         // Ohne Mahlzeit und Tag bleiben beide, wie sie waren.
-        DaySummary again = service.updateEntry(entryId, new UpdateEntryRequest(200.0, null, null));
+        DaySummary again = service.updateEntry(ME, entryId, new UpdateEntryRequest(200.0, null, null));
         assertThat(again.date()).isEqualTo(TODAY.minusDays(1));
         assertThat(again.entries().get(0).meal()).isEqualTo(Meal.DINNER);
     }
 
     @Test
     void deletingAnEntryRemovesItFromItsDay() {
-        DaySummary day = service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        DaySummary day = service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
         String entryId = day.entries().get(0).id();
 
-        DaySummary after = service.deleteEntry(entryId);
+        DaySummary after = service.deleteEntry(ME, entryId);
 
         assertThat(after.entries()).isEmpty();
         assertThat(after.consumed().kcal()).isZero();
@@ -235,11 +243,11 @@ class FoodServiceTest {
 
     @Test
     void dailyTotalsCoverOnlyDaysWithEntriesInsideTheRange() {
-        service.addEntry(new NewEntryRequest(TODAY.minusDays(2), null, skyr(), 300.0, null));
-        service.addEntry(new NewEntryRequest(TODAY, null,
+        service.addEntry(ME, new NewEntryRequest(TODAY.minusDays(2), null, skyr(), 300.0, null));
+        service.addEntry(ME, new NewEntryRequest(TODAY, null,
                 new DishRequest("Haferflocken", 370.0, 13.0, 59.0, 7.0, null), 100.0, null));
 
-        List<DayTotal> totals = service.dailyTotals(TODAY.minusDays(3), TODAY);
+        List<DayTotal> totals = service.dailyTotals(ME, TODAY.minusDays(3), TODAY);
 
         // Der Tag dazwischen taucht nicht als 0 kcal auf - nichts eingetragen heisst
         // "unbekannt", nicht "nichts gegessen".
@@ -251,7 +259,7 @@ class FoodServiceTest {
 
     /** Ein Eintrag mit genau {@code kcal} an einem Tag: 1000 g von einem Gericht mit {@code kcal/10} je 100 g. */
     private void kcalOn(LocalDate date, double kcal) {
-        service.addEntry(new NewEntryRequest(date, null,
+        service.addEntry(ME, new NewEntryRequest(date, null,
                 new DishRequest("Testgericht " + kcal, kcal / 10.0, 0.0, 0.0, 0.0, null), 1000.0, null));
     }
 
@@ -261,7 +269,7 @@ class FoodServiceTest {
         kcalOn(TODAY.minusDays(4), 2400);
         kcalOn(TODAY, 1600);   // laeuft noch - zaehlt nicht
 
-        List<DayAverage> averages = service.dailyAverages(TODAY.minusDays(8), TODAY);
+        List<DayAverage> averages = service.dailyAverages(ME, TODAY.minusDays(8), TODAY);
 
         // Jeder Tag, dessen Fenster (3 davor, 3 danach) einen abgeschlossenen
         // Eintrag enthaelt, bekommt ein Mittel - nur ueber diese Tage: die
@@ -289,7 +297,7 @@ class FoodServiceTest {
         kcalOn(TODAY, 5000);                // halber Tag, waechst noch
         kcalOn(TODAY.plusDays(1), 3000);    // vorerfasst - ein Plan, kein Tag
 
-        List<DayAverage> averages = service.dailyAverages(TODAY.minusDays(10), TODAY.plusDays(5));
+        List<DayAverage> averages = service.dailyAverages(ME, TODAY.minusDays(10), TODAY.plusDays(5));
 
         // Gestern ist der einzige abgeschlossene Tag: jedes Fenster, das ihn
         // enthaelt, mittelt genau ihn - und nach heute wird nichts prognostiziert.
@@ -297,24 +305,24 @@ class FoodServiceTest {
                 TODAY.minusDays(4), TODAY.minusDays(3), TODAY.minusDays(2), TODAY.minusDays(1), TODAY);
         assertThat(averages).extracting(DayAverage::kcal).containsOnly(2000.0);
         assertThat(averages).extracting(DayAverage::days).containsOnly(1);
-        assertThat(service.dailyAverages(TODAY.minusDays(60), TODAY.minusDays(30))).isEmpty();
+        assertThat(service.dailyAverages(ME, TODAY.minusDays(60), TODAY.minusDays(30))).isEmpty();
     }
 
     @Test
     void dailyAveragesRejectAnInvertedRange() {
-        assertThatThrownBy(() -> service.dailyAverages(TODAY, TODAY.minusDays(1)))
+        assertThatThrownBy(() -> service.dailyAverages(ME, TODAY, TODAY.minusDays(1)))
                 .isInstanceOf(ResponseStatusException.class);
     }
 
     @Test
     void dailyTotalsRejectAnInvertedRange() {
-        assertThatThrownBy(() -> service.dailyTotals(TODAY, TODAY.minusDays(1)))
+        assertThatThrownBy(() -> service.dailyTotals(ME, TODAY, TODAY.minusDays(1)))
                 .isInstanceOf(ResponseStatusException.class);
     }
 
     @Test
     void mealTargetsAddUpToTheDailyTarget() {
-        DaySummary day = service.day(TODAY);
+        DaySummary day = service.day(ME, TODAY);
         // 25/35/30/10 von 2300 kcal.
         assertThat(day.mealTargets())
                 .containsEntry(Meal.BREAKFAST, 575.0)
@@ -328,13 +336,13 @@ class FoodServiceTest {
     @Test
     void mealTargetsFollowAChangedDailyTarget() {
         // Der ganze Grund, Anteile statt absoluter Werte zu speichern.
-        service.updateTargets(new TargetsRequest(2000.0, 150.0, 200.0, 65.0, null));
-        assertThat(service.day(TODAY).mealTargets()).containsEntry(Meal.BREAKFAST, 500.0);
+        service.updateTargets(ME, new TargetsRequest(2000.0, 150.0, 200.0, 65.0, null));
+        assertThat(service.day(ME, TODAY).mealTargets()).containsEntry(Meal.BREAKFAST, 500.0);
     }
 
     @Test
     void aSplitThatDoesNotAddUpIsRejected() {
-        assertThatThrownBy(() -> service.updateTargets(new TargetsRequest(
+        assertThatThrownBy(() -> service.updateTargets(ME, new TargetsRequest(
                 2300.0, 200.0, 235.5, 62.0,
                 Map.of(Meal.BREAKFAST, 0.5, Meal.LUNCH, 0.5, Meal.DINNER, 0.5, Meal.SNACK, 0.5))))
                 .isInstanceOf(ResponseStatusException.class)
@@ -343,25 +351,25 @@ class FoodServiceTest {
 
     @Test
     void aChangedSplitIsStored() {
-        service.updateTargets(new TargetsRequest(2300.0, 200.0, 235.5, 62.0,
+        service.updateTargets(ME, new TargetsRequest(2300.0, 200.0, 235.5, 62.0,
                 Map.of(Meal.BREAKFAST, 0.2, Meal.LUNCH, 0.4, Meal.DINNER, 0.35, Meal.SNACK, 0.05)));
-        assertThat(service.day(TODAY).mealTargets())
+        assertThat(service.day(ME, TODAY).mealTargets())
                 .containsEntry(Meal.BREAKFAST, 460.0)
                 .containsEntry(Meal.LUNCH, 920.0);
     }
 
     @Test
     void targetsCanBeChanged() {
-        var targets = service.updateTargets(new TargetsRequest(2000.0, 150.0, 200.0, 65.0, null));
+        var targets = service.updateTargets(ME, new TargetsRequest(2000.0, 150.0, 200.0, 65.0, null));
         assertThat(targets.kcal()).isEqualTo(2000.0);
-        assertThat(service.day(TODAY).targets().proteinG()).isEqualTo(150.0);
+        assertThat(service.day(ME, TODAY).targets().proteinG()).isEqualTo(150.0);
     }
 
     @Test
     void statusReportsTodaysFigures() {
-        service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
 
-        StatusInfo status = service.status();
+        StatusInfo status = service.status(ME);
 
         assertThat(status.lastResult()).isEqualTo("ok");
         assertThat(status.today()).isEqualTo(TODAY);
@@ -374,7 +382,7 @@ class FoodServiceTest {
 
     @Test
     void quickCaptureOnlyProposesAndWritesNothing() {
-        QuickCapturePreview preview = service.quickCapture(
+        QuickCapturePreview preview = service.quickCapture(ME, 
                 new QuickCaptureRequest(TODAY, "  mittags einen grossen Teller Spaghetti Bolognese  ", null));
 
         // Der Text geht getrimmt rein, so wie er getippt wurde.
@@ -387,13 +395,13 @@ class FoodServiceTest {
         assertThat(preview.meal()).isEqualTo(Meal.LUNCH);
 
         // Und zwar wirklich nichts geschrieben - weder Eintrag noch Gericht.
-        assertThat(service.day(TODAY).entries()).isEmpty();
-        assertThat(service.dishes()).isEmpty();
+        assertThat(service.day(ME, TODAY).entries()).isEmpty();
+        assertThat(service.dishes(ME)).isEmpty();
     }
 
     @Test
     void thePreviewSaysWhereEveryValueCameFrom() {
-        QuickCapturePreview preview = service.quickCapture(
+        QuickCapturePreview preview = service.quickCapture(ME, 
                 new QuickCaptureRequest(TODAY, "ein Teller Bolognese", null));
 
         // Der Fake-Extractor meldet alles ausser der Portionsgroesse als geschaetzt.
@@ -406,7 +414,7 @@ class FoodServiceTest {
     @Test
     void anEntryWithoutAMealLandsUnderSnacks() {
         // Sonst taeuchte es in keinem der vier Abschnitte auf.
-        DaySummary day = service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
+        DaySummary day = service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null));
         assertThat(day.entries()).singleElement()
                 .extracting(e -> e.meal()).isEqualTo(Meal.SNACK);
     }
@@ -415,14 +423,14 @@ class FoodServiceTest {
     void theChosenSectionBeatsTheAgentsGuess() {
         // Der Fake-Extractor tippt auf LUNCH; wer aus dem Fruehstuecks-Abschnitt
         // kommt, hat aber schon gesagt, was er meint.
-        assertThat(service.quickCapture(
+        assertThat(service.quickCapture(ME, 
                 new QuickCaptureRequest(TODAY, "ein Teller Bolognese", Meal.BREAKFAST)).meal())
                 .isEqualTo(Meal.BREAKFAST);
     }
 
     @Test
     void withoutASectionTheAgentsGuessIsUsed() {
-        assertThat(service.quickCapture(
+        assertThat(service.quickCapture(ME, 
                 new QuickCaptureRequest(TODAY, "mittags ein Teller Bolognese", null)).meal())
                 .isEqualTo(Meal.LUNCH);
     }
@@ -431,11 +439,11 @@ class FoodServiceTest {
     void aKnownDishKeepsItsStoredValues() {
         // "Banane" liegt mit gepflegten Werten in der Liste; der Agent liefert
         // denselben Namen, aber leicht andere Zahlen.
-        service.createDish(new DishRequest("Banane", 89.0, 1.1, 23.0, 0.3, 120.0));
+        service.createDish(ME, new DishRequest("Banane", 89.0, 1.1, 23.0, 0.3, 120.0));
         extractor.next = new ExtractedDish(
                 "banane", 105.0, 2.0, 27.0, 0.5, 120, 150.0, List.of(), List.of("kcalPer100g"), "geraten", Meal.SNACK);
 
-        QuickCapturePreview preview = service.quickCapture(
+        QuickCapturePreview preview = service.quickCapture(ME, 
                 new QuickCaptureRequest(TODAY, "eine Banane", null));
 
         // Vorgeschlagen werden die gespeicherten 89 kcal je 100 g, nicht die
@@ -458,7 +466,7 @@ class FoodServiceTest {
                 List.of("grams"),
                 "Naehrwerte laut original-wagner.de.", Meal.SNACK);
 
-        QuickCapturePreview preview = service.quickCapture(
+        QuickCapturePreview preview = service.quickCapture(ME, 
                 new QuickCaptureRequest(TODAY, "6 Wagner Piccolinis", null));
 
         assertThat(preview.valueSources())
@@ -469,8 +477,8 @@ class FoodServiceTest {
 
     @Test
     void quickCaptureGetsTheAlreadyKnownDishesAsContext() {
-        service.createDish(skyr());
-        service.quickCapture(new QuickCaptureRequest(TODAY, "ein Becher Skyr", null));
+        service.createDish(ME, skyr());
+        service.quickCapture(ME, new QuickCaptureRequest(TODAY, "ein Becher Skyr", null));
 
         assertThat(extractor.seenKnown).extracting(Dish::name).containsExactly("Skyr mit Beeren");
     }
@@ -482,10 +490,10 @@ class FoodServiceTest {
         // bei einer Eingabe von Hand. Ein Modell, das sich um eine Zehnerpotenz
         // vertut, kommt da nicht vorbei.
         extractor.next = new ExtractedDish("Unfug", 99_000, 7, 16, 4, 450, null, List.of(), List.of(), "", null);
-        QuickCapturePreview preview = service.quickCapture(
+        QuickCapturePreview preview = service.quickCapture(ME, 
                 new QuickCaptureRequest(TODAY, "irgendwas", null));
 
-        assertThatThrownBy(() -> service.addEntry(new NewEntryRequest(
+        assertThatThrownBy(() -> service.addEntry(ME, new NewEntryRequest(
                 TODAY, null,
                 new DishRequest(preview.name(), preview.per100g().kcal(),
                         preview.per100g().proteinG(), preview.per100g().carbsG(),
@@ -499,7 +507,7 @@ class FoodServiceTest {
     void quickCaptureWithPhotoNeedsNoTextAndCleansUp() {
         byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0, 16, 'J', 'F', 'I', 'F'};
         String base64 = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(jpeg);
-        QuickCapturePreview preview = service.quickCapture(
+        QuickCapturePreview preview = service.quickCapture(ME, 
                 new QuickCaptureRequest(TODAY, "", null, base64), "job-1");
         assertThat(preview.name()).isEqualTo("Spaghetti Bolognese");
         assertThat(extractor.seenText).isEmpty();
@@ -529,9 +537,9 @@ class FoodServiceTest {
 
     @Test
     void quickCaptureRejectsEmptyAndOverlongText() {
-        assertThatThrownBy(() -> service.quickCapture(new QuickCaptureRequest(TODAY, "   ", null)))
+        assertThatThrownBy(() -> service.quickCapture(ME, new QuickCaptureRequest(TODAY, "   ", null)))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> service.quickCapture(
+        assertThatThrownBy(() -> service.quickCapture(ME, 
                 new QuickCaptureRequest(TODAY, "x".repeat(1001), null)))
                 .isInstanceOf(ResponseStatusException.class);
     }
@@ -545,17 +553,50 @@ class FoodServiceTest {
 
     @Test
     void invalidInputIsRejected() {
-        assertThatThrownBy(() -> service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 0.0, null)))
+        assertThatThrownBy(() -> service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 0.0, null)))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> service.addEntry(new NewEntryRequest(TODAY, null, skyr(), 25_000.0, null)))
+        assertThatThrownBy(() -> service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 25_000.0, null)))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> service.addEntry(new NewEntryRequest(TODAY, null, null, 100.0, null)))
+        assertThatThrownBy(() -> service.addEntry(ME, new NewEntryRequest(TODAY, null, null, 100.0, null)))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> service.addEntry(new NewEntryRequest(TODAY, "nope", null, 100.0, null)))
+        assertThatThrownBy(() -> service.addEntry(ME, new NewEntryRequest(TODAY, "nope", null, 100.0, null)))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> service.createDish(new DishRequest("  ", 80.0, 8.0, 6.0, 1.3, null)))
+        assertThatThrownBy(() -> service.createDish(ME, new DishRequest("  ", 80.0, 8.0, 6.0, 1.3, null)))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> service.createDish(new DishRequest("X", -1.0, 8.0, 6.0, 1.3, null)))
+        assertThatThrownBy(() -> service.createDish(ME, new DishRequest("X", -1.0, 8.0, 6.0, 1.3, null)))
                 .isInstanceOf(ResponseStatusException.class);
+    }
+
+    // --- zwei Personen --------------------------------------------------------
+
+    /** Jede Person hat ihr eigenes Tagebuch - nichts sickert hinueber. */
+    @Test
+    void twoPeopleNeverSeeEachOthersDiary() {
+        service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.BREAKFAST));
+        service.updateTargets("torben", new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null));
+        service.addEntry("torben", new NewEntryRequest(TODAY, null,
+                new DishRequest("Döner", 215.0, 12.0, 20.0, 9.0, 400.0), 400.0, Meal.LUNCH));
+
+        assertThat(service.day(ME, TODAY).entries()).singleElement()
+                .satisfies(e -> assertThat(e.name()).isEqualTo("Skyr mit Beeren"));
+        assertThat(service.day("torben", TODAY).entries()).singleElement()
+                .satisfies(e -> assertThat(e.name()).isEqualTo("Döner"));
+        assertThat(service.dishes(ME)).extracting(Dish::name).containsExactly("Skyr mit Beeren");
+        assertThat(service.dishes("torben")).extracting(Dish::name).containsExactly("Döner");
+        assertThat(service.targets(ME).kcal()).isEqualTo(2300.0);
+        assertThat(service.targets("torben").kcal()).isEqualTo(2800.0);
+        assertThat(service.dailyTotals("torben", TODAY, TODAY)).singleElement()
+                .satisfies(t -> assertThat(t.consumed().kcal()).isEqualTo(860.0));
+    }
+
+    /**
+     * Die Schnellerfassung arbeitet mit den Gerichten und Zielen der Person, die
+     * fragt - sonst erkennte der Agent bei Torben Felix' Merkliste wieder.
+     */
+    @Test
+    void quickCaptureUsesTheAskingPersonsDishes() {
+        service.createDish(ME, new DishRequest("Banane", 89.0, 1.1, 23.0, 0.3, 120.0));
+        service.quickCapture("torben", new QuickCaptureRequest(TODAY, "eine Banane", null));
+        assertThat(extractor.seenKnown).isEmpty();
     }
 }

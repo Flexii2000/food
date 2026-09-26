@@ -3,9 +3,11 @@ package com.fherrmann.food.controller;
 import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
+import com.fherrmann.food.security.HealthUsers;
 import com.fherrmann.food.security.SecurityConfig;
 import com.fherrmann.food.service.FoodService;
 import com.fherrmann.food.push.DeviceTokens;
+import com.fherrmann.food.service.QuickCaptureAccess;
 import com.fherrmann.food.service.QuickCaptureJobs;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +27,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -34,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(FoodController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, HealthUsers.class})
 @TestPropertySource(properties = {
         "food.security.token=testtoken",
         "food.cors.allowed-origins=https://weight.fherrmann.com",
@@ -52,6 +56,9 @@ class FoodControllerTest {
 
     @MockitoBean
     private DeviceTokens devices;
+
+    @MockitoBean
+    private QuickCaptureAccess quickCaptureAccess;
 
     private MockMvc mockMvc;
 
@@ -88,7 +95,7 @@ class FoodControllerTest {
 
     @Test
     void thePrivateModeCookieOfFherrmannComIsAccepted() throws Exception {
-        when(service.day(any())).thenReturn(emptyDay());
+        when(service.day(anyString(), any())).thenReturn(emptyDay());
         mockMvc.perform(get("/api/food/day").cookie(new Cookie("fh_private", "testtoken")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.targets.kcal").value(2300.0));
@@ -97,7 +104,7 @@ class FoodControllerTest {
     @Test
     @WithMockUser
     void dayReturnsTargetsAndTotals() throws Exception {
-        when(service.day(LocalDate.of(2026, 8, 31))).thenReturn(emptyDay());
+        when(service.day(anyString(), eq(LocalDate.of(2026, 8, 31)))).thenReturn(emptyDay());
         mockMvc.perform(get("/api/food/day").param("date", "2026-08-31"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.date").value("2026-08-31"))
@@ -107,7 +114,7 @@ class FoodControllerTest {
     @Test
     @WithMockUser
     void entriesEndpointRejectsAMalformedBody() throws Exception {
-        when(service.addEntry(any())).thenThrow(
+        when(service.addEntry(anyString(), any())).thenThrow(
                 new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.BAD_REQUEST, "grams is required"));
         mockMvc.perform(post("/api/food/entries")
@@ -118,7 +125,7 @@ class FoodControllerTest {
     @Test
     @WithMockUser
     void dailyIsReadableFromTheWeightTrackersOrigin() throws Exception {
-        when(service.dailyTotals(any(), any())).thenReturn(List.of());
+        when(service.dailyTotals(anyString(), any(), any())).thenReturn(List.of());
         // Der kcal-Overlay der Weight-App liest diesen Endpunkt cross-site; ohne die
         // beiden Header (und mit Credentials nur bei konkreter Origin) blockt der
         // Browser die Antwort.
@@ -133,7 +140,7 @@ class FoodControllerTest {
     @Test
     @WithMockUser
     void dailyAveragesAreReadableFromTheWeightTrackersOrigin() throws Exception {
-        when(service.dailyAverages(any(), any())).thenReturn(List.of(
+        when(service.dailyAverages(anyString(), any(), any())).thenReturn(List.of(
                 new com.fherrmann.food.dto.DayAverage(java.time.LocalDate.of(2026, 8, 30), 2100, 6, false)));
         mockMvc.perform(get("/api/food/daily-average")
                         .param("from", "2026-08-01").param("to", "2026-08-31")
@@ -149,7 +156,7 @@ class FoodControllerTest {
     @Test
     @WithMockUser
     void targetsAreReadableFromTheWeightTrackersOrigin() throws Exception {
-        when(service.targets()).thenReturn(new Nutrients(2300, 200, 235.5, 62));
+        when(service.targets(anyString())).thenReturn(new Nutrients(2300, 200, 235.5, 62));
         // Die Weight-App zeichnet die kcal-Ziellinie in ihre Charts und braucht
         // dafuer denselben Wert, gegen den hier gerechnet wird.
         mockMvc.perform(get("/api/food/targets").header("Origin", "https://weight.fherrmann.com"))
@@ -160,7 +167,7 @@ class FoodControllerTest {
     @Test
     @WithMockUser
     void dayIsNotReadableCrossSite() throws Exception {
-        when(service.day(any())).thenReturn(emptyDay());
+        when(service.day(anyString(), any())).thenReturn(emptyDay());
         // Nur /daily und /status sind fuer andere Origins freigegeben - der Rest der
         // API bleibt auf food.fherrmann.com beschraenkt.
         mockMvc.perform(get("/api/food/day").header("Origin", "https://weight.fherrmann.com"))

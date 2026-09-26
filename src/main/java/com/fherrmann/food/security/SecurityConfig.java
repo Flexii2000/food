@@ -16,26 +16,28 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 /**
- * Protects the whole application (UI + API) with the shared private-mode cookie of
- * fherrmann.com - see {@link PrivateCookie}.
+ * Protects the whole application (UI + API) with long-lived tokens instead of a login.
  *
- * <p>nginx already refuses requests without that cookie before they ever reach here
- * (see {@code deploy/nginx-food.fherrmann.com.conf}). Checking it a second time inside
- * the app is not redundant: it keeps the app from being wide open to anything on the
- * host that can reach {@code 127.0.0.1:48180} directly, and it means a mistake in the
- * server block cannot quietly expose a food diary.
+ * <p>Originally only the shared private-mode cookie of fherrmann.com ({@link PrivateCookie}),
+ * checked by nginx in front and here a second time. Since 2026-09 further people have their
+ * own token ({@code health.tokens}, shared with the weight tracker) - as a cookie or as
+ * {@code Authorization: Bearer} from the Android app - and each of them sees only their own
+ * diary. nginx no longer gates the domain, because it cannot tell a valid personal token
+ * from an invalid one; this filter chain is now the only gate, exactly like the shopping
+ * list's. See {@link PrivateCookieAuthFilter} and {@link HealthUsers}.
  *
- * <p>There is deliberately no login, no registration and no {@code /setup} endpoint
- * here: the cookie is issued centrally on fherrmann.com, and duplicating that would
- * mean a second place able to mint access.
+ * <p>{@code /setup} only ever issues a personal token's cookie. The private-mode cookie
+ * stays issued centrally on fherrmann.com - a second place able to mint that one would
+ * open far more than this app.
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     @Bean
-    public PrivateCookieAuthFilter privateCookieAuthFilter(@Value("${food.security.token}") String token) {
-        return new PrivateCookieAuthFilter(token);
+    public PrivateCookieAuthFilter privateCookieAuthFilter(
+            @Value("${food.security.token}") String token, HealthUsers users) {
+        return new PrivateCookieAuthFilter(token, users);
     }
 
     /**
@@ -67,7 +69,9 @@ public class SecurityConfig {
             PrivateCookieAuthFilter privateCookieAuthFilter,
             CorsConfigurationSource corsConfigurationSource) throws Exception {
         http
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/setup").permitAll()
+                        .anyRequest().authenticated())
                 .addFilterBefore(privateCookieAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -91,9 +95,10 @@ public class SecurityConfig {
                         response.sendError(HttpServletResponse.SC_FORBIDDEN);
                     }
                 }))
-                // Auth is a single shared-secret token in a SameSite=Lax cookie, not
-                // forms/sessions. Lax withholds it from cross-site requests, which covers
-                // the state-changing endpoints, so CSRF protection is not needed on top.
+                // Auth is a token in a SameSite=Lax cookie or a Bearer header, not
+                // forms/sessions. Lax withholds the cookie from cross-site requests, which
+                // covers the state-changing endpoints, and no browser attaches a Bearer
+                // header on its own, so CSRF protection is not needed on top.
                 .csrf(csrf -> csrf.disable());
         return http.build();
     }

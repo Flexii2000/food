@@ -2,11 +2,17 @@ package com.fherrmann.food;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.context.annotation.Bean;
 
 import java.time.Clock;
 
+/**
+ * Die Zeitsteuerung braucht genau ein Bauteil: {@code ReleaseAnnouncer}, der nach
+ * neuen Android-Versionen schaut.
+ */
 @SpringBootApplication
+@EnableScheduling
 public class FoodApplication {
 
     public static void main(String[] args) {

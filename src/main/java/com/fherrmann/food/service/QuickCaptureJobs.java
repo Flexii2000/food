@@ -27,6 +27,10 @@ import java.util.concurrent.Executors;
  * sich anstellen, statt zwei Sessions parallel zu bezahlen. Ein Mensch traegt
  * ohnehin nacheinander ein.
  *
+ * <p>Jeder Auftrag gehoert der Person, die ihn gestartet hat: nur sie kann seinen
+ * Stand abfragen, und nur ihre Geraete bekommen die Benachrichtigung. Die
+ * Warteschlange ist trotzdem eine fuer alle - es bleibt dasselbe Kontingent.
+ *
  * <p>Die Auftraege liegen nur im Speicher. Ein Neustart verliert sie - die
  * Oberflaeche bekommt dann ein 404 und sagt das auch, statt endlos zu warten.
  * Fuer eine Auswertung, die eine Minute dauert, waere alles andere
@@ -53,22 +57,26 @@ public class QuickCaptureJobs {
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
 
     private final PushNotifier notifier;
+    private final QuickCaptureAccess access;
 
-    public QuickCaptureJobs(FoodService service, Clock clock, PushNotifier notifier) {
+    public QuickCaptureJobs(FoodService service, Clock clock, PushNotifier notifier, QuickCaptureAccess access) {
         this.service = service;
         this.clock = clock;
         this.notifier = notifier;
+        this.access = access;
     }
 
     /** Ein Auftrag samt Ergebnis. Veraenderliche Felder, weil der Thread sie nachtraegt. */
     private static final class Job {
+        private final String owner;
         private final Instant startedAt;
         private volatile String status = QuickCaptureJob.RUNNING;
         private volatile QuickCapturePreview preview;
         private volatile String error;
         private volatile Instant finishedAt;
 
-        private Job(Instant startedAt) {
+        private Job(String owner, Instant startedAt) {
+            this.owner = owner;
             this.startedAt = startedAt;
         }
     }
@@ -78,17 +86,21 @@ public class QuickCaptureJobs {
      * schon geprueft - ein Tippfehler soll als 400 ankommen und nicht erst eine
      * Minute spaeter als fehlgeschlagener Auftrag.
      */
-    public QuickCaptureJob start(QuickCaptureRequest request) {
+    public QuickCaptureJob start(String user, QuickCaptureRequest request) {
+        if (!access.allows(user)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Die Schnellerfassung ist für dich nicht freigeschaltet.");
+        }
         service.validateQuickCapture(request);
         purge();
 
         String id = UUID.randomUUID().toString();
-        Job job = new Job(clock.instant());
+        Job job = new Job(user, clock.instant());
         jobs.put(id, job);
 
         executor.submit(() -> {
             try {
-                job.preview = service.quickCapture(request, id);
+                job.preview = service.quickCapture(user, request, id);
                 job.status = QuickCaptureJob.DONE;
             } catch (ResponseStatusException e) {
                 job.error = e.getReason() == null ? e.getMessage() : e.getReason();
@@ -101,17 +113,20 @@ public class QuickCaptureJobs {
                 job.finishedAt = clock.instant();
                 // Erst nachdem der Stand steht: die Benachrichtigung fuehrt in
                 // die App, und die soll dort ein fertiges Ergebnis vorfinden.
-                notifier.quickCaptureFinished(job.status, job.preview, job.error);
+                notifier.quickCaptureFinished(user, id, job.status, job.preview, job.error);
             }
         });
 
         return view(id, job);
     }
 
-    /** Der Stand eines Auftrags. */
-    public QuickCaptureJob status(String id) {
+    /**
+     * Der Stand eines Auftrags. Der Auftrag einer anderen Person sieht aus wie ein
+     * unbekannter - dass es ihn gibt, geht niemanden sonst etwas an.
+     */
+    public QuickCaptureJob status(String user, String id) {
         Job job = jobs.get(id);
-        if (job == null) {
+        if (job == null || !job.owner.equals(user)) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "Diese Auswertung gibt es nicht mehr - lief der Server zwischendurch neu?");

@@ -308,18 +308,24 @@ sonst aus, statt einen Knopf anzubieten, der beim Drücken scheitert.
 
 Die Schnellerfassung dauert bis zu einer Minute. Die App muss dafür nicht offen
 bleiben: ist ein Auftrag fertig, schickt der Server eine Benachrichtigung an
-alle angemeldeten Geräte.
+die angemeldeten Geräte **der Person, die ihn gestartet hat** — iPhones über
+APNs, Android-Handys über Firebase Cloud Messaging.
 
 **Warum das nicht in der App allein geht:** legt man das Handy weg, friert iOS
 sie nach etwa dreißig Sekunden ein. Nur der Server läuft weiter, und nur er
 weiß, wann die Auswertung fertig ist.
 
-**Anmeldung:** `POST /api/food/devices` mit `{"token": "…"}`. Die App ruft das
-bei jedem Start auf, weil iOS die Kennung gelegentlich austauscht. Gespeichert
-wird in `data/devices.json` — bewusst neben `food.json` und nicht darin: das
-Tagebuch ist der Bestand, den man aufhebt, Gerätekennungen sind flüchtig.
-Lehnt Apple eine ab (410 oder `BadDeviceToken`), fliegt sie raus; erst dann
-weiß man sicher, dass sie tot ist.
+**Anmeldung:** `POST /api/food/devices` mit `{"token": "…"}` (iPhone) bzw.
+`{"token": "…", "platform": "android"}`. Die Apps rufen das bei jedem Start
+auf, weil iOS und Firebase die Kennung gelegentlich austauschen. Gespeichert
+wird je Person in `devices.json` (APNs) und `devices-android.json` (Firebase) —
+bei der Eigentümerin unter `data/`, bei allen anderen unter
+`data/users/<name>/`, bewusst neben `food.json` und nicht darin: das Tagebuch
+ist der Bestand, den man aufhebt, Gerätekennungen sind flüchtig. Meldet sich
+eine Kennung für eine andere Person an, verschwindet sie bei der ersten — ein
+umgewidmetes Handy bekäme sonst weiter fremde Benachrichtigungen. Lehnt der
+Dienst eine ab (APNs: 410 oder `BadDeviceToken`; Firebase: `UNREGISTERED`),
+fliegt sie raus; erst dann weiß man sicher, dass sie tot ist.
 
 **Ohne Bibliothek.** APNs ist ein HTTP/2-POST mit einem signierten Token im
 Kopf, und beides kann das JDK. Eine Abhängigkeit für dreißig Zeilen wäre mehr
@@ -356,6 +362,30 @@ APNS_HOST=https://api.sandbox.push.apple.com
 
 Die `.p8` gehört **nicht** ins Repo und lässt sich im Portal nur ein einziges
 Mal herunterladen.
+
+### Android: Firebase Cloud Messaging
+
+Ebenfalls ohne SDK (`FcmClient`): die HTTP-v1-Schnittstelle ist ein POST mit
+einem Bearer-Token, und das Token holt man mit einem RS256-signierten JWT aus
+dem Dienstkonto. Geschickt werden **reine Datennachrichten** mit Priorität
+`high`; die App baut die Benachrichtigung selbst:
+
+```
+{kind: "quick-capture", jobId, status: "done"|"failed", title, body}
+{kind: "app-update", versionCode, versionName, title, body}
+```
+
+Die Dienstkonto-Datei kommt aus der Firebase-Konsole (Projekteinstellungen →
+Dienstkonten → Neuen privaten Schlüssel generieren), liegt als
+`/etc/fcm-healthy.json` (`root:food`, 640) und steht in `/etc/food.env` als
+`FCM_SERVICE_ACCOUNT_FILE`. `deploy/setup-health-users.sh --fcm-key <datei>`
+legt sie an. **Ohne Datei passiert nichts** — die Android-App fragt eine
+laufende Schnellerfassung weiter selbst nach, solange sie offen ist.
+
+Als tot gilt eine Kennung nur, wenn Firebase das ausdrücklich sagt
+(`UNREGISTERED`, `SENDER_ID_MISMATCH`, „registration token" bei 400). Ein 404
+allein könnte auch ein falsch eingetragenes Projekt sein, und dann flögen alle
+Kennungen raus.
 
 ## Symbol
 
@@ -398,6 +428,13 @@ Alle Daten liegen in **`data/food.json`** — Tagesziele, Gerichte und Einträge
 Die Datei muss nicht existieren: fehlt sie, startet die App mit den Default-Zielen
 und leerer Liste. Sie liegt deshalb auch nicht im Repo.
 
+**Eine Datei je Person.** `data/food.json` gehört der Eigentümerin
+(`health.owner`, Felix) und bleibt, wo sie immer lag. Jede weitere Person
+(siehe [Zugriffsschutz](#zugriffsschutz)) hat ihr eigenes Tagebuch unter
+`data/users/<name>/food.json` — eigene Ziele, eigene Gerichteliste, eigene
+Einträge; eine neue Person startet mit den Default-Zielen. Bewusst kein Umzug
+der vorhandenen Datei: ein Rollback auf ein älteres Jar findet sie weiter.
+
 ### Default-Tagesziele
 
 2300 kcal, 200 g Eiweiß, 62 g Fett — die Kohlenhydrate füllen den Rest exakt auf:
@@ -430,8 +467,15 @@ vier Zahlen noch zusammenpassen.
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne — liest die Weight-App        |
 | GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
-| GET     | `/api/food/features`      | welche optionalen Funktionen der Server anbietet         |
-| POST    | `/api/food/quick-capture` | Freitext und/oder Foto → **Vorschlag** (schreibt nichts)  |
+| GET     | `/api/food/features`      | `{quickCapture, me}` — was dieser Person angeboten wird, und wer sie ist |
+| POST    | `/api/food/quick-capture` | Freitext und/oder Foto → **Vorschlag** (schreibt nichts); 403, wenn für diese Person nicht freigeschaltet |
+| GET     | `/api/food/quick-capture/{id}` | Stand eines Auftrags; der einer anderen Person ist 404 |
+| POST    | `/api/food/devices`       | Push-Kennung anmelden, `{token, platform?}`             |
+| GET     | `/api/app/android`        | `{versionCode, versionName, sizeBytes, sha256}` der veröffentlichten Android-App, 404 ohne |
+| GET     | `/api/app/android/apk`    | die APK selbst                                           |
+| GET     | `/setup?token=`           | Browser mit einem persönlichen Token einrichten (setzt `health_token`) |
+
+Alle Endpunkte arbeiten auf dem Tagebuch der Person zum Token.
 
 POST-Body für einen Eintrag, entweder mit bekanntem Gericht:
 
@@ -483,30 +527,44 @@ Falschaussage.
 
 ## Zugriffsschutz
 
-Die App liegt im **privaten Bereich von fherrmann.com** und stellt selbst keinen
-Zugang aus. Maßgeblich ist der Cookie `fh_private`, der einmalig pro Gerät über
+Kein Login, keine Registrierung — langlebige Token, geprüft von der App selbst
+(`SecurityConfig` / `PrivateCookieAuthFilter`). Drei Wege, in dieser
+Reihenfolge; der Filter setzt den Namen der Person als Principal, und jeder
+Endpunkt arbeitet auf ihrem Tagebuch:
 
-```
-https://fherrmann.com/setup?token=<secret>
-```
+| Weg | Wer | Person |
+|---|---|---|
+| `Authorization: Bearer <token>` | die Android-App | die zum Token |
+| Cookie `health_token` | ein Browser, eingerichtet über `/setup?token=…` | die zum Token |
+| Cookie `fh_private` | Felix' Browser, die iPhone-App, Habits, das Statusboard | die Eigentümerin |
 
-gesetzt wird — auf `Domain=.fherrmann.com`, gilt also auch hier. Der Token steht
-an genau einer Stelle auf dem Server: `/etc/nginx/conf.d/private-mode.conf`.
+**Persönliche Token** (seit 2026-09): je Person einer, in `/etc/food.env` als
+`HEALTH_TOKENS=torben:…` — **wortgleich** auch in `/etc/health-viz.env`, denn
+derselbe Token öffnet den Weight Tracker. `/setup` setzt ihn als Cookie für die
+ganze Domain (`Domain=fherrmann.com`), also öffnet ein Link beide Dienste.
+Angelegt und verteilt werden die Token von `deploy/setup-health-users.sh`, das
+am Ende die Setup-Links ausgibt. Kommt ein persönlicher Token zusammen mit
+`fh_private` an, gewinnt der persönliche — sonst ließe sich in Felix' Browser
+nie prüfen, was eine andere Person sieht.
 
-Geprüft wird er **zweimal**:
+**Der Privat-Cookie** `fh_private` ist der von fherrmann.com, einmalig pro
+Gerät gesetzt über `https://fherrmann.com/setup?token=<secret>` auf
+`Domain=.fherrmann.com`. Der Token steht an genau einer Stelle auf dem Server
+(`/etc/nginx/conf.d/private-mode.conf`); `deploy/setup-food.sh` liest ihn von
+dort nach `FH_PRIVATE_TOKEN` in `/etc/food.env`. **Diese App stellt ihn nie
+aus** — er öffnet weit mehr als sie; `/setup` hier nimmt nur persönliche Token.
 
-1. **nginx** weist Anfragen ohne gültigen Cookie ab, bevor sie die App erreichen
-   (Weiterleitung auf `fherrmann.com`, wo `/setup` liegt).
-2. **Die App selbst** (`SecurityConfig` / `PrivateCookieAuthFilter`) prüft
-   denselben Cookie noch einmal gegen `FH_PRIVATE_TOKEN` aus `/etc/food.env`.
+**Kein Gate mehr in nginx.** Bis 2026-09 hing die ganze Domain zusätzlich
+hinter `$fh_private` in nginx. Mit persönlichen Token geht das nicht mehr:
+nginx kann einen gültigen nicht von einem ungültigen unterscheiden und sperrte
+genau die aus, für die es sie gibt. Die App ist jetzt die einzige Schranke —
+wie bei der Einkaufsliste. Sie lauscht nur auf `127.0.0.1` und antwortet ohne
+gültigen Token mit 403.
 
-Der zweite Schritt ist nicht überflüssig: die App lauscht zwar nur auf
-`127.0.0.1`, aber ohne ihn wäre sie für alles auf dem Host offen, was diesen
-Port erreicht — und ein Fehler im nginx-Block würde ein Ernährungstagebuch
-stillschweigend freigeben.
-
-`deploy/setup-food.sh` liest den Token direkt aus der nginx-Konfiguration, damit
-Cookie und App-Prüfung nicht auseinanderlaufen können.
+**Schnellerfassung je Person:** jede Auswertung läuft auf Felix' Claude-Login,
+deshalb ist sie schaltbar (`FOOD_QUICK_CAPTURE=felix,torben`, `*` = alle, leer
+= nur die Eigentümerin). `/api/food/features` sagt der Oberfläche, ob sie den
+Knopf zeigt.
 
 ### CORS
 
@@ -533,6 +591,10 @@ der Browser-Konsole:
 document.cookie = 'fh_private=changeme-local-token; path=/';
 ```
 
+Eine zweite Person lokal: `HEALTH_TOKENS=torben:0123456789abcdef0123456789abcdef
+./gradlew bootRun`, dann <http://localhost:48180/setup?token=0123456789abcdef0123456789abcdef>
+oder `curl -H 'Authorization: Bearer 0123…'`.
+
 ## Tests
 
 ```bash
@@ -544,6 +606,14 @@ document.cookie = 'fh_private=changeme-local-token; path=/';
 - **`FoodRepositoryTest`** — fehlende Datei ⇒ Defaults, Round-Trip.
 - **`FoodControllerTest`** — Cookie-Prüfung (403 ohne/mit falschem Cookie, 200 mit
   richtigem) und die CORS-Header genau auf den beiden freigegebenen Endpunkten.
+- **`FoodAccessTest`** — mit echtem Filter: welcher Token welche Person meint,
+  dass sie nur ihr eigenes Tagebuch sieht, `/setup`, `features` je Person.
+- **`QuickCaptureJobsTest`** — Aufträge gehören der Person, die sie startet;
+  ohne Freischaltung 403, bevor etwas läuft.
+- **`DeviceTokensTest`**, **`FcmClientTest`** (gegen einen lokalen Server, der
+  Google spielt: signiertes JWT, Datennachricht, tote Kennungen),
+  **`AndroidReleaseTest`** (Prüfsumme, halbe Veröffentlichung, Ankündigung
+  genau einmal).
 - **`ErrorStatusIT`** — läuft gegen einen echten Server statt gegen MockMvc, und
   das ist der Punkt: löst ein Endpunkt eine Ausnahme aus, stellt der Container
   intern nach `/error` zu. Dieser zweite Durchlauf ging ursprünglich an der
@@ -563,6 +633,12 @@ In `src/main/resources/application.properties`:
 | `server.address`            | `127.0.0.1`                                         | Lauscht nur lokal                   |
 | `food.security.token`       | `changeme-local-token` (env: `FH_PRIVATE_TOKEN`)    | Der geteilte Privat-Cookie          |
 | `food.cors.allowed-origins` | `weight.` + `status.fherrmann.com`                  | Origins für `/daily` und `/status`  |
+| `health.owner`              | `felix` (env: `HEALTH_OWNER`)                       | Wem `fh_private` und `data/food.json` gehören |
+| `health.tokens`             | leer (env: `HEALTH_TOKENS`)                         | Weitere Personen, `name:token,…`    |
+| `health.cookie-domain`      | `fherrmann.com` (env: `HEALTH_COOKIE_DOMAIN`)       | Domain des `health_token`-Cookies   |
+| `food.agent.people`         | leer = Eigentümerin (env: `FOOD_QUICK_CAPTURE`)     | Wer die Schnellerfassung benutzen darf |
+| `food.fcm.service-account-file` | leer (env: `FCM_SERVICE_ACCOUNT_FILE`)          | Firebase-Dienstkonto für Push an Android |
+| `food.android.dir`          | leer (env: `FOOD_ANDROID_DIR`)                      | Verzeichnis mit `healthy.apk` + `latest.json` |
 
 ## Architektur
 
@@ -572,8 +648,11 @@ com.fherrmann.food
   dto/         DaySummary, DayTotal, StatusInfo, …    (API-Transferobjekte)
   repository/  FoodRepository                         (JSON-I/O)
   service/     FoodService                            (Regeln, kein HTTP)
-  controller/  FoodController                         (HTTP)
-  security/    SecurityConfig, PrivateCookieAuthFilter (geteilter Cookie + CORS)
+  controller/  FoodController, AppController           (HTTP)
+  security/    SecurityConfig, PrivateCookieAuthFilter, HealthUsers, UserFiles,
+               SetupController                         (wer ist wer, wessen Dateien, CORS)
+  push/        ApnsClient, FcmClient, DeviceTokens, PushNotifier
+  release/     AndroidRelease, ReleaseAnnouncer        (Android-App ausliefern und ankündigen)
 
 deploy/agent/  Vorlagen für das Agent-Arbeitsverzeichnis (siehe Schnellerfassung)
 ```
@@ -581,7 +660,7 @@ deploy/agent/  Vorlagen für das Agent-Arbeitsverzeichnis (siehe Schnellerfassun
 ## Deployment
 
 ```
-Internet (443) → Lightsail → WireGuard → Homeserver:443 (nginx, TLS, fh_private-Gate)
+Internet (443) → Lightsail → WireGuard → Homeserver:443 (nginx, TLS)
                                                  │
                                                  ▼
                                        Homeserver:48180 (Spring Boot, nur localhost)
@@ -592,7 +671,9 @@ Internet (443) → Lightsail → WireGuard → Homeserver:443 (nginx, TLS, fh_pr
 | Repo/Build | `~/services/food` |
 | Laufzeit | `/opt/food` (`app.jar` + `data/`) |
 | Dienst | `food.service`, User `food` |
-| Token | `/etc/food.env` (aus `/etc/nginx/conf.d/private-mode.conf`) |
+| Token | `/etc/food.env` — `FH_PRIVATE_TOKEN` (aus `/etc/nginx/conf.d/private-mode.conf`), `HEALTH_TOKENS` (wortgleich in `/etc/health-viz.env`) |
+| Android-App | `/opt/healthy-android` (`healthy.apk` + `latest.json`, gehört `flexii`) |
+| Firebase | `/etc/fcm-healthy.json` (`root:food`, 640) |
 | nginx | `/etc/nginx/sites-available/food.fherrmann.com` |
 
 **Erstinstallation** — legt User, Verzeichnisse, Token-Datei, systemd-Unit,
@@ -615,3 +696,14 @@ ssh -t HeimServerRemote '~/scripts/update-food.sh'
 
 Beide Skripte liegen im Repo unter `deploy/` und werden von dort nach
 `~/scripts/` kopiert. `/opt/food/data/` fasst keines davon an.
+
+**Persönliche Zugänge** (Token für Kalorienzähler und Weight Tracker,
+Schnellerfassung, Verzeichnis der Android-App, Firebase, nginx ohne Gate) —
+idempotent, gibt am Ende die Setup-Links aus. **Erst** beide Dienste
+aktualisieren, dann:
+
+```bash
+ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh torben'
+# mit Push an Android, Dienstkonto vorher nach ~ kopiert:
+ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --fcm-key ~/fcm-healthy.json torben'
+```

@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestPropertySource(properties = {
         "food.security.token=testtoken",
         "food.data-file=build/tmp/error-status-it/food.json",
+        "health.tokens=torben:0123456789abcdef0123456789abcdef",
 })
 class ErrorStatusIT {
 
@@ -121,5 +122,29 @@ class ErrorStatusIT {
                 .uri(URI.create("http://localhost:" + port + "/api/food/day")).build(),
                 HttpResponse.BodyHandlers.ofString()).statusCode();
         assertThat(code).isEqualTo(403);
+    }
+
+    /** Mit Bearer-Token (die Android-App) muss der Fehlerstatus genauso durchkommen. */
+    @Test
+    void aBadRequestWithABearerTokenStaysABadRequest() throws Exception {
+        HttpResponse<String> response = http.send(HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/api/food/entries"))
+                        .header("Authorization", "Bearer 0123456789abcdef0123456789abcdef")
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(400);
+    }
+
+    /** Ohne veroeffentlichte App ein ehrliches 404 - nicht 403, nicht 500. */
+    @Test
+    void withoutAPublishedAppTheReleaseIsNotFound() throws Exception {
+        HttpResponse<String> response = http.send(HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:" + port + "/api/app/android"))
+                        .header("Authorization", "Bearer 0123456789abcdef0123456789abcdef")
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(404);
     }
 }
