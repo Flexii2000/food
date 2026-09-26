@@ -1,0 +1,34 @@
+# Erlaubt dem Dienstnutzer der Food-App ein zweites Kommando als flexii: das
+# Wrapper-Skript, das fuer die Feature Requests aus einem Wunsch eine Story Card
+# entwirft. Das Gegenstueck zu 20-food-agent (Schnellerfassung), mit eigenem
+# Agent-Verzeichnis.
+#
+# Warum das noetig ist: die Claude-Code-Session braucht Binary und Anmeldedaten
+# unter /home/flexii, und das Verzeichnis ist 750 - der Systemnutzer `food` kann
+# dort nicht einmal hineinsehen. Die App als flexii laufen zu lassen waere die
+# Alternative gewesen; flexii ist aber in `docker` und `lxd` und damit faktisch
+# root-aequivalent. Eine einzelne, benannte Ausnahme ist das kleinere Uebel.
+#
+# Was ein Angreifer damit NICHT kann: das Skript legt seine Aufrufparameter
+# selbst fest, kontrolliert wird nur die Standardeingabe - der Wunsch in eigenen
+# Worten. Die Session hat kein einziges Werkzeug (--tools "" im Skript, dazu die
+# deny-Liste in .claude/settings.json), und das Agent-Verzeichnis gehoert flexii
+# und ist fuer `food` nicht beschreibbar.
+#
+# Installation ueber deploy/setup-feature-requests.sh; von Hand:
+#   sudo visudo -c -f deploy/sudoers-story-agent   # erst pruefen!
+#   sudo install -o root -g root -m 440 deploy/sudoers-story-agent \
+#        /etc/sudoers.d/21-story-agent
+
+# Kein Pseudo-Terminal fuer dieses Kommando: Prompt und Antwort laufen ueber
+# Standardein- und -ausgabe, und ein tty wuerde die Eingabe zurueckspiegeln und
+# Zeilenenden umschreiben. Die globale use_pty-Vorgabe bleibt fuer alles andere.
+Defaults!/home/flexii/services/story-agent/run-agent.sh !use_pty
+
+# Das Modell laesst sich ueber STORY_AGENT_MODEL in /etc/food.env umstellen. sudo
+# setzt die Umgebung sonst zurueck (env_reset), und die Variable kaeme im Skript
+# nie an. Genau diese eine darf durch; das Skript nimmt sie nur in der Form eines
+# Modellnamens an.
+Defaults!/home/flexii/services/story-agent/run-agent.sh env_keep += "STORY_AGENT_MODEL"
+
+food ALL=(flexii) NOPASSWD: /home/flexii/services/story-agent/run-agent.sh

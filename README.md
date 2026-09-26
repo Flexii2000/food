@@ -338,6 +338,107 @@ unter `/home/flexii` (Modus 750), und die systemd-Unit setzt
 Weiteres starten**. `setup-food.sh` prüft das und lässt die Schnellerfassung
 sonst aus, statt einen Knopf anzubieten, der beim Drücken scheitert.
 
+## Feature Requests
+
+Unter <https://fherrmann.com/feature-requests/> schreibt Torben (oder jede andere
+Person mit Token) einen Wunsch in eigenen Worten auf. Claude entwirft daraus eine
+**Story Card** — Titel, User Story („Als … möchte ich …, damit …") und
+Akzeptanzkriterien —, die Person **bearbeitet jedes Feld und gibt sie frei**, und
+beim Absenden entsteht in Felix' To-Do eine Unteraufgabe. Die Liste zeigt jeder
+Person ihre Anfragen mit dem Stand **offen** oder **erledigt**; erledigt ist eine
+Anfrage, sobald Felix ihre Unteraufgabe abhakt.
+
+| | |
+|---|---|
+| Seite | `/feature-requests/` (Liste), `/feature-requests/neu`, `/feature-requests/<id>` (Kartenseite, dorthin zeigt der Link im To-Do). Statisch unter `static/feature-requests/`, die Adressen liefert `FeatureRequestPage` |
+| Wer was sieht | die Eigentümerin alle Anfragen, jede andere Person ihre eigenen; eine fremde Karte ist 404, als gäbe es sie nicht |
+| Anmeldung | wie überall hier (`health_token`, Bearer, `fh_private`), **kein** `permitAll` — ohne Token sind auch Seite und Dateien 403 |
+| Ablage | `data/feature-requests.json`, eine Datei für alle, jede Anfrage mit `author`. Atomar geschrieben (daneben schreiben, umbenennen) |
+| Originaltext | bleibt neben der Karte stehen, damit sich die Karte am Wortlaut messen lässt |
+
+nginx reicht `location /feature-requests/` in `sites-available/fherrmann.com`
+unverändert an `:48180` weiter, **ohne Privat-Gate** — Torben hat keinen
+`fh_private`, sondern seinen `health_token`, und der gilt für
+`Domain=fherrmann.com`. Die Seite verweist nur relativ auf ihre Dateien, denn
+unter fherrmann.com gehört die Wurzel der Landing Page.
+
+### Claude entwirft, die Person gibt frei
+
+Ein **zweiter Agent** neben der Schnellerfassung, mit eigenem Verzeichnis:
+
+```
+~/services/story-agent/        (Vorlage: deploy/story-agent/)
+  CLAUDE.md                    Auftrag, Ausgabeformat, Produktkontext
+  .claude/settings.json        Rechte: jedes Werkzeug verboten
+  run-agent.sh                 startet claude -p, Prompt über stdin
+```
+
+Nicht der Agent der Schnellerfassung: dessen `CLAUDE.md` ist ganz auf Mahlzeiten
+zugeschnitten, und er darf im Netz nachschlagen. Dieser darf **nichts** — keine
+Websuche, keine Datei, kein Kommando. `--tools ""` im Skript nimmt der Session
+jedes Werkzeug schon beim Start, die deny-Liste in `settings.json` ist die zweite
+Schranke dahinter. Der Wunsch geht in `<wunsch>`-Klammern hinein und ist in
+`CLAUDE.md` als Zitat markiert, nie als Anweisung; steht im Text selbst ein
+`</wunsch>`, wird es vorher entschärft.
+
+Wie die Schnellerfassung **ein Auftrag im Hintergrund**: der Start antwortet
+sofort mit einer Auftragsnummer, die Seite fragt alle anderthalb Sekunden nach
+(`running` → `done` oder `failed`), Zeitlimit 120 s. Ein Arbeitsthread für alle,
+höchstens drei offene Entwürfe je Person. Scheitert der Entwurf (Login
+abgelaufen, Zeitlimit, unlesbare Antwort), kommt eine deutsche Meldung, und der
+Editor öffnet leer mit dem eigenen Text darunter. Ohne `FOOD_STORY_AGENT_COMMAND`
+gibt es gar keinen Entwurf: der Knopf heißt dann „Weiter", und die Person schreibt
+die Karte selbst — die Funktion geht trotzdem.
+
+Entwerfen darf, wer die Seite sieht; es läuft auf Felix' Claude-Login. Das Modell
+steht in `STORY_AGENT_MODEL` (Vorgabe `claude-sonnet-5`) und lässt sich in
+`/etc/food.env` umstellen — sudo reicht genau diese Variable an das Skript durch
+(`deploy/sudoers-story-agent`), das sie nur in der Form eines Modellnamens annimmt.
+
+### Die Unteraufgabe im To-Do
+
+Beim Absenden wird die Anfrage **zuerst gespeichert**, erst dann legt
+`FeatureRequestTodos` im To-Do an:
+
+1. den Bereich **„Server"** — fehlt er, wird er angelegt (Groß- und Kleinschreibung
+   egal, wie im To-Do selbst);
+2. darin die offene Aufgabe **„Healthy"** der obersten Ebene — fehlt sie oder ist
+   die vorhandene erledigt, eine neue;
+3. darunter die Unteraufgabe: Titel der Karte, `link` =
+   `https://fherrmann.com/feature-requests/<id>` (Basis in `FOOD_FEATURE_REQUESTS_URL`).
+
+Angemeldet wird mit dem Privat-Cookie, es ist derselbe `FH_PRIVATE_TOKEN`. Das
+To-Do antwortet auf jedes Anlegen mit dem ganzen Brett statt mit einer Id; die
+neue Id ergibt sich aus dem Vergleich vorher/nachher, bei zwei neuen entscheiden
+Titel und Elternaufgabe.
+
+**Fällt das To-Do aus, geht nichts verloren.** Die Anfrage bleibt ohne `todoId`
+gespeichert, und ein Nachlauf alle zehn Minuten legt fehlende Unteraufgaben an.
+Kam die Antwort auf ein Anlegen nicht mehr an, erkennt er die schon vorhandene
+Aufgabe an ihrem Link und übernimmt sie, statt sie doppelt anzulegen — das setzt
+ein To-Do voraus, das `link` speichert; das ältere vergisst das Feld, die
+Unteraufgabe entsteht dort trotzdem, nur ohne Link.
+
+Der Stand kommt aus dem Brett (`GET /api/board?all=true`, `doneAt` der
+Unteraufgabe): abgehakt heißt erledigt, der Haken zurück wieder offen. Antwortet
+das To-Do nicht oder ist die Aufgabe gelöscht, gilt der zuletzt gesehene Stand,
+den der Nachlauf mitschreibt.
+
+### Schnittstelle
+
+| Methode | Pfad | |
+|---|---|---|
+| GET | `/feature-requests/api/features` | `{me, owner, drafting}` — wer fragt, ob alle Anfragen sichtbar sind, ob Claude entwirft |
+| POST | `/feature-requests/api/drafts` | `{text}` → `202 {jobId, status, …}`; 503 ohne Agent |
+| GET | `/feature-requests/api/drafts/{jobId}` | `{jobId, status, card, error, elapsedSeconds}`, `status` ist `running`, `done` oder `failed`; der einer anderen Person ist 404 |
+| POST | `/feature-requests/api/requests` | `{originalText, title, story, acceptanceCriteria[]}` → 201 mit der Anfrage |
+| GET | `/feature-requests/api/requests` | die sichtbaren Anfragen, neueste zuerst, je mit `status` (`open`/`done`), `doneAt`, `inTodo`, `url` |
+| GET | `/feature-requests/api/requests/{id}` | eine Anfrage — nur für Autor und Eigentümerin |
+
+Prüfungen: Titel 1–120 Zeichen (eine Zeile), Story 1–2000, bis zu 10
+Akzeptanzkriterien mit je höchstens 300 (leere Zeilen fallen weg), Originaltext
+höchstens 4000.
+
 ## Push: der Server meldet sich
 
 Die Schnellerfassung dauert bis zu einer Minute. Die App muss dafür nicht offen
@@ -509,7 +610,8 @@ vier Zahlen noch zusammenpassen.
 | GET     | `/api/app/android/apk`    | die APK selbst                                           |
 | GET     | `/setup?token=`           | Browser mit einem persönlichen Token einrichten (setzt `health_token`) |
 
-Alle Endpunkte arbeiten auf dem Tagebuch der Person zum Token.
+Alle Endpunkte arbeiten auf dem Tagebuch der Person zum Token. Dazu kommen die
+Feature Requests unter `/feature-requests/api/…` (siehe dort).
 
 POST-Body für einen Eintrag, entweder mit bekanntem Gericht:
 
@@ -648,6 +750,14 @@ oder `curl -H 'Authorization: Bearer 0123…'`.
   Google spielt: signiertes JWT, Datennachricht, tote Kennungen),
   **`AndroidReleaseTest`** (Prüfsumme, halbe Veröffentlichung, Ankündigung
   genau einmal).
+- **Feature Requests** (`featurerequest/`): `FeatureRequestServiceTest` (Prüfungen,
+  wer was sieht, Stand aus dem Brett), `FeatureRequestAccessTest` (echter Filter:
+  eigene, alle, fremde 404, ohne Token 403 auch auf Seite und Dateien),
+  `ClaudeStoryAgentTest` (gegen ein Ersatz-Skript: Auftrag mit Zitat, Umschlag,
+  Fehler, Zeitlimit), `StoryDraftJobsTest`, `TodoClientTest` und
+  `FeatureRequestTodosTest` (gegen einen lokalen Server, der das To-Do spielt:
+  „Server" und „Healthy" finden oder anlegen, Ausfall und Nachlauf, Link-Übernahme),
+  `FeatureRequestsIT` (der ganze Weg gegen einen echten Server).
 - **`ErrorStatusIT`** — läuft gegen einen echten Server statt gegen MockMvc, und
   das ist der Punkt: löst ein Endpunkt eine Ausnahme aus, stellt der Container
   intern nach `/error` zu. Dieser zweite Durchlauf ging ursprünglich an der
@@ -674,6 +784,12 @@ In `src/main/resources/application.properties`:
 | `food.detailed-people`      | leer = niemand (env: `FOOD_DETAILED_NUTRIENTS`)     | Wer die ganze Nährwerttabelle erfasst |
 | `food.fcm.service-account-file` | leer (env: `FCM_SERVICE_ACCOUNT_FILE`)          | Firebase-Dienstkonto für Push an Android |
 | `food.android.dir`          | leer (env: `FOOD_ANDROID_DIR`)                      | Verzeichnis mit `healthy.apk` + `latest.json` |
+| `food.story-agent.command`  | leer (env: `FOOD_STORY_AGENT_COMMAND`)              | Wrapper des Story-Agenten; leer = Feature Requests ohne Claude-Entwurf |
+| `food.story-agent.timeout-seconds` | `120`                                        | danach wird die Entwurfs-Session beendet |
+| `food.todo.url`             | `http://127.0.0.1:48210/todo` (env: `FOOD_TODO_URL`) | To-Do für die Unteraufgaben; leer = keine |
+| `food.todo.sync-interval`   | `PT10M`                                             | Takt des Nachlaufs für fehlende Unteraufgaben |
+| `food.feature-requests.base-url` | `https://fherrmann.com/feature-requests` (env: `FOOD_FEATURE_REQUESTS_URL`) | Basis der Links in den Unteraufgaben |
+| `food.feature-requests.data-file` | `data/feature-requests.json` (env: `FOOD_FEATURE_REQUESTS_FILE`) | Ablage aller Anfragen |
 
 ## Architektur
 
@@ -688,8 +804,12 @@ com.fherrmann.food
                SetupController                         (wer ist wer, wessen Dateien, CORS)
   push/        ApnsClient, FcmClient, DeviceTokens, PushNotifier
   release/     AndroidRelease, ReleaseAnnouncer        (Android-App ausliefern und ankündigen)
+  featurerequest/  FeatureRequestService, -Controller, -Page, -Repository,
+               StoryDraftJobs, ClaudeStoryAgent, TodoClient, FeatureRequestTodos
+                                                       (Feature Requests, siehe dort)
 
-deploy/agent/  Vorlagen für das Agent-Arbeitsverzeichnis (siehe Schnellerfassung)
+deploy/agent/        Vorlagen für das Agent-Arbeitsverzeichnis (siehe Schnellerfassung)
+deploy/story-agent/  dasselbe für den Agenten der Feature Requests
 ```
 
 ## Deployment
@@ -741,4 +861,13 @@ aktualisieren, dann:
 ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh torben'
 # mit Push an Android, Dienstkonto vorher nach ~ kopiert:
 ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --fcm-key ~/fcm-healthy.json torben'
+```
+
+**Feature Requests** (Story-Agent unter `~/services/story-agent`, sudo-Regel
+`/etc/sudoers.d/21-story-agent`, `FOOD_STORY_AGENT_COMMAND` nur bei gelungener
+sudo-Probe, `location /feature-requests/` in `sites-available/fherrmann.com`,
+Neustart, Prüfung auf 403 ohne Cookie) — idempotent, **nach** `update-food.sh`:
+
+```bash
+ssh -t HeimServerRemote '~/services/food/deploy/setup-feature-requests.sh'
 ```

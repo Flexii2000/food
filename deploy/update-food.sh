@@ -43,6 +43,17 @@ if [ -d "$AGENT_DIR" ]; then
 else
     echo "    ($AGENT_DIR gibt es nicht - Schnellerfassung ist hier nicht eingerichtet.)"
 fi
+# Dasselbe fuer den zweiten Agenten, der die Story Cards der Feature Requests
+# entwirft (eingerichtet von deploy/setup-feature-requests.sh).
+STORY_AGENT_DIR="$HOME/services/story-agent"
+if [ -d "$STORY_AGENT_DIR" ] && [ -d "$BUILD_DIR/deploy/story-agent" ]; then
+    mkdir -p "$STORY_AGENT_DIR/.claude"
+    cp "$BUILD_DIR/deploy/story-agent/CLAUDE.md" "$STORY_AGENT_DIR/CLAUDE.md"
+    cp "$BUILD_DIR/deploy/story-agent/run-agent.sh" "$STORY_AGENT_DIR/run-agent.sh"
+    cp "$BUILD_DIR/deploy/story-agent/.claude/settings.json" "$STORY_AGENT_DIR/.claude/settings.json"
+    chmod +x "$STORY_AGENT_DIR/run-agent.sh"
+    echo "    Story-Agent aktualisiert."
+fi
 
 echo "[4/6] Laufendes Jar sichern ..."
 BACKUP="$TARGET.bak-$(date +%Y%m%d-%H%M%S)"
