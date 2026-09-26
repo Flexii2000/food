@@ -147,4 +147,11 @@ class ErrorStatusIT {
                 HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(404);
     }
+
+    /** Die Begruendung kommt mit - sonst saehe jede Oberflaeche nur "Bad Request". */
+    @Test
+    void aBadRequestCarriesItsReason() throws Exception {
+        String reply = body("POST", "/api/food/entries", "{}");
+        assertThat(reply).contains("\"message\"").contains("grams is required");
+    }
 }
