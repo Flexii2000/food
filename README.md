@@ -20,10 +20,16 @@ hindurch — eine Linie mitten durch die Füllung zerschneidet sie optisch. Der
 Bogen reicht bis 125 % des Ziels, die Marke also nicht ans Ende: sonst wäre
 nicht ablesbar, ob man knapp oder weit darüber liegt.
 
-Die Bögen sind mit einem Farbverlauf und einem dezenten Schein in derselben
-Farbe gezeichnet (`<linearGradient>` einmal im Dokument, per `url(#…)`
-referenziert). Das gibt ihnen Tiefe, statt sie wie ausgeschnittene Streifen
-wirken zu lassen.
+Die Bögen sind mit einem Farbverlauf in der Tonart des Werts gezeichnet
+(`<linearGradient>` einmal im Dokument, per `url(#…)` referenziert), ohne
+Schein und Schatten — die Tönung ist die Information. Die Farben der Stopps
+stehen als CSS-Variablen: das helle und das dunkle Schema bekommen je eigene
+Nuancen, die Bedeutung bleibt dieselbe wie in den Apps.
+
+Hell ist der Standard, dunkel folgt der Systemeinstellung
+(`prefers-color-scheme`); alle Farben kommen aus CSS-Variablen, auch die des
+Diagramms. Ab 1100 px Breite stehen Tagesübersicht und Mahlzeiten
+nebeneinander, Verlauf und Einstellungen darunter.
 
 Die Einfärbung folgt der Richtung, in die das jeweilige Ziel gemeint ist. Eiweiß
 ist ein **Mindestwert**: ab dem Ziel grün, darüber bleibt es grün — mehr ist
@@ -425,8 +431,8 @@ Für den Home-Bildschirm auf iOS geht das nicht: `apple-touch-icon` akzeptiert
 kein SVG. Dafür liegt eine 180×180-PNG daneben, gerendert aus demselben Emoji
 auf dem Hintergrund der Seite.
 
-Dazu ein `theme-color`-Meta im Ton der Oberfläche, damit die Browserleiste auf
-dem Handy nicht hell danebensteht.
+Dazu je Farbschema ein `theme-color`-Meta im Ton der Oberfläche, damit die
+Browserleiste auf dem Handy zur Seite passt.
 
 ## Single Source of Truth
 
