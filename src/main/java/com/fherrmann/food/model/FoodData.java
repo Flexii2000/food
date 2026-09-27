@@ -1,5 +1,7 @@
 package com.fherrmann.food.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,12 +17,19 @@ import java.util.Map;
  *                   zu muessen
  * @param dishes     the remembered dish library
  * @param entries    every logged entry, across all days (unordered on disk)
+ * @param microTargets die Tagesziele fuer Mikronaehrstoffe, getrennt von {@code targets}:
+ *                   {@code null} heisst "nie gespeichert" (dann gilt die DGE-Vorgabe),
+ *                   eine Liste - auch eine leere - ist eine Entscheidung, und ein
+ *                   fehlender Schluessel darin heisst "bewusst ohne Ziel". In
+ *                   {@code targets} liesse sich beides nicht auseinanderhalten, weil
+ *                   eine leere Liste dort gar nicht im JSON steht
  */
 public record FoodData(
         Nutrients targets,
         Map<Meal, Double> mealShares,
         List<Dish> dishes,
-        List<FoodEntry> entries) {
+        List<FoodEntry> entries,
+        @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Double> microTargets) {
 
     /**
      * Daily goals used when {@code food.json} does not exist yet: 2300 kcal with 200 g
@@ -49,9 +58,23 @@ public record FoodData(
                 : Map.copyOf(mealShares);
         dishes = dishes == null ? new ArrayList<>() : new ArrayList<>(dishes);
         entries = entries == null ? new ArrayList<>() : new ArrayList<>(entries);
+        microTargets = microTargets == null ? null : Micronutrient.ordered(microTargets);
+    }
+
+    /** Ohne gespeicherte Mikro-Ziele - so sieht jedes Tagebuch aus, das sie nie hatte. */
+    public FoodData(Nutrients targets, Map<Meal, Double> mealShares, List<Dish> dishes, List<FoodEntry> entries) {
+        this(targets, mealShares, dishes, entries, null);
     }
 
     public static FoodData empty() {
         return new FoodData(DEFAULT_TARGETS, DEFAULT_MEAL_SHARES, List.of(), List.of());
+    }
+
+    /**
+     * Derselbe Stand mit anderen Gerichten und Eintraegen, die Ziele bleiben. Jede
+     * Aenderung am Tagebuch geht hierueber, damit keine davon die Mikro-Ziele verliert.
+     */
+    public FoodData with(List<Dish> dishes, List<FoodEntry> entries) {
+        return new FoodData(targets, mealShares, dishes, entries, microTargets);
     }
 }

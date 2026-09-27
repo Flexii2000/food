@@ -1,9 +1,10 @@
 # Food – Kalorienzähler
 
 Kleine Spring-Boot-Anwendung, die den Tagesbedarf einer einzelnen Person gegen das
-hält, was sie gegessen hat. Bewusst auf **vier Werte** beschränkt: kcal, Eiweiß,
-Kohlenhydrate, Fett. Kein Mikronährstoff-Tracking, keine Rezeptdatenbank, keine
-Barcode-Scans.
+hält, was sie gegessen hat. Im Kern auf **vier Werte** beschränkt: kcal, Eiweiß,
+Kohlenhydrate, Fett. Wer mehr will, bekommt je Person die übrigen Zeilen der
+Nährwerttabelle und Mikronährstoffe dazu (siehe unten). Keine Rezeptdatenbank,
+keine Barcode-Scans.
 
 Läuft unter <https://food.fherrmann.com> und gehört zum
 [Weight Tracker](https://github.com/Flexii2000/weight-app) — dort blendet ein
@@ -77,6 +78,56 @@ Statusboard), sehen dieselben vier Zahlen wie vorher.
   Bei allen anderen fragt er nicht und liest auch nichts, was ungefragt kommt.
 - **Rundung:** Detailwerte auf zwei Stellen — Salz steht als „0,03 g" auf der
   Packung.
+
+## Mikronährstoffe je Person
+
+Ein Wunsch von Torben: sehen, ob er seinen Bedarf an Vitaminen und
+Mineralstoffen deckt. Dafür gibt es vierzehn **Mikronährstoffe**, eingestellt
+je Person (`FOOD_MICRONUTRIENTS=torben`, `setup-health-users.sh --micronutrients`);
+`/api/food/features` meldet das als `micronutrients`.
+
+| Vitamine | | Mineralstoffe | |
+|---|---|---|---|
+| `vitaminAUg` | Vitamin A (µg Retinol-Aktivitäts-Äquivalente) | `calciumMg` | Calcium |
+| `vitaminDUg` | Vitamin D | `magnesiumMg` | Magnesium |
+| `vitaminEMg` | Vitamin E | `potassiumMg` | Kalium |
+| `vitaminCMg` | Vitamin C | `ironMg` | Eisen |
+| `vitaminB2Mg` | Vitamin B2 | `zincMg` | Zink |
+| `vitaminB12Ug` | Vitamin B12 | `iodineUg` | Jod |
+| `folateUg` | Folat (µg Folat-Äquivalente) | `seleniumUg` | Selen |
+
+Die Einheit steht im Schlüssel wie bei `proteinG`: `Mg` Milligramm, `Ug`
+Mikrogramm. Die Reihenfolge ist überall dieselbe (`Micronutrient`).
+
+- **Eine Zuordnung statt vierzehn Felder:** `Nutrients.micros` ist ein Objekt
+  `{schlüssel: zahl}` — je 100 g am Gericht und in der Kopie am Eintrag, als
+  Tagessumme in `consumed`. Ein fehlender Schlüssel heißt „keine Angabe", eine
+  0 wird nie erfunden; ohne einen einzigen Wert fehlt das Feld ganz.
+- **Nur für diese Personen:** anders als die Detailwerte speichert der Dienst
+  `micros` nur für Freigeschaltete. Bei allen anderen wird das Feld in jeder
+  Anfrage übergangen, ungeprüft, und keine Antwort bekommt ein neues Feld —
+  `MicronutrientsApiTest` vergleicht Felix' Antworten Zeichen für Zeichen mit
+  dem Stand davor. Einzige Ausnahme: `micronutrients: false` in `features`.
+- **Teilsummen mit Lücken** wie bei den Detailwerten: `DaySummary.microGaps`
+  nennt die Schlüssel, bei denen ein Eintrag des Tages keinen Wert hat.
+- **Geprüft:** bekannter Schlüssel, endlich, ≥ 0, höchstens das Gegenstück von
+  10 g je 100 g (10.000 mg bzw. 10.000.000 µg) — das fängt vor allem die
+  Verwechslung von mg und µg ab. `PUT /dishes/{id}` ersetzt das Gericht ganz:
+  wer `micros` hat, muss sie mitschicken.
+- **Tagesziele mit Vorgabe:** `targets.micros` in `GET /targets` und im Tag.
+  Hat jemand noch nie Mikro-Ziele gespeichert, gelten die DGE-Referenzwerte für
+  Männer von 25 bis unter 51 Jahren (Stand 2026-09-27). Gespeichert werden sie
+  getrennt als `microTargets` in `food.json`: fehlt das Feld, gilt die Vorgabe;
+  eine leere Zuordnung heißt „bewusst ohne Ziel" — in `targets` ließe sich das
+  nicht unterscheiden. `PUT /targets` ohne `micros` lässt die gespeicherten
+  stehen, ältere Clients löschen also nichts. Ein Ziel muss größer als 0 sein.
+- **Kein Rest:** Mikro-Ziele sind Mindestwerte wie das Eiweiß; die Oberflächen
+  zeigen die Zielerreichung, `remaining` bleibt ohne `micros`.
+- **Schnellerfassung:** der Auftrag fragt `microsPer100g` mit ab — Schätzen
+  ist ausdrücklich erwünscht, sonst blieben fast alle Einträge leer (siehe
+  `deploy/agent/CLAUDE.md`). Die Herkunft steht je Schlüssel in `valueSources`.
+  Die gespeicherten Gerichte gehen ohne ihre Mikronährstoffe in den Auftrag:
+  für ein bekanntes Gericht gelten ohnehin die gespeicherten Werte.
 
 ## Gramm-basiert, mit optionaler Portion
 
@@ -598,11 +649,11 @@ vier Zahlen noch zusammenpassen.
 | DELETE  | `/api/food/entries/{id}`  | Eintrag löschen                                         |
 | PUT | `/api/food/entries/{id}` | `{grams, meal?, date?}` — Menge, Mahlzeit oder Tag berichtigen; Name und Nährwerte je 100 g bleiben, wie sie beim Eintragen waren. Antwort: der Tag, auf dem der Eintrag danach liegt |
 | GET     | `/api/food/targets`       | Tagesziele                                              |
-| PUT     | `/api/food/targets`       | Tagesziele ändern                                       |
+| PUT     | `/api/food/targets`       | Tagesziele ändern (mit `micros` die Mikro-Ziele, siehe oben) |
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne — liest die Weight-App        |
 | GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
-| GET     | `/api/food/features`      | `{quickCapture, me, detailedNutrients}` — was dieser Person angeboten wird, und wer sie ist |
+| GET     | `/api/food/features`      | `{quickCapture, me, detailedNutrients, micronutrients}` — was dieser Person angeboten wird, und wer sie ist |
 | POST    | `/api/food/quick-capture` | Freitext und/oder Foto → **Vorschlag** (schreibt nichts); 403, wenn für diese Person nicht freigeschaltet |
 | GET     | `/api/food/quick-capture/{id}` | Stand eines Auftrags; der einer anderen Person ist 404 |
 | POST    | `/api/food/devices`       | Push-Kennung anmelden, `{token, platform?}`             |
@@ -740,6 +791,12 @@ oder `curl -H 'Authorization: Bearer 0123…'`.
 - **`FoodServiceTest`** — Tagessummen, Gramm-Rechnung, Gerichte-Upsert über den
   Namen, Unveränderlichkeit bereits erfasster Einträge, Spannen-Abfrage, Validierung.
 - **`FoodRepositoryTest`** — fehlende Datei ⇒ Defaults, Round-Trip.
+- **`NutrientsTest`** — Rechnung mit den Mikronährstoffen: Skalieren,
+  Teilsummen, kein Rest, Rundung, feste Reihenfolge, JSON-Form, DGE-Vorgabe.
+- **`MicronutrientsApiTest`** — durch den ganzen Dienst: Felix' Antworten
+  Zeichen für Zeichen wie vor den Mikronährstoffen (obwohl seine Anfragen
+  `micros` mitschicken), Torbens Werte, Lücken und Schnellerfassung, Mikro-Ziele
+  mit Vorgabe und „bewusst ohne Ziel".
 - **`FoodControllerTest`** — Cookie-Prüfung (403 ohne/mit falschem Cookie, 200 mit
   richtigem) und die CORS-Header genau auf den beiden freigegebenen Endpunkten.
 - **`FoodAccessTest`** — mit echtem Filter: welcher Token welche Person meint,
@@ -782,6 +839,7 @@ In `src/main/resources/application.properties`:
 | `health.cookie-domain`      | `fherrmann.com` (env: `HEALTH_COOKIE_DOMAIN`)       | Domain des `health_token`-Cookies   |
 | `food.agent.people`         | leer = Eigentümerin (env: `FOOD_QUICK_CAPTURE`)     | Wer die Schnellerfassung benutzen darf |
 | `food.detailed-people`      | leer = niemand (env: `FOOD_DETAILED_NUTRIENTS`)     | Wer die ganze Nährwerttabelle erfasst |
+| `food.micronutrient-people` | leer = niemand (env: `FOOD_MICRONUTRIENTS`)         | Wer Mikronährstoffe erfasst |
 | `food.fcm.service-account-file` | leer (env: `FCM_SERVICE_ACCOUNT_FILE`)          | Firebase-Dienstkonto für Push an Android |
 | `food.android.dir`          | leer (env: `FOOD_ANDROID_DIR`)                      | Verzeichnis mit `healthy.apk` + `latest.json` |
 | `food.story-agent.command`  | leer (env: `FOOD_STORY_AGENT_COMMAND`)              | Wrapper des Story-Agenten; leer = Feature Requests ohne Claude-Entwurf |
@@ -859,6 +917,8 @@ aktualisieren, dann:
 
 ```bash
 ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh torben'
+# mit Detailwerten und Mikronährstoffen für die genannten Personen:
+ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --detailed --micronutrients torben'
 # mit Push an Android, Dienstkonto vorher nach ~ kopiert:
 ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --fcm-key ~/fcm-healthy.json torben'
 ```

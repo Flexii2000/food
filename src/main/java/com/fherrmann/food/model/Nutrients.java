@@ -2,7 +2,10 @@ package com.fherrmann.food.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.UnaryOperator;
 
 /**
  * The four nutrition figures this app tracks for everyone: calories and the three
@@ -18,6 +21,11 @@ import java.util.List;
  * {@code null} und erscheinen im JSON gar nicht - Felix' Tagebuch und alles, was es liest
  * (iPhone-App, Weight Tracker, Habits), sieht dieselben vier Zahlen wie immer.
  *
+ * <p><b>Die Mikronaehrstoffe</b> ({@link Micronutrient}) haengen als {@code micros}
+ * daran, je Schluessel eine Zahl. Ein fehlender Schluessel heisst "keine Angabe", ohne
+ * einen einzigen fehlt das Feld im JSON ganz - dieselbe Regel wie bei den Detailwerten,
+ * nur ueber vierzehn Werte, die nicht jeder Client kennen muss.
+ *
  * @param kcal          kilocalories
  * @param proteinG      protein in grams
  * @param carbsG        carbohydrates in grams
@@ -26,6 +34,8 @@ import java.util.List;
  * @param sugarG        davon Zucker in Gramm, oder {@code null}
  * @param fiberG        Ballaststoffe in Gramm, oder {@code null}
  * @param saltG         Salz in Gramm, oder {@code null}
+ * @param micros        Mikronaehrstoffe je Schluessel aus {@link Micronutrient#KEYS},
+ *                      oder {@code null}, wenn keiner angegeben ist
  */
 public record Nutrients(
         double kcal,
@@ -35,16 +45,31 @@ public record Nutrients(
         @JsonInclude(JsonInclude.Include.NON_NULL) Double saturatedFatG,
         @JsonInclude(JsonInclude.Include.NON_NULL) Double sugarG,
         @JsonInclude(JsonInclude.Include.NON_NULL) Double fiberG,
-        @JsonInclude(JsonInclude.Include.NON_NULL) Double saltG) {
+        @JsonInclude(JsonInclude.Include.NON_NULL) Double saltG,
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) Map<String, Double> micros) {
 
     public static final Nutrients ZERO = new Nutrients(0, 0, 0, 0);
+
+    /** Nur bekannte Schluessel, in fester Reihenfolge; ohne einen einzigen Wert gar kein Feld. */
+    public Nutrients {
+        micros = Micronutrient.ordered(micros);
+        if (micros.isEmpty()) {
+            micros = null;
+        }
+    }
 
     /** Die Feldnamen der Detailwerte, wie sie im JSON stehen. */
     public static final List<String> DETAIL_FIELDS = List.of("saturatedFatG", "sugarG", "fiberG", "saltG");
 
     /** Nur die vier Grundwerte - so sieht jede Zahl aus, die nicht aus einem detaillierten Tagebuch kommt. */
     public Nutrients(double kcal, double proteinG, double carbsG, double fatG) {
-        this(kcal, proteinG, carbsG, fatG, null, null, null, null);
+        this(kcal, proteinG, carbsG, fatG, null, null, null, null, null);
+    }
+
+    /** Mit Detailwerten, ohne Mikronaehrstoffe. */
+    public Nutrients(double kcal, double proteinG, double carbsG, double fatG,
+                     Double saturatedFatG, Double sugarG, Double fiberG, Double saltG) {
+        this(kcal, proteinG, carbsG, fatG, saturatedFatG, sugarG, fiberG, saltG, null);
     }
 
     /** Ob irgendein Detailwert gesetzt ist. */
@@ -63,17 +88,34 @@ public record Nutrients(
         };
     }
 
+    /** Ob irgendein Mikronaehrstoff angegeben ist. */
+    public boolean hasMicros() {
+        return micros != null;
+    }
+
+    /** Der Mikronaehrstoff zum Schluessel, oder {@code null} ohne Angabe. */
+    public Double micro(String key) {
+        return micros == null ? null : micros.get(key);
+    }
+
+    /** Dieselben Werte mit diesen Mikronaehrstoffen statt der bisherigen. */
+    public Nutrients withMicros(Map<String, Double> micros) {
+        return new Nutrients(kcal, proteinG, carbsG, fatG, saturatedFatG, sugarG, fiberG, saltG, micros);
+    }
+
     /** All values scaled by the same factor (used to turn per-100 g into a portion). */
     public Nutrients scaled(double factor) {
         return new Nutrients(kcal * factor, proteinG * factor, carbsG * factor, fatG * factor,
-                times(saturatedFatG, factor), times(sugarG, factor), times(fiberG, factor), times(saltG, factor));
+                times(saturatedFatG, factor), times(sugarG, factor), times(fiberG, factor), times(saltG, factor),
+                eachMicro(value -> value * factor));
     }
 
     /**
      * Summe zweier Stände. Ein Detailwert, den nur eine Seite hat, geht mit seinem Wert
      * ein - die Summe ist dann eine Untergrenze, und das muss der Aufrufer sagen
-     * (siehe {@code DaySummary.detailGaps}); eine Luecke als null zu behandeln hiesse,
-     * einen ganzen Tag Zucker wegen eines einzigen Apfels ohne Angabe zu verlieren.
+     * (siehe {@code DaySummary.detailGaps} und {@code microGaps}); eine Luecke als null
+     * zu behandeln hiesse, einen ganzen Tag Zucker wegen eines einzigen Apfels ohne
+     * Angabe zu verlieren.
      */
     public Nutrients plus(Nutrients other) {
         if (other == null) {
@@ -87,12 +129,15 @@ public record Nutrients(
                 sum(saturatedFatG, other.saturatedFatG),
                 sum(sugarG, other.sugarG),
                 sum(fiberG, other.fiberG),
-                sum(saltG, other.saltG));
+                sum(saltG, other.saltG),
+                summedMicros(other.micros));
     }
 
     /**
      * Difference to a goal, per value. Negative means the goal has been exceeded.
-     * Detailwerte haben kein Ziel - der Rest dazu bleibt leer.
+     * Detailwerte haben kein Ziel - der Rest dazu bleibt leer. Mikronaehrstoffe haben
+     * eines, aber als Mindestwert: die Oberflaechen zeigen, wie weit es erreicht ist,
+     * und ein Rest je Schluessel stuende nur doppelt im JSON.
      */
     public Nutrients minus(Nutrients other) {
         if (other == null) {
@@ -112,7 +157,8 @@ public record Nutrients(
      */
     public Nutrients rounded() {
         return new Nutrients(round(kcal), round(proteinG), round(carbsG), round(fatG),
-                round2(saturatedFatG), round2(sugarG), round2(fiberG), round2(saltG));
+                round2(saturatedFatG), round2(sugarG), round2(fiberG), round2(saltG),
+                eachMicro(Nutrients::round2));
     }
 
     private static double round(double value) {
@@ -121,6 +167,25 @@ public record Nutrients(
 
     private static Double round2(Double value) {
         return value == null ? null : Math.round(value * 100.0) / 100.0;
+    }
+
+    private Map<String, Double> eachMicro(UnaryOperator<Double> change) {
+        if (micros == null) {
+            return null;
+        }
+        Map<String, Double> changed = new LinkedHashMap<>();
+        micros.forEach((key, value) -> changed.put(key, change.apply(value)));
+        return changed;
+    }
+
+    /** Wie {@link #sum}, je Schluessel: was nur eine Seite hat, geht mit seinem Wert ein. */
+    private Map<String, Double> summedMicros(Map<String, Double> other) {
+        if (micros == null || other == null) {
+            return micros == null ? other : micros;
+        }
+        Map<String, Double> summed = new LinkedHashMap<>(micros);
+        other.forEach((key, value) -> summed.merge(key, value, Double::sum));
+        return summed;
     }
 
     private static Double times(Double value, double factor) {

@@ -9,7 +9,7 @@ set -euo pipefail
 # Aufruf VOM LAPTOP aus - das -t ist noetig, sonst kann sudo nicht nach dem
 # Passwort fragen:
 #
-#     ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --detailed torben'
+#     ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --detailed --micronutrients torben'
 #
 # Mit Push an Android (Firebase-Dienstkonto vorher per scp nach ~ kopiert):
 #
@@ -22,6 +22,9 @@ set -euo pipefail
 #     --detailed             die genannten Personen erfassen die ganze
 #                            Naehrwerttabelle (ges. Fettsaeuren, Zucker,
 #                            Ballaststoffe, Salz) statt nur kcal und Makros
+#     --micronutrients       die genannten Personen erfassen auch
+#                            Mikronaehrstoffe (7 Vitamine, 7 Mineralstoffe,
+#                            mit Tageszielen)
 #
 # Idempotent: vorhandene Token bleiben, wie sie sind; nur wer noch keinen hat,
 # bekommt einen. Ohne Namen richtet es nur Verzeichnis, nginx und ggf. Firebase
@@ -49,12 +52,14 @@ fail() { echo "FEHLER: $*" >&2; exit 1; }
 FCM_KEY=""
 QUICK_CAPTURE=1
 DETAILED=0
+MICRONUTRIENTS=0
 PEOPLE=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --fcm-key) FCM_KEY="${2:-}"; [[ -n "$FCM_KEY" ]] || fail "--fcm-key braucht eine Datei"; shift 2 ;;
         --no-quick-capture) QUICK_CAPTURE=0; shift ;;
         --detailed) DETAILED=1; shift ;;
+        --micronutrients) MICRONUTRIENTS=1; shift ;;
         -*) fail "Unbekannte Option $1" ;;
         *) PEOPLE+=("$1"); shift ;;
     esac
@@ -130,7 +135,7 @@ set_env "$FOOD_ENV" HEALTH_TOKENS "$JOINED"
 set_env "$WEIGHT_ENV" HEALTH_TOKENS "$JOINED"
 echo "    HEALTH_TOKENS in $FOOD_ENV und $WEIGHT_ENV: ${#TOKENS[@]} Person(en)."
 
-step "2/6 Schnellerfassung und Detailwerte"
+step "2/6 Schnellerfassung, Detailwerte und Mikronaehrstoffe"
 ALLOWED="$(get_env "$FOOD_ENV" FOOD_QUICK_CAPTURE)"
 ALLOWED="${ALLOWED:-$OWNER}"
 if [[ "$ALLOWED" != "*" && $QUICK_CAPTURE -eq 1 ]]; then
@@ -152,6 +157,18 @@ fi
 if [[ -n "$DETAILED_PEOPLE" ]]; then
     set_env "$FOOD_ENV" FOOD_DETAILED_NUTRIENTS "$DETAILED_PEOPLE"
     echo "    ganze Naehrwerttabelle: $DETAILED_PEOPLE"
+fi
+
+# Mikronaehrstoffe genauso: nur hinzufuegen, nie wegnehmen.
+MICRO_PEOPLE="$(get_env "$FOOD_ENV" FOOD_MICRONUTRIENTS)"
+if [[ "$MICRO_PEOPLE" != "*" && $MICRONUTRIENTS -eq 1 ]]; then
+    for person in "${PEOPLE[@]}"; do
+        [[ ",$MICRO_PEOPLE," == *",$person,"* ]] || MICRO_PEOPLE+="${MICRO_PEOPLE:+,}$person"
+    done
+fi
+if [[ -n "$MICRO_PEOPLE" ]]; then
+    set_env "$FOOD_ENV" FOOD_MICRONUTRIENTS "$MICRO_PEOPLE"
+    echo "    Mikronaehrstoffe: $MICRO_PEOPLE"
 fi
 
 step "3/6 Verzeichnis fuer die Android-App"

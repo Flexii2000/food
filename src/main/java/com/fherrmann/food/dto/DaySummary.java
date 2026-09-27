@@ -27,6 +27,8 @@ import java.util.Map;
  *                    ist die Summe in {@code consumed} eine Untergrenze. Leer, und dann
  *                    gar nicht im JSON, wenn es keine Luecke gibt oder der Tag ueberhaupt
  *                    keine Detailwerte kennt (Felix' Tagebuch)
+ * @param microGaps   dasselbe fuer die Mikronaehrstoffe (Schluessel aus
+ *                    {@link com.fherrmann.food.model.Micronutrient#KEYS})
  */
 public record DaySummary(
         LocalDate date,
@@ -35,10 +37,11 @@ public record DaySummary(
         Nutrients remaining,
         List<FoodEntry> entries,
         Map<Meal, Double> mealTargets,
-        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> detailGaps) {
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> detailGaps,
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> microGaps) {
 
     public DaySummary(LocalDate date, Nutrients targets, Nutrients consumed, Nutrients remaining,
                       List<FoodEntry> entries, Map<Meal, Double> mealTargets) {
-        this(date, targets, consumed, remaining, entries, mealTargets, List.of());
+        this(date, targets, consumed, remaining, entries, mealTargets, List.of(), List.of());
     }
 }

@@ -29,6 +29,9 @@ public interface NutritionExtractor {
      *                wiedererkannt statt als Beinahe-Dublette neu angelegt wird
      * @param detailed ob diese Person auch die Detailwerte erfasst (gesaettigte
      *                Fettsaeuren, Zucker, Ballaststoffe, Salz) - nur dann danach fragen
+     * @param micronutrients ob diese Person Mikronaehrstoffe erfasst - nur dann danach
+     *                fragen, und nur dann welche zurueckgeben
      */
-    ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed);
+    ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed,
+                          boolean micronutrients);
 }

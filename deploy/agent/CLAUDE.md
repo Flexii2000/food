@@ -109,6 +109,61 @@ sonst lässt du sie weg:
 - Passt die Beschreibung auf ein gespeichertes Gericht, das Detailwerte hat,
   nimm auch die exakt so.
 
+## Wenn der Auftrag nach Mikronährstoffen fragt
+
+Manche Personen erfassen zusätzlich vierzehn Vitamine und Mineralstoffe. Dann
+steht im Auftrag ausdrücklich, dass du `microsPer100g` angeben sollst — **nur
+dann**, sonst lässt du das Feld weg:
+
+```
+  "microsPer100g": {
+    "vitaminAUg": 40, "vitaminDUg": 0.1, "vitaminEMg": 0.7, "vitaminCMg": 3,
+    "vitaminB2Mg": 0.08, "vitaminB12Ug": 0.4, "folateUg": 12,
+    "calciumMg": 20, "magnesiumMg": 20, "potassiumMg": 220,
+    "ironMg": 1.1, "zincMg": 1.2, "iodineUg": 2, "seleniumUg": 8
+  },
+```
+
+- **Je 100 g**, wie alle anderen Werte. Die Einheit steht im Schlüssel: `Mg`
+  heißt Milligramm, `Ug` Mikrogramm (µg). Mikrogramm und Milligramm liegen
+  um den Faktor 1000 auseinander — verwechselt ist der Wert unbrauchbar.
+
+  | Schlüssel | Nährstoff | Einheit |
+  |---|---|---|
+  | `vitaminAUg` | Vitamin A | µg Retinol-Aktivitäts-Äquivalente |
+  | `vitaminDUg` | Vitamin D | µg |
+  | `vitaminEMg` | Vitamin E | mg |
+  | `vitaminCMg` | Vitamin C | mg |
+  | `vitaminB2Mg` | Vitamin B2 | mg |
+  | `vitaminB12Ug` | Vitamin B12 | µg |
+  | `folateUg` | Folat | µg Folat-Äquivalente |
+  | `calciumMg` | Calcium | mg |
+  | `magnesiumMg` | Magnesium | mg |
+  | `potassiumMg` | Kalium | mg |
+  | `ironMg` | Eisen | mg |
+  | `zincMg` | Zink | mg |
+  | `iodineUg` | Jod | µg |
+  | `seleniumUg` | Selen | µg |
+
+- **Schätzen ist hier ausdrücklich erwünscht.** Auf Packungen stehen diese
+  Werte fast nie; ohne Schätzung bliebe fast jeder Eintrag leer. Gib alle
+  vierzehn an, geschätzt aus dem, was du über Nährwerttabellen weißt
+  (Bundeslebensmittelschlüssel, USDA) — hier ist eine begründete Schätzung
+  mehr wert als eine Lücke.
+- Bei einem **konkreten Produkt** (Marke, Fertiggericht, Restaurantkette)
+  schlag trotzdem nach: angereicherte Lebensmittel weichen stark von jeder
+  Tabelle ab (Vitamin D in Margarine, Jod im Speisesalz, B12 und Calcium in
+  Pflanzendrinks).
+- Eine **0** ist eine Angabe, kein Platzhalter — Vitamin B12 in rein
+  pflanzlichen Lebensmitteln ist 0. Weglassen darfst du einen Schlüssel nur,
+  wenn du nicht einmal die Größenordnung abschätzen kannst.
+- Für die Herkunft gelten dieselben Listen: nachgeschlagen in `lookedUp`,
+  geschätzt in `estimated`, jeweils mit dem Schlüssel selbst
+  (`"vitaminB12Ug"`, nicht `vitaminB12Per100g`).
+- Die gespeicherten Gerichte im Auftrag stehen ohne Mikronährstoffe da.
+  Passt die Beschreibung auf eines, übernimmt die App dessen gespeicherte
+  Werte ohnehin — deine Schätzung schadet dann nicht.
+
 ## Wenn ein Foto dabei ist
 
 Nennt der Auftrag ein Foto, sieh es dir mit `Read` an, bevor du antwortest.

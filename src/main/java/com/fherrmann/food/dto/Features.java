@@ -11,10 +11,12 @@ package com.fherrmann.food.dto;
  * @param detailedNutrients ob diese Person die Detailwerte erfasst (gesaettigte
  *                     Fettsaeuren, Zucker, Ballaststoffe, Salz) - dann bieten die
  *                     Oberflaechen die Felder an
+ * @param micronutrients ob diese Person Mikronaehrstoffe erfasst - dann gibt es die
+ *                     Felder, die Tagesziele dafuer und die Uebersicht des Tages
  */
-public record Features(boolean quickCapture, String me, boolean detailedNutrients) {
+public record Features(boolean quickCapture, String me, boolean detailedNutrients, boolean micronutrients) {
 
     public Features(boolean quickCapture, String me) {
-        this(quickCapture, me, false);
+        this(quickCapture, me, false, false);
     }
 }

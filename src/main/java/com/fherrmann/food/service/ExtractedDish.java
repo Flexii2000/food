@@ -1,8 +1,10 @@
 package com.fherrmann.food.service;
 
 import com.fherrmann.food.model.Meal;
+import com.fherrmann.food.model.Micronutrient;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Das Ergebnis der Freitext-Auswertung, bevor daraus ein Gericht und ein
@@ -25,6 +27,8 @@ import java.util.List;
  * @param sugarG    Zucker je 100 g, dito
  * @param fiberG    Ballaststoffe je 100 g, dito
  * @param saltG     Salz je 100 g, dito
+ * @param micros    Mikronaehrstoffe je 100 g, nur fuer Personen, die sie erfassen;
+ *                  leer, wenn der Agent keine liefert oder niemand danach gefragt hat
  */
 public record ExtractedDish(
         String name,
@@ -41,11 +45,21 @@ public record ExtractedDish(
         Double saturatedFatG,
         Double sugarG,
         Double fiberG,
-        Double saltG) {
+        Double saltG,
+        Map<String, Double> micros) {
 
     public ExtractedDish {
         lookedUpFields = lookedUpFields == null ? List.of() : List.copyOf(lookedUpFields);
         estimatedFields = estimatedFields == null ? List.of() : List.copyOf(estimatedFields);
+        micros = Micronutrient.ordered(micros);
+    }
+
+    /** Mit Detailwerten, ohne Mikronaehrstoffe. */
+    public ExtractedDish(String name, double kcal, double proteinG, double carbsG, double fatG, double grams,
+                         Double portionG, List<String> lookedUpFields, List<String> estimatedFields,
+                         String note, Meal meal, Double saturatedFatG, Double sugarG, Double fiberG, Double saltG) {
+        this(name, kcal, proteinG, carbsG, fatG, grams, portionG, lookedUpFields, estimatedFields, note, meal,
+                saturatedFatG, sugarG, fiberG, saltG, null);
     }
 
     /** Ohne Detailwerte - so antwortet der Agent, wenn niemand danach fragt. */
@@ -53,6 +67,6 @@ public record ExtractedDish(
                          Double portionG, List<String> lookedUpFields, List<String> estimatedFields,
                          String note, Meal meal) {
         this(name, kcal, proteinG, carbsG, fatG, grams, portionG, lookedUpFields, estimatedFields, note, meal,
-                null, null, null, null);
+                null, null, null, null, null);
     }
 }

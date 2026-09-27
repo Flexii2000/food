@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,12 +41,18 @@ class ClaudeSessionNutritionExtractorTest {
     }
 
     private static final List<Dish> KNOWN = List.of(new Dish("d1", "Skyr natur",
-            new Nutrients(63, 11, 4, 0.2, 0.1, 4.0, 0.0, 0.13), 150.0, null));
+            new Nutrients(63, 11, 4, 0.2, 0.1, 4.0, 0.0, 0.13, Map.of("calciumMg", 150.0)), 150.0, null));
+
+    /** Eine Antwort mit Mikronaehrstoffen - darunter einer, den es nicht gibt, und zwei unbrauchbare Werte. */
+    private static final String ANSWER_WITH_MICROS = ANSWER.replace(
+            ",\\\"meal\\\"",
+            ",\\\"microsPer100g\\\":{\\\"ironMg\\\":2.1,\\\"folateUg\\\":60,\\\"vitaminKUg\\\":5,"
+                    + "\\\"zincMg\\\":-1,\\\"iodineUg\\\":\\\"viel\\\"},\\\"meal\\\"");
 
     @Test
     void aDetailedPersonIsAskedForTheWholeLabelAndGetsIt() throws Exception {
         Path prompt = tempDir.resolve("prompt.txt");
-        ExtractedDish dish = extractor(prompt).extract("Pasta", null, new Nutrients(2800, 180, 300, 90), KNOWN, true);
+        ExtractedDish dish = extractor(prompt).extract("Pasta", null, new Nutrients(2800, 180, 300, 90), KNOWN, true, false);
 
         String sent = Files.readString(prompt);
         assertThat(sent).contains("saturatedFatPer100g, sugarPer100g, fiberPer100g und saltPer100g");
@@ -59,7 +66,7 @@ class ClaudeSessionNutritionExtractorTest {
     @Test
     void everyoneElseIsNotAskedAndGetsNoDetails() throws Exception {
         Path prompt = tempDir.resolve("prompt.txt");
-        ExtractedDish dish = extractor(prompt).extract("Pasta", null, new Nutrients(2300, 200, 235.5, 62), KNOWN, false);
+        ExtractedDish dish = extractor(prompt).extract("Pasta", null, new Nutrients(2300, 200, 235.5, 62), KNOWN, false, false);
 
         String sent = Files.readString(prompt);
         assertThat(sent).doesNotContain("sugarPer100g", "Zucker");
@@ -78,7 +85,7 @@ class ClaudeSessionNutritionExtractorTest {
         assertThat(answer).isNotEqualTo(ANSWER);
 
         ExtractedDish dish = extractor(tempDir.resolve("prompt.txt"), answer)
-                .extract("Pasta", null, new Nutrients(2800, 180, 300, 90), KNOWN, true);
+                .extract("Pasta", null, new Nutrients(2800, 180, 300, 90), KNOWN, true, false);
 
         assertThat(dish.estimatedFields()).contains("kcalPer100g", "sugarPer100g", "saltPer100g");
     }
@@ -93,9 +100,56 @@ class ClaudeSessionNutritionExtractorTest {
                 new ClaudeSessionNutritionExtractor(script.toString(), 1, new ObjectMapper());
 
         long start = System.nanoTime();
-        assertThatThrownBy(() -> hanging.extract("Pasta", null, new Nutrients(2300, 200, 235.5, 62), KNOWN, false))
+        assertThatThrownBy(() -> hanging.extract("Pasta", null, new Nutrients(2300, 200, 235.5, 62), KNOWN, false, false))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode().value()).isEqualTo(504));
         assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(10));
+    }
+
+    // --- Mikronaehrstoffe --------------------------------------------------------
+
+    @Test
+    void aPersonWithMicronutrientsIsAskedForThemAndGetsThem() throws Exception {
+        assertThat(ANSWER_WITH_MICROS).isNotEqualTo(ANSWER);
+        Path prompt = tempDir.resolve("prompt.txt");
+        ExtractedDish dish = extractor(prompt, ANSWER_WITH_MICROS)
+                .extract("Linsensuppe", null, new Nutrients(2800, 180, 300, 90), KNOWN, false, true);
+
+        String sent = Files.readString(prompt);
+        assertThat(sent).contains("microsPer100g", "vitaminAUg, vitaminDUg", "seleniumUg", "ausdruecklich erwuenscht");
+        // Nur Bekanntes mit einer Zahl >= 0 - der Rest ist keine Angabe.
+        assertThat(dish.micros()).containsExactly(Map.entry("folateUg", 60.0), Map.entry("ironMg", 2.1));
+    }
+
+    /** Die gespeicherten Gerichte gehen ohne ihre Mikronaehrstoffe in den Auftrag - der Dienst nimmt ohnehin die eigenen. */
+    @Test
+    void theKnownDishesGoWithoutTheirMicros() throws Exception {
+        Path prompt = tempDir.resolve("prompt.txt");
+        extractor(prompt, ANSWER_WITH_MICROS).extract("Skyr", null, new Nutrients(2800, 180, 300, 90), KNOWN, false, true);
+        assertThat(Files.readString(prompt)).contains("Skyr natur: 63 kcal").doesNotContain("150 mg", "calciumMg: ");
+    }
+
+    /** Felix: keine Frage nach Mikronaehrstoffen, und was ungefragt kommt, wird nicht gelesen. */
+    @Test
+    void everyoneElseIsNotAskedForMicrosAndGetsNone() throws Exception {
+        Path prompt = tempDir.resolve("prompt.txt");
+        ExtractedDish dish = extractor(prompt, ANSWER_WITH_MICROS)
+                .extract("Linsensuppe", null, new Nutrients(2300, 200, 235.5, 62), KNOWN, true, false);
+
+        assertThat(Files.readString(prompt)).doesNotContain("microsPer100g", "Mikronaehrstoffe", "vitaminAUg");
+        assertThat(dish.micros()).isEmpty();
+        assertThat(dish.sugarG()).isEqualTo(2.5);
+    }
+
+    /** Fehlt die Liste der Schaetzungen, gelten auch die Mikronaehrstoffe als geschaetzt. */
+    @Test
+    void withoutAnEstimatedListTheMicrosCountAsEstimatedToo() throws Exception {
+        String answer = ANSWER_WITH_MICROS.replace(",\\\"estimated\\\":[\\\"kcalPer100g\\\"]", "");
+        assertThat(answer).isNotEqualTo(ANSWER_WITH_MICROS);
+
+        ExtractedDish dish = extractor(tempDir.resolve("prompt.txt"), answer)
+                .extract("Linsensuppe", null, new Nutrients(2800, 180, 300, 90), KNOWN, false, true);
+
+        assertThat(dish.estimatedFields()).contains("kcalPer100g", "ironMg", "folateUg", "seleniumUg");
     }
 }

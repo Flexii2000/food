@@ -12,6 +12,7 @@ import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Meal;
+import com.fherrmann.food.model.Micronutrient;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.repository.FoodRepository;
 import com.fherrmann.food.security.HealthUsers;
@@ -31,6 +32,7 @@ import java.nio.file.Files;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -50,6 +52,8 @@ class FoodServiceTest {
     Path tempDir;
 
     private FoodService service;
+    /** Dasselbe Tagebuch, aber Torben erfasst Mikronaehrstoffe. */
+    private FoodService micro;
     private FakeExtractor extractor;
 
     /**
@@ -66,6 +70,7 @@ class FoodServiceTest {
         private String seenText;
         private List<Dish> seenKnown;
         private boolean seenDetailed;
+        private boolean seenMicronutrients;
         private Path seenPhoto;
         private byte[] seenPhotoBytes;
 
@@ -76,10 +81,11 @@ class FoodServiceTest {
 
         @Override
         public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known,
-                                     boolean detailed) {
+                                     boolean detailed, boolean micronutrients) {
             seenText = text;
             seenKnown = known;
             seenDetailed = detailed;
+            seenMicronutrients = micronutrients;
             seenPhoto = photo;
             // Waehrend der Auswertung muss die Datei da sein - danach nicht mehr.
             try {
@@ -98,6 +104,8 @@ class FoodServiceTest {
         Clock clock = Clock.fixed(TODAY.atStartOfDay(ZoneId.of("UTC")).toInstant(), ZoneId.of("UTC"));
         extractor = new FakeExtractor();
         service = new FoodService(repository, extractor, clock);
+        micro = new FoodService(repository, extractor, clock, DetailedNutrition.none(),
+                new MicronutrientTracking("torben"));
     }
 
     private static DishRequest skyr() {
@@ -704,5 +712,261 @@ class FoodServiceTest {
         assertThat(preview.known()).isTrue();
         assertThat(preview.per100g().sugarG()).isEqualTo(4.0);
         assertThat(preview.valueSources()).containsEntry("sugarG", "stored");
+    }
+
+    // --- Mikronaehrstoffe --------------------------------------------------------
+
+    /** Haferflocken laut Packung und Tabelle, mit allen vierzehn Mikronaehrstoffen. */
+    private static Map<String, Double> oatMicros() {
+        Map<String, Double> micros = new java.util.LinkedHashMap<>();
+        micros.put("vitaminAUg", 0.0);
+        micros.put("vitaminDUg", 0.0);
+        micros.put("vitaminEMg", 0.8);
+        micros.put("vitaminCMg", 0.0);
+        micros.put("vitaminB2Mg", 0.155);
+        micros.put("vitaminB12Ug", 0.0);
+        micros.put("folateUg", 33.0);
+        micros.put("calciumMg", 54.0);
+        micros.put("magnesiumMg", 130.0);
+        micros.put("potassiumMg", 380.0);
+        micros.put("ironMg", 4.2);
+        micros.put("zincMg", 3.6);
+        micros.put("iodineUg", 1.5);
+        micros.put("seleniumUg", 6.0);
+        return micros;
+    }
+
+    private static DishRequest oats(Map<String, Double> micros) {
+        return new DishRequest("Haferflocken", 372.0, 13.5, 58.7, 7.0, 60.0, null, null, null, null, micros);
+    }
+
+    @Test
+    void microsAreStoredScaledAndSummed() {
+        micro.createDish("torben", oats(oatMicros()));
+        String id = micro.dishes("torben").get(0).id();
+        micro.addEntry("torben", new NewEntryRequest(TODAY, id, null, 60.0, Meal.BREAKFAST));
+        DaySummary day = micro.addEntry("torben", new NewEntryRequest(TODAY, id, null, 40.0, Meal.SNACK));
+
+        assertThat(micro.dishes("torben").get(0).per100g().micros()).isEqualTo(oatMicros());
+        // 60 g + 40 g = 100 g, also genau die Werte je 100 g - auf zwei Stellen gerundet.
+        assertThat(day.consumed().micro("magnesiumMg")).isEqualTo(130.0);
+        assertThat(day.consumed().micro("vitaminB2Mg")).isEqualTo(0.16);
+        assertThat(day.consumed().micro("vitaminCMg")).isEqualTo(0.0);
+        assertThat(day.entries().get(0).total().micro("ironMg")).isCloseTo(2.52, org.assertj.core.data.Offset.offset(1e-9));
+        // Jeder Eintrag hat jeden Wert - keine Luecke. Und ein Rest wird nicht gerechnet.
+        assertThat(day.microGaps()).isEmpty();
+        assertThat(day.remaining().micros()).isNull();
+    }
+
+    /** Ein Eintrag ohne Wert macht die Summe zur Untergrenze - und das sagt der Tag. */
+    @Test
+    void aDayWithAnEntryWithoutMicrosReportsTheGaps() {
+        micro.createDish("torben", oats(oatMicros()));
+        String id = micro.dishes("torben").get(0).id();
+        micro.addEntry("torben", new NewEntryRequest(TODAY, id, null, 100.0, Meal.BREAKFAST));
+        DaySummary day = micro.addEntry("torben", new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.SNACK));
+
+        assertThat(day.microGaps()).containsExactlyElementsOf(Micronutrient.KEYS);
+        assertThat(day.consumed().micro("ironMg")).isEqualTo(4.2);
+    }
+
+    /** Nur die Schluessel, zu denen wirklich ein Wert fehlt - nicht alle, sobald einer fehlt. */
+    @Test
+    void theGapsNameOnlyTheMissingKeys() {
+        micro.addEntry("torben", new NewEntryRequest(TODAY, null, new DishRequest("Orange", 47.0, 0.9, 9.0, 0.1,
+                150.0, null, null, null, null, Map.of("vitaminCMg", 53.0, "potassiumMg", 180.0)), 150.0, Meal.SNACK));
+        DaySummary day = micro.addEntry("torben", new NewEntryRequest(TODAY, null, new DishRequest("Kiwi", 61.0,
+                1.1, 10.0, 0.5, 75.0, null, null, null, null, Map.of("vitaminCMg", 90.0)), 75.0, Meal.SNACK));
+
+        assertThat(day.microGaps()).doesNotContain("vitaminCMg").contains("potassiumMg", "ironMg").hasSize(13);
+        assertThat(day.consumed().micro("vitaminCMg")).isEqualTo(147.0);   // 79,5 + 67,5
+        assertThat(day.consumed().micro("potassiumMg")).isEqualTo(270.0);
+        assertThat(day.consumed().micro("ironMg")).isNull();
+    }
+
+    @Test
+    void microsAreOptionalButChecked() {
+        assertThatThrownBy(() -> micro.createDish("torben", oats(Map.of("vitaminXMg", 1.0))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400").hasMessageContaining("micros.vitaminXMg is not a known micronutrient");
+        assertThatThrownBy(() -> micro.createDish("torben", oats(Map.of("ironMg", -0.1))))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("micros.ironMg");
+        assertThatThrownBy(() -> micro.createDish("torben", oats(Map.of("ironMg", Double.NaN))))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("micros.ironMg");
+        // Hoechstens das Gegenstueck von 10 g je 100 g: 10.000 mg oder 10.000.000 µg.
+        assertThatThrownBy(() -> micro.createDish("torben", oats(Map.of("calciumMg", 10_000.5))))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("micros.calciumMg must be at most");
+        assertThatThrownBy(() -> micro.createDish("torben", oats(Map.of("iodineUg", 10_000_001.0))))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("micros.iodineUg");
+        assertThat(micro.dishes("torben")).isEmpty();
+
+        // Eine 0 ist eine Angabe, ein Schluessel ohne Wert keine.
+        Map<String, Double> sparse = new HashMap<>();
+        sparse.put("vitaminB12Ug", 0.0);
+        sparse.put("iodineUg", 10_000_000.0);
+        sparse.put("zincMg", null);
+        Dish stored = micro.createDish("torben", oats(sparse));
+        assertThat(stored.per100g().micros()).containsExactly(
+                Map.entry("vitaminB12Ug", 0.0), Map.entry("iodineUg", 10_000_000.0));
+    }
+
+    /** PUT ersetzt das Gericht ganz: wer die Mikronaehrstoffe behalten will, schickt sie mit. */
+    @Test
+    void savingADishWithoutMicrosRemovesThem() {
+        Dish created = micro.createDish("torben", oats(oatMicros()));
+        Dish updated = micro.updateDish("torben", created.id(), oats(null));
+        assertThat(updated.per100g().micros()).isNull();
+        assertThat(micro.dishes("torben").get(0).per100g().hasMicros()).isFalse();
+    }
+
+    /** Fuer alle anderen bleibt micros unbeachtet - nicht gespeichert, nicht einmal geprueft. */
+    @Test
+    void microsAreIgnoredForEveryoneElse() throws Exception {
+        Dish dish = micro.createDish(ME, oats(Map.of("ironMg", 4.2, "vitaminXMg", -5.0)));
+        DaySummary day = micro.addEntry(ME, new NewEntryRequest(TODAY, null, new DishRequest("Skyr mit Beeren",
+                80.0, 8.0, 6.0, 1.3, 300.0, null, null, null, null, Map.of("calciumMg", 120.0)), 300.0, null));
+        micro.updateTargets(ME, new TargetsRequest(2300.0, 200.0, 235.5, 62.0, null, Map.of("vitaminCMg", 0.0)));
+
+        assertThat(dish.per100g().micros()).isNull();
+        assertThat(day.entries()).allSatisfy(e -> assertThat(e.per100g().micros()).isNull());
+        assertThat(micro.targets(ME).micros()).isNull();
+        String json = new ObjectMapper().writeValueAsString(micro.day(ME, TODAY))
+                + new ObjectMapper().writeValueAsString(micro.dishes(ME));
+        assertThat(json).doesNotContain("micros", "microGaps", "ironMg");
+        // Auch in der Datei steht nichts Neues.
+        assertThat(Files.readString(tempDir.resolve("food.json"))).doesNotContain("micro");
+    }
+
+    // --- Mikro-Ziele ------------------------------------------------------------
+
+    /** Wer nie Mikro-Ziele gespeichert hat, bekommt die DGE-Vorgabe - im Tag und unter /targets. */
+    @Test
+    void neverSavedMicroTargetsAreTheDgeValues() {
+        assertThat(micro.targets("torben").micros()).isEqualTo(Micronutrient.defaultTargets());
+        assertThat(micro.day("torben", TODAY).targets().micros()).isEqualTo(Micronutrient.defaultTargets());
+        // Die Grundwerte bleiben die gespeicherten.
+        assertThat(micro.targets("torben").kcal()).isEqualTo(2300.0);
+        assertThat(micro.targets(ME).micros()).isNull();
+    }
+
+    /** Was gespeichert ist, gilt - ein fehlender Schluessel heisst "kein Ziel", nicht "Vorgabe". */
+    @Test
+    void savedMicroTargetsReplaceTheDefaults() {
+        Nutrients saved = micro.updateTargets("torben", new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null,
+                Map.of("vitaminDUg", 25.0, "ironMg", 10.0)));
+
+        assertThat(saved.micros()).containsExactly(Map.entry("vitaminDUg", 25.0), Map.entry("ironMg", 10.0));
+        assertThat(micro.targets("torben").micros()).isEqualTo(saved.micros());
+        assertThat(micro.day("torben", TODAY).targets().micro("vitaminCMg")).isNull();
+    }
+
+    /** Eine leere Liste ist "bewusst ohne Ziel" - und bleibt es, statt zur Vorgabe zurueckzufallen. */
+    @Test
+    void anEmptyListMeansDeliberatelyNoMicroTargets() throws Exception {
+        Nutrients saved = micro.updateTargets("torben",
+                new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null, Map.of()));
+
+        assertThat(saved.micros()).isNull();
+        assertThat(micro.targets("torben").micros()).isNull();
+        assertThat(new ObjectMapper().writeValueAsString(micro.targets("torben"))).doesNotContain("micros");
+        assertThat(Files.readString(tempDir.resolve("users/torben/food.json"))).contains("\"microTargets\" : { }");
+    }
+
+    /** Ein Client, der das Feld nicht kennt, loescht nichts - weder gespeicherte Ziele noch die Vorgabe. */
+    @Test
+    void targetsWithoutMicrosKeepWhatIsStored() {
+        micro.updateTargets("torben", new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null));
+        assertThat(micro.targets("torben").micros()).isEqualTo(Micronutrient.defaultTargets());
+
+        micro.updateTargets("torben", new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null, Map.of("zincMg", 11.0)));
+        micro.updateTargets("torben", new TargetsRequest(2700.0, 180.0, 300.0, 90.0, null));
+        assertThat(micro.targets("torben").micros()).containsExactly(Map.entry("zincMg", 11.0));
+        assertThat(micro.targets("torben").kcal()).isEqualTo(2700.0);
+    }
+
+    /** Eintragen, Loeschen und Gerichte pflegen speichern das ganze Tagebuch - die Mikro-Ziele muessen mit. */
+    @Test
+    void microTargetsSurviveEveryOtherChange() {
+        micro.updateTargets("torben", new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null, Map.of("zincMg", 11.0)));
+        Dish dish = micro.createDish("torben", oats(oatMicros()));
+        DaySummary day = micro.addEntry("torben", new NewEntryRequest(TODAY, dish.id(), null, 50.0, null));
+        micro.updateEntry("torben", day.entries().get(0).id(), new UpdateEntryRequest(70.0, null, null));
+        micro.updateDish("torben", dish.id(), oats(Map.of()));
+        micro.deleteEntry("torben", day.entries().get(0).id());
+        micro.deleteDish("torben", dish.id());
+
+        assertThat(micro.targets("torben").micros()).containsExactly(Map.entry("zincMg", 11.0));
+    }
+
+    @Test
+    void microTargetsAreChecked() {
+        assertThatThrownBy(() -> micro.updateTargets("torben",
+                new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null, Map.of("vitaminCMg", 0.0))))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("micros.vitaminCMg must be greater than 0");
+        assertThatThrownBy(() -> micro.updateTargets("torben",
+                new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null, Map.of("vitaminK", 70.0))))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("micros.vitaminK");
+        assertThatThrownBy(() -> micro.updateTargets("torben",
+                new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null, Map.of("potassiumMg", 20_000.0))))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("micros.potassiumMg must be at most");
+        // Nichts davon wurde gespeichert - auch nicht die Grundwerte.
+        assertThat(micro.targets("torben").kcal()).isEqualTo(2300.0);
+        assertThat(micro.targets("torben").micros()).isEqualTo(Micronutrient.defaultTargets());
+    }
+
+    // --- Mikronaehrstoffe in der Schnellerfassung -----------------------------------
+
+    @Test
+    void quickCaptureAsksForMicrosOnlyForPeopleWhoTrackThem() {
+        micro.quickCapture("torben", new QuickCaptureRequest(TODAY, "ein Teller Linsensuppe", null));
+        assertThat(extractor.seenMicronutrients).isTrue();
+        micro.quickCapture(ME, new QuickCaptureRequest(TODAY, "ein Teller Linsensuppe", null));
+        assertThat(extractor.seenMicronutrients).isFalse();
+    }
+
+    @Test
+    void theProposalCarriesMicrosWithTheirSources() {
+        extractor.next = new ExtractedDish("Linsensuppe", 95, 6, 12, 2.5, 400, 400.0, List.of("ironMg"),
+                List.of("kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams", "folateUg"),
+                "geschaetzt", Meal.LUNCH, null, null, null, null,
+                Map.of("ironMg", 2.14567, "folateUg", 60.0, "potassiumMg", 310.0));
+
+        QuickCapturePreview preview = micro.quickCapture("torben", new QuickCaptureRequest(TODAY, "Linsensuppe", null));
+
+        assertThat(preview.per100g().micros()).containsExactly(
+                Map.entry("folateUg", 60.0), Map.entry("potassiumMg", 310.0), Map.entry("ironMg", 2.15));
+        assertThat(preview.valueSources())
+                .containsEntry("ironMg", "lookedUp")
+                .containsEntry("folateUg", "estimated")
+                .containsEntry("potassiumMg", "read")
+                .doesNotContainKey("zincMg");
+    }
+
+    /** Ein bekanntes Gericht bringt seine gespeicherten Mikronaehrstoffe mit - "gespeichert" nur, wo einer ist. */
+    @Test
+    void aKnownDishKeepsItsStoredMicros() {
+        micro.createDish("torben", oats(Map.of("ironMg", 4.2, "magnesiumMg", 130.0)));
+        extractor.next = new ExtractedDish("haferflocken", 380, 12, 60, 7, 50, null, List.of(), List.of(), "",
+                Meal.BREAKFAST, null, null, null, null, Map.of("ironMg", 3.0, "zincMg", 3.0));
+
+        QuickCapturePreview preview = micro.quickCapture("torben", new QuickCaptureRequest(TODAY, "Haferflocken", null));
+
+        assertThat(preview.known()).isTrue();
+        assertThat(preview.per100g().micros()).containsExactly(Map.entry("magnesiumMg", 130.0), Map.entry("ironMg", 4.2));
+        assertThat(preview.valueSources()).containsEntry("ironMg", "stored").containsEntry("magnesiumMg", "stored")
+                .doesNotContainKey("zincMg");
+    }
+
+    /** Liefert der Agent sie ungefragt, landen sie trotzdem nicht in Felix' Vorschlag. */
+    @Test
+    void microsFromTheAgentNeverReachSomeoneElsesProposal() throws Exception {
+        extractor.next = new ExtractedDish("Linsensuppe", 95, 6, 12, 2.5, 400, 400.0, List.of("ironMg"), List.of(),
+                "", Meal.LUNCH, null, null, null, null, Map.of("ironMg", 2.1));
+
+        QuickCapturePreview preview = micro.quickCapture(ME, new QuickCaptureRequest(TODAY, "Linsensuppe", null));
+
+        assertThat(preview.per100g().micros()).isNull();
+        assertThat(preview.valueSources()).doesNotContainKey("ironMg");
+        assertThat(new ObjectMapper().writeValueAsString(preview)).doesNotContain("micros", "ironMg");
     }
 }

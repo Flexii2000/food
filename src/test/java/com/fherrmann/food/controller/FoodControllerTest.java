@@ -63,6 +63,9 @@ class FoodControllerTest {
     @MockitoBean
     private com.fherrmann.food.service.DetailedNutrition detailedNutrition;
 
+    @MockitoBean
+    private com.fherrmann.food.service.MicronutrientTracking micronutrients;
+
     private MockMvc mockMvc;
 
     @BeforeEach

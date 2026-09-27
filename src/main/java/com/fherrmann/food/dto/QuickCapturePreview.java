@@ -24,7 +24,9 @@ import java.util.Map;
  * @param valueSources je Feld ({@code kcal}, {@code proteinG}, {@code carbsG},
  *                     {@code fatG}, {@code grams}, {@code portionG}) die Herkunft:
  *                     {@code stored} aus der Gerichteliste, {@code read} als Zahl
- *                     im Text gestanden, {@code estimated} geschaetzt
+ *                     im Text gestanden, {@code estimated} geschaetzt. Detailwerte
+ *                     und Mikronaehrstoffe stehen mit ihrem Schluessel darin, soweit
+ *                     der Vorschlag sie hat
  * @param note         ein Satz zur Herleitung
  */
 public record QuickCapturePreview(

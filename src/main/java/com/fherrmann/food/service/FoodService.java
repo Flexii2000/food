@@ -14,6 +14,7 @@ import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.FoodData;
 import com.fherrmann.food.model.FoodEntry;
 import com.fherrmann.food.model.Meal;
+import com.fherrmann.food.model.Micronutrient;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.repository.FoodRepository;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -86,24 +88,34 @@ public class FoodService {
     /** Wer die Detailwerte erfasst - danach richtet sich, was die Schnellerfassung schaetzt. */
     private final DetailedNutrition detailed;
 
+    /** Wer Mikronaehrstoffe erfasst - nur fuer diese Personen gibt es Werte, Ziele und Fragen danach. */
+    private final MicronutrientTracking micronutrients;
+
     public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock) {
-        this(repository, extractor, clock, Path.of(System.getProperty("java.io.tmpdir"), "food-inbox"),
-                DetailedNutrition.none());
+        this(repository, extractor, clock, DetailedNutrition.none(), MicronutrientTracking.none());
     }
 
     public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
                        DetailedNutrition detailed) {
-        this(repository, extractor, clock, Path.of(System.getProperty("java.io.tmpdir"), "food-inbox"), detailed);
+        this(repository, extractor, clock, detailed, MicronutrientTracking.none());
+    }
+
+    public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
+                       DetailedNutrition detailed, MicronutrientTracking micronutrients) {
+        this(repository, extractor, clock, Path.of(System.getProperty("java.io.tmpdir"), "food-inbox"),
+                detailed, micronutrients);
     }
 
     @Autowired
     public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
-                       @Value("${food.agent.inbox:data/inbox}") Path inbox, DetailedNutrition detailed) {
+                       @Value("${food.agent.inbox:data/inbox}") Path inbox, DetailedNutrition detailed,
+                       MicronutrientTracking micronutrients) {
         this.inbox = inbox;
         this.repository = repository;
         this.extractor = extractor;
         this.clock = clock;
         this.detailed = detailed;
+        this.micronutrients = micronutrients;
     }
 
     /** Ob die Schnellerfassung eingerichtet ist - siehe {@link NutritionExtractor}. */
@@ -121,12 +133,13 @@ public class FoodService {
         Nutrients consumed = sum(entries);
         return new DaySummary(
                 day,
-                data.targets().rounded(),
+                targetsOf(user, data).rounded(),
                 consumed.rounded(),
                 data.targets().minus(consumed).rounded(),
                 entries,
                 mealTargets(data),
-                detailGaps(entries));
+                detailGaps(entries),
+                microGaps(entries));
     }
 
     /**
@@ -146,6 +159,21 @@ public class FoodService {
     }
 
     /**
+     * Dasselbe fuer die Mikronaehrstoffe: die Schluessel, zu denen mindestens ein Eintrag
+     * des Tages keinen Wert hat. Kennt kein Eintrag einen einzigen, gibt es auch keine
+     * Luecke - dann steht im Tag schlicht nichts dazu.
+     */
+    static List<String> microGaps(List<FoodEntry> entries) {
+        boolean anyMicros = entries.stream().anyMatch(e -> e.per100g() != null && e.per100g().hasMicros());
+        if (!anyMicros) {
+            return List.of();
+        }
+        return Micronutrient.KEYS.stream()
+                .filter(key -> entries.stream().anyMatch(e -> e.per100g() == null || e.per100g().micro(key) == null))
+                .toList();
+    }
+
+    /**
      * The dish library, most recently used first and never-used ones after them, each
      * group alphabetical. The picker is a flat list, so the sort is the only thing
      * keeping the handful of things eaten every week within reach.
@@ -159,7 +187,20 @@ public class FoodService {
     }
 
     public Nutrients targets(String user) {
-        return repository.load(user).targets().rounded();
+        return targetsOf(user, repository.load(user)).rounded();
+    }
+
+    /**
+     * Die Tagesziele, wie die Person sie sieht. Wer Mikronaehrstoffe erfasst, bekommt deren
+     * Ziele dazu - die gespeicherten, oder die DGE-Vorgabe, solange nie welche gespeichert
+     * wurden. Eine gespeicherte leere Liste bleibt leer: das war eine Entscheidung.
+     */
+    private Nutrients targetsOf(String user, FoodData data) {
+        if (!micronutrients.isEnabled(user)) {
+            return data.targets().withMicros(null);
+        }
+        return data.targets().withMicros(
+                data.microTargets() != null ? data.microTargets() : Micronutrient.defaultTargets());
     }
 
     /**
@@ -294,7 +335,7 @@ public class FoodService {
                     .findFirst()
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown dishId"));
         } else if (request.dish() != null) {
-            dish = upsertDish(dishes, request.dish(), null);
+            dish = upsertDish(dishes, request.dish(), null, micronutrients.isEnabled(user));
         } else {
             throw badRequest("either dishId or dish is required");
         }
@@ -321,7 +362,7 @@ public class FoodService {
                 request.meal() == null ? Meal.SNACK : request.meal(),
                 Instant.now(clock)));
 
-        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, entries));
+        repository.save(user, data.with(dishes, entries));
         return day(user, date);
     }
 
@@ -352,13 +393,15 @@ public class FoodService {
         byte[] image = decodeImage(request);
 
         FoodData data = repository.load(user);
+        boolean withMicros = micronutrients.isEnabled(user);
         Path photo = null;
         ExtractedDish extracted;
         try {
             if (image != null) {
                 photo = storePhoto(jobId, image);
             }
-            extracted = extractor.extract(text, photo, data.targets(), data.dishes(), detailed.isDetailed(user));
+            extracted = extractor.extract(text, photo, data.targets(), data.dishes(), detailed.isDetailed(user),
+                    withMicros);
         } finally {
             if (photo != null) {
                 try {
@@ -383,11 +426,14 @@ public class FoodService {
                 .filter(d -> d.name().equalsIgnoreCase(extracted.name().trim()))
                 .findFirst();
 
+        // Mikronaehrstoffe nur fuer Personen, die sie erfassen - auch wenn ein Agent sie
+        // ungefragt liefert, gehoeren sie nicht in einen fremden Vorschlag.
+        Map<String, Double> micros = withMicros ? extracted.micros() : Map.of();
         Nutrients per100g = known.map(Dish::per100g).orElseGet(
                 () -> new Nutrients(extracted.kcal(), extracted.proteinG(),
                         extracted.carbsG(), extracted.fatG(),
                         extracted.saturatedFatG(), extracted.sugarG(),
-                        extracted.fiberG(), extracted.saltG()));
+                        extracted.fiberG(), extracted.saltG(), micros));
 
         return new QuickCapturePreview(
                 known.isPresent(),
@@ -397,7 +443,7 @@ public class FoodService {
                 known.map(Dish::portionG).orElseGet(extracted::portionG),
                 extracted.grams(),
                 meal == null ? Meal.SNACK : meal,
-                valueSources(extracted, known.map(Dish::per100g).orElse(null)),
+                valueSources(extracted, micros, known.map(Dish::per100g).orElse(null)),
                 known.isPresent()
                         ? "Bekanntes Gericht erkannt - die gespeicherten Nährwerte werden übernommen."
                         : extracted.note());
@@ -525,7 +571,8 @@ public class FoodService {
      * Bestaetigen sehen muss: eine geschaetzte Zahl von einer abgelesenen zu
      * unterscheiden, ist die eine Pruefung, die er selbst nicht nachholen kann.
      */
-    private static Map<String, String> valueSources(ExtractedDish extracted, Nutrients stored) {
+    private static Map<String, String> valueSources(ExtractedDish extracted, Map<String, Double> micros,
+                                                    Nutrients stored) {
         boolean known = stored != null;
         Map<String, String> sources = new LinkedHashMap<>();
         // Reihenfolge ist Absicht: nachgeschlagen schlaegt geschaetzt, und was in
@@ -546,6 +593,9 @@ public class FoodService {
             Nutrients.DETAIL_FIELDS.stream()
                     .filter(field -> stored.detail(field) != null)
                     .forEach(field -> sources.put(field, "stored"));
+            Micronutrient.KEYS.stream()
+                    .filter(key -> stored.micro(key) != null)
+                    .forEach(key -> sources.put(key, "stored"));
         } else {
             put.accept("kcal", "kcalPer100g");
             put.accept("proteinG", "proteinPer100g");
@@ -556,6 +606,8 @@ public class FoodService {
             if (extracted.sugarG() != null) put.accept("sugarG", "sugarPer100g");
             if (extracted.fiberG() != null) put.accept("fiberG", "fiberPer100g");
             if (extracted.saltG() != null) put.accept("saltG", "saltPer100g");
+            // Beim Agent heissen die Mikronaehrstoffe genau wie im JSON.
+            micros.keySet().forEach(key -> put.accept(key, key));
         }
         // Die Menge steht im Text oder eben nicht - unabhaengig davon, ob das
         // Gericht bekannt ist.
@@ -586,7 +638,7 @@ public class FoodService {
         List<FoodEntry> entries = data.entries().stream()
                 .map(e -> e.id() != null && e.id().equals(id) ? updated : e)
                 .toList();
-        repository.save(user, new FoodData(data.targets(), data.mealShares(), data.dishes(), entries));
+        repository.save(user, data.with(data.dishes(), entries));
         return day(user, date);
     }
 
@@ -599,7 +651,7 @@ public class FoodService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown entry"));
         List<FoodEntry> entries = new ArrayList<>(data.entries());
         entries.removeIf(e -> e.id() != null && e.id().equals(id));
-        repository.save(user, new FoodData(data.targets(), data.mealShares(), data.dishes(), entries));
+        repository.save(user, data.with(data.dishes(), entries));
         return day(user, existing.date());
     }
 
@@ -607,8 +659,8 @@ public class FoodService {
     public synchronized Dish createDish(String user, DishRequest request) {
         FoodData data = repository.load(user);
         List<Dish> dishes = new ArrayList<>(data.dishes());
-        Dish dish = upsertDish(dishes, request, null);
-        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
+        Dish dish = upsertDish(dishes, request, null, micronutrients.isEnabled(user));
+        repository.save(user, data.with(dishes, data.entries()));
         return dish;
     }
 
@@ -623,8 +675,8 @@ public class FoodService {
         if (dishes.stream().noneMatch(d -> d.id().equals(id))) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown dish");
         }
-        Dish updated = upsertDish(dishes, request, id);
-        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
+        Dish updated = upsertDish(dishes, request, id, micronutrients.isEnabled(user));
+        repository.save(user, data.with(dishes, data.entries()));
         return updated;
     }
 
@@ -635,10 +687,14 @@ public class FoodService {
         if (!dishes.removeIf(d -> d.id().equals(id))) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown dish");
         }
-        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, data.entries()));
+        repository.save(user, data.with(dishes, data.entries()));
     }
 
-    /** Replaces the daily goals. */
+    /**
+     * Replaces the daily goals. Mikro-Ziele nur fuer Personen, die sie erfassen, und nur,
+     * wenn welche mitkommen: ein Client, der das Feld nicht kennt, soll die gespeicherten
+     * nicht loeschen.
+     */
     public synchronized Nutrients updateTargets(String user, TargetsRequest request) {
         if (request == null) {
             throw badRequest("request body is required");
@@ -652,8 +708,12 @@ public class FoodService {
         Map<Meal, Double> shares = request.mealShares() == null
                 ? data.mealShares()
                 : validShares(request.mealShares());
-        repository.save(user, new FoodData(targets, shares, data.dishes(), data.entries()));
-        return targets.rounded();
+        Map<String, Double> microTargets = micronutrients.isEnabled(user) && request.micros() != null
+                ? validMicroTargets(request.micros())
+                : data.microTargets();
+        FoodData updated = new FoodData(targets, shares, data.dishes(), data.entries(), microTargets);
+        repository.save(user, updated);
+        return targetsOf(user, updated).rounded();
     }
 
     // --- helpers ------------------------------------------------------------
@@ -678,8 +738,11 @@ public class FoodService {
      * Writes a dish into {@code dishes}, either under the given id (edit) or under a
      * name that already exists (re-entering a known dish updates it instead of creating
      * a near-duplicate), or as a new one. Returns the stored dish.
+     *
+     * @param withMicros ob die Person Mikronaehrstoffe erfasst - sonst bleibt
+     *                   {@code micros} unbeachtet, auch ungeprueft
      */
-    private Dish upsertDish(List<Dish> dishes, DishRequest request, String id) {
+    private Dish upsertDish(List<Dish> dishes, DishRequest request, String id, boolean withMicros) {
         if (request == null) {
             throw badRequest("dish is required");
         }
@@ -699,7 +762,8 @@ public class FoodService {
                 optionalNonNegative(request.saturatedFatG(), "saturatedFatG", MAX_MACRO_PER_100G),
                 optionalNonNegative(request.sugarG(), "sugarG", MAX_MACRO_PER_100G),
                 optionalNonNegative(request.fiberG(), "fiberG", MAX_MACRO_PER_100G),
-                optionalNonNegative(request.saltG(), "saltG", MAX_MACRO_PER_100G));
+                optionalNonNegative(request.saltG(), "saltG", MAX_MACRO_PER_100G),
+                withMicros ? validMicros(request.micros()) : null);
         Double portionG = request.portionG() == null
                 ? null
                 : requirePositive(request.portionG(), "portionG", MAX_GRAMS);
@@ -754,6 +818,38 @@ public class FoodService {
 
     private static Double optionalNonNegative(Double value, String field, double max) {
         return value == null ? null : requireNonNegative(value, field, max);
+    }
+
+    /**
+     * Mikronaehrstoffe je 100 g: nur bekannte Schluessel, jeder Wert endlich, mindestens 0
+     * und hoechstens das Gegenstueck von 10 g. Ein Schluessel ohne Wert ist keine Angabe
+     * und faellt weg - eine 0 wird nie erfunden.
+     */
+    private static Map<String, Double> validMicros(Map<String, Double> micros) {
+        return checkedMicros(micros, (nutrient, value) ->
+                requireNonNegative(value, "micros." + nutrient.key(), nutrient.limit()));
+    }
+
+    /** Mikro-Ziele: wie {@link #validMicros}, aber groesser als 0 - ein Ziel von 0 ist keines. */
+    private static Map<String, Double> validMicroTargets(Map<String, Double> micros) {
+        return checkedMicros(micros, (nutrient, value) ->
+                requirePositive(value, "micros." + nutrient.key(), nutrient.limit()));
+    }
+
+    private static Map<String, Double> checkedMicros(
+            Map<String, Double> micros, BiFunction<Micronutrient, Double, Double> check) {
+        if (micros == null) {
+            return null;
+        }
+        Map<String, Double> checked = new LinkedHashMap<>();
+        micros.forEach((key, value) -> {
+            Micronutrient nutrient = Micronutrient.byKey(key)
+                    .orElseThrow(() -> badRequest("micros." + key + " is not a known micronutrient"));
+            if (value != null) {
+                checked.put(nutrient.key(), check.apply(nutrient, value));
+            }
+        });
+        return checked;
     }
 
     private static double requireNonNegative(Double value, String field, double max) {

@@ -2,6 +2,7 @@ package com.fherrmann.food.service;
 
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Meal;
+import com.fherrmann.food.model.Micronutrient;
 import com.fherrmann.food.model.Nutrients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,10 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -50,10 +54,14 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      */
     private static final int MAX_KNOWN_DISHES = 60;
 
-    /** Feldnamen, die der Agent schaetzen kann - Rueckfallwert, siehe unten. */
-    private static final List<String> ALL_ESTIMATABLE = List.of(
-            "kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams", "portionG",
-            "saturatedFatPer100g", "sugarPer100g", "fiberPer100g", "saltPer100g");
+    /**
+     * Feldnamen, die der Agent schaetzen kann - Rueckfallwert, siehe unten. Die
+     * Mikronaehrstoffe heissen beim Agent genau wie im JSON.
+     */
+    private static final List<String> ALL_ESTIMATABLE = Stream.concat(
+            Stream.of("kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams", "portionG",
+                    "saturatedFatPer100g", "sugarPer100g", "fiberPer100g", "saltPer100g"),
+            Micronutrient.KEYS.stream()).toList();
 
     private final List<String> command;
     private final long timeoutSeconds;
@@ -85,15 +93,16 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
     }
 
     @Override
-    public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed) {
+    public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed,
+                                 boolean micronutrients) {
         if (!isAvailable()) {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "Schnellerfassung ist auf diesem Server nicht eingerichtet.");
         }
 
-        String output = run(prompt(text, photo, targets, known, detailed));
-        return parse(output, detailed);
+        String output = run(prompt(text, photo, targets, known, detailed, micronutrients));
+        return parse(output, detailed, micronutrients);
     }
 
     /** Startet die Session, schiebt den Prompt hinein und gibt aus, was zurueckkam. */
@@ -169,7 +178,7 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      * steckt die Antwort in {@code result}) oder die blanke Antwort. Beides wird
      * akzeptiert, damit ein Wechsel des Ausgabeformats im Wrapper nichts bricht.
      */
-    private ExtractedDish parse(String output, boolean detailed) {
+    private ExtractedDish parse(String output, boolean detailed, boolean micronutrients) {
         String payload = output;
         JsonNode envelope = tryReadJson(output);
         if (envelope != null && envelope.has("result")) {
@@ -206,7 +215,21 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                 detailed ? optionalValue(node.path("saturatedFatPer100g")) : null,
                 detailed ? optionalValue(node.path("sugarPer100g")) : null,
                 detailed ? optionalValue(node.path("fiberPer100g")) : null,
-                detailed ? optionalValue(node.path("saltPer100g")) : null);
+                detailed ? optionalValue(node.path("saltPer100g")) : null,
+                // Dasselbe fuer die Mikronaehrstoffe.
+                micronutrients ? readMicros(node.path("microsPer100g")) : Map.of());
+    }
+
+    /** Die bekannten Schluessel mit einer Zahl >= 0; alles andere ist keine Angabe. */
+    private static Map<String, Double> readMicros(JsonNode node) {
+        Map<String, Double> micros = new LinkedHashMap<>();
+        for (String key : Micronutrient.KEYS) {
+            Double value = optionalValue(node.path(key));
+            if (value != null) {
+                micros.put(key, value);
+            }
+        }
+        return micros;
     }
 
     /** Eine Zahl, oder null, wenn sie fehlt oder keine ist - fehlend ist keine 0. */
@@ -283,7 +306,8 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      * Aufruf zu Aufruf aendert - der Text, die Tagesziele und die schon
      * gespeicherten Gerichte.
      */
-    private String prompt(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed) {
+    private String prompt(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed,
+                          boolean micronutrients) {
         StringBuilder sb = new StringBuilder();
         sb.append("Tagesziele: ")
                 .append(fmt(targets.kcal())).append(" kcal, ")
@@ -316,6 +340,19 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                     .append("saturatedFatPer100g, sugarPer100g, fiberPer100g und saltPer100g an ")
                     .append("(je 100 g, wie auf einer Packung in der EU) und fuehre sie in lookedUp ")
                     .append("bzw. estimated wie die uebrigen Werte.\n\n");
+        }
+
+        // Ebenso die Mikronaehrstoffe. Die gespeicherten Gerichte oben tragen ihre
+        // bewusst nicht: fuer ein bekanntes Gericht nimmt der Dienst ohnehin die
+        // gespeicherten Werte, und vierzehn Zahlen je Gericht machten den Auftrag
+        // nur laenger und teurer.
+        if (micronutrients) {
+            sb.append("Diese Person erfasst auch Mikronaehrstoffe. Gib zusaetzlich microsPer100g an, ")
+                    .append("je 100 g mit den Schluesseln ")
+                    .append(String.join(", ", Micronutrient.KEYS))
+                    .append(" (Einheit im Namen: Mg = Milligramm, Ug = Mikrogramm). Schaetzen ist hier ")
+                    .append("ausdruecklich erwuenscht; bei einem konkreten Produkt schlag nach. Fuehre sie ")
+                    .append("mit ihren Schluesseln in lookedUp bzw. estimated.\n\n");
         }
 
         // Das Foto liegt als Datei im Postfach, das der Agent lesen darf -

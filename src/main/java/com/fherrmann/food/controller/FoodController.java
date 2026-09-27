@@ -18,6 +18,7 @@ import com.fherrmann.food.push.DeviceTokens;
 import com.fherrmann.food.push.DeviceTokens.Platform;
 import com.fherrmann.food.service.DetailedNutrition;
 import com.fherrmann.food.service.FoodService;
+import com.fherrmann.food.service.MicronutrientTracking;
 import com.fherrmann.food.service.QuickCaptureAccess;
 import com.fherrmann.food.service.QuickCaptureJobs;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -49,17 +50,19 @@ public class FoodController {
     private final QuickCaptureJobs quickCaptureJobs;
     private final QuickCaptureAccess quickCaptureAccess;
     private final DetailedNutrition detailedNutrition;
+    private final MicronutrientTracking micronutrients;
 
     private final DeviceTokens devices;
 
     public FoodController(FoodService service, QuickCaptureJobs quickCaptureJobs,
                           QuickCaptureAccess quickCaptureAccess, DetailedNutrition detailedNutrition,
-                          DeviceTokens devices) {
+                          MicronutrientTracking micronutrients, DeviceTokens devices) {
         this.devices = devices;
         this.service = service;
         this.quickCaptureJobs = quickCaptureJobs;
         this.quickCaptureAccess = quickCaptureAccess;
         this.detailedNutrition = detailedNutrition;
+        this.micronutrients = micronutrients;
     }
 
     /** Targets, totals and entries for one day; defaults to today. */
@@ -98,7 +101,7 @@ public class FoodController {
     public Features features(Principal principal) {
         String user = principal.getName();
         return new Features(service.quickCaptureAvailable() && quickCaptureAccess.allows(user), user,
-                detailedNutrition.isDetailed(user));
+                detailedNutrition.isDetailed(user), micronutrients.isEnabled(user));
     }
 
     /**
