@@ -422,6 +422,21 @@ main {
     .day-entries { grid-area: entries; }
     .history { grid-area: history; }
     .settings { grid-area: settings; }
+
+    /* Mit Mikronaehrstoffen steht deren Uebersicht links unter den Detailwerten,
+       die Mahlzeiten reichen rechts ueber beide Zeilen. Die zweite Zeile nimmt
+       auf, was die Mahlzeiten laenger sind - sonst rueckte die Uebersicht mit
+       nach unten. Nur mit ihr: ohne bliebe eine leere Zeile samt Abstand stehen. */
+    main:has(> .micros:not([hidden])) {
+        grid-template-areas:
+            "overview entries"
+            "micros entries"
+            "history history"
+            "settings settings";
+        grid-template-rows: auto 1fr auto auto;
+    }
+
+    .micros { grid-area: micros; align-self: start; margin-top: -24px; }
 }
 
 /* --- Tachos ------------------------------------------------------------- */
@@ -432,7 +447,8 @@ main {
    mittig - ueber die volle Breite gezogen stuenden Name und Wert der
    Detailzeilen weit auseinander. */
 @media (min-width: 641px) and (max-width: 1099px) {
-    .overview { width: 100%; max-width: 480px; justify-self: center; }
+    .overview,
+    .micros { width: 100%; max-width: 480px; justify-self: center; }
 }
 
 /* Die drei Makros oben nebeneinander, auf gleicher Hoehe. */
@@ -785,6 +801,150 @@ main {
 .entry-details dt { color: var(--muted); }
 .entry-details dd { margin: 0; }
 
+/* Die Mikronaehrstoffe des Eintrags bei seiner Menge: feste Spalten statt Fluss,
+   damit sie in jedem Eintrag an derselben Stelle stehen. */
+.entry-micros {
+    grid-column: 1 / -1;
+    margin: 0 0 8px;
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.em-title {
+    margin: 6px 0 2px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.entry-micros dl {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    gap: 2px 24px;
+    margin: 0;
+}
+
+.entry-micros dl div { display: flex; justify-content: space-between; gap: 8px; min-width: 0; }
+.entry-micros dt { color: var(--muted); white-space: nowrap; }
+.entry-micros dd { margin: 0; color: var(--text-2); white-space: nowrap; }
+
+/* --- Mikronaehrstoffe des Tages ------------------------------------------ */
+
+/* Gesetzt wie die Detailwerte - Name links, Wert rechts -, dazu je ein duenner
+   Balken bis zum Ziel. Die Fuellung nimmt die Toene der Tachos: blau auf dem
+   Weg, gruen erreicht. Eine Warnfarbe gibt es nicht, die Ziele sind Mindestwerte. */
+.micros h2 { margin-bottom: 4px; }
+
+.micro-group { padding-top: 18px; }
+
+.micro-group h3 {
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-2);
+}
+
+.micro-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 3.25rem;
+    grid-template-areas: "name value pct" "bar bar bar";
+    align-items: baseline;
+    column-gap: 12px;
+    padding: 7px 0 8px;
+    font-size: 0.875rem;
+}
+
+.mr-name { grid-area: name; color: var(--text-2); }
+
+.mr-value {
+    grid-area: value;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.mr-sum { color: var(--text); font-weight: 600; }
+
+.mr-pct {
+    grid-area: pct;
+    color: var(--muted);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.mr-bar {
+    grid-area: bar;
+    height: 4px;
+    margin-top: 6px;
+    border-radius: 2px;
+    background: var(--track);
+    overflow: hidden;
+}
+
+.mr-fill {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--g-neutral-a), var(--g-neutral-b));
+}
+
+.mr-fill.reached { background: linear-gradient(90deg, var(--g-good-a), var(--g-good-b)); }
+
+/* --- Mikronaehrstoff-Felder --------------------------------------------- */
+
+/* Aufklappbar in Eingabefenster, Vorschlag und Gerichteliste: vierzehn Felder
+   mehr, die man nur ausfuellt, wenn man sie kennt. */
+.micro-fields { margin-top: 18px; }
+
+.micro-fields > summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    min-height: 32px;
+    list-style: none;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-2);
+    cursor: pointer;
+}
+
+.micro-fields > summary::-webkit-details-marker { display: none; }
+.micro-fields > summary:hover { color: var(--text); }
+.micro-fields > summary:focus-visible { border-radius: 6px; }
+
+.micro-fields > summary .chevron {
+    width: 16px;
+    height: 16px;
+    color: var(--muted);
+    transition: transform 0.2s ease;
+}
+
+.micro-fields[open] > summary .chevron { transform: rotate(180deg); }
+
+.mf-count {
+    font-weight: 500;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Vitamine und Mineralstoffe als leise Zwischenzeilen. */
+.micro-caption {
+    margin: 14px 0 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.micro-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    align-items: end;
+    gap: 10px 12px;
+}
+
 /* --- Verlauf ------------------------------------------------------------ */
 
 .section-head {
@@ -918,10 +1078,12 @@ main {
 
 /* --- Einstellungen ------------------------------------------------------ */
 
+/* Nur die beiden Tafeln selbst - aufklappbare Abschnitte darin (Mikronaehrstoffe
+   je Gericht) haben ihre eigene, leisere Form. */
 .settings { border-top: 1px solid var(--line); }
-.settings details { border-bottom: 1px solid var(--line); }
+.settings > details { border-bottom: 1px solid var(--line); }
 
-.settings summary {
+.settings > details > summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -933,20 +1095,20 @@ main {
     cursor: pointer;
 }
 
-.settings summary::-webkit-details-marker { display: none; }
+.settings > details > summary::-webkit-details-marker { display: none; }
 
-.settings summary:focus-visible { outline-offset: -2px; border-radius: 8px; }
+.settings > details > summary:focus-visible { outline-offset: -2px; border-radius: 8px; }
 
-.settings summary .chevron {
+.settings > details > summary .chevron {
     width: 20px;
     height: 20px;
     color: var(--muted);
     transition: transform 0.2s ease, color 0.15s ease;
 }
 
-.settings summary:hover .chevron { color: var(--text); }
-.settings details[open] > summary .chevron { transform: rotate(180deg); }
-.settings details[open] { padding-bottom: 28px; }
+.settings > details > summary:hover .chevron { color: var(--text); }
+.settings > details[open] > summary .chevron { transform: rotate(180deg); }
+.settings > details[open] { padding-bottom: 28px; }
 
 #targets-check { margin-top: 16px; }
 
@@ -975,6 +1137,10 @@ main {
 .dish-row .d-satfat { grid-row: 3; grid-column: 4; }
 
 .dish-row label.detail { font-size: 0.75rem; font-weight: 400; color: var(--muted); }
+
+.dish-row .dish-micros { grid-column: 1 / -1; margin-top: 0; }
+.dish-micros label { font-size: 0.75rem; font-weight: 400; color: var(--muted); }
+.dish-micros .micro-caption:first-of-type { margin-top: 6px; }
 
 .dish-actions {
     grid-column: 2 / -1;
@@ -1300,6 +1466,7 @@ main {
 }
 
 .proposal .group-label { margin-top: 16px; margin-bottom: 4px; }
+.proposal .micro-fields { margin-top: 12px; }
 
 .proposal-value {
     display: grid;
@@ -1406,6 +1573,7 @@ main {
     .segmented button { height: 44px; padding: 0 14px; }
     .toggle-body { height: 44px; }
     .e-toggle { min-height: 44px; margin: -6px 0; }
+    .micro-fields > summary { min-height: 44px; }
 }
 
 @media (max-width: 640px) {

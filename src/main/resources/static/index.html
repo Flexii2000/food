@@ -87,6 +87,15 @@
         <div id="meals"></div>
     </section>
 
+    <!-- Mikronaehrstoffe des Tages gegen ihre Ziele, nur fuer Personen, die sie
+         erfassen. Im Dokument nach den Mahlzeiten, damit auf dem Handy das
+         Erfassen oben bleibt; auf dem Desktop steht die Uebersicht links unter
+         den Detailwerten (siehe styles.css). -->
+    <section class="micros" id="micros" aria-labelledby="micros-heading" hidden>
+        <h2 id="micros-heading">Mikronährstoffe</h2>
+        <div id="micro-groups"></div>
+    </section>
+
     <section class="history" aria-labelledby="history-heading">
         <div class="section-head">
             <h2 id="history-heading">Verlauf</h2>
@@ -130,6 +139,13 @@
                 <label>Snacks (%) <input type="number" id="sh-snack" step="1" min="0" max="100"></label>
             </form>
             <p class="hint" id="targets-check"></p>
+            <!-- Die Mikro-Ziele (nur mit features.micronutrients), vorbelegt mit dem,
+                 was der Dienst liefert. Ein leeres Feld oder 0 heisst "kein Ziel". Unter der
+                 Pruefzeile, weil die nur die Makros und die Aufteilung betrifft. -->
+            <div id="micro-targets" data-micros hidden>
+                <p class="group-label">Mikronährstoffe</p>
+                <div id="tg-micro-inputs"></div>
+            </div>
             <div class="actions">
                 <button type="submit" form="targets-form" class="button primary">Speichern</button>
                 <span id="targets-msg" class="form-msg"></span>
@@ -187,6 +203,10 @@
                      Stellen. Rechts steht je Wert, woher er stammt. -->
                 <p class="group-label" id="proposal-unit"></p>
                 <div class="proposal-values" id="proposal-values"></div>
+                <details class="micro-fields" id="proposal-micros" hidden>
+                    <summary><span>Mikronährstoffe</span><svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8"/></svg></summary>
+                    <div id="proposal-micro-values"></div>
+                </details>
 
                 <div class="proposal-amounts">
                     <label>Menge (g)
@@ -252,6 +272,11 @@
                 <label class="d-fiber" data-detail hidden>Ballaststoffe (g) <input type="number" id="nd-fiber" step="0.01" min="0" max="100"></label>
                 <label class="d-salt" data-detail hidden>Salz (g) <input type="number" id="nd-salt" step="0.01" min="0" max="100"></label>
             </div>
+            <!-- Mikronaehrstoffe, zugeklappt, solange alle Felder leer sind. -->
+            <details class="micro-fields" id="nd-micros" data-micros hidden>
+                <summary><span>Mikronährstoffe</span><svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8"/></svg></summary>
+                <div id="nd-micro-inputs"></div>
+            </details>
         </fieldset>
 
         <!-- Der Knopf gehoert per form-Attribut zum Formular oben und steht

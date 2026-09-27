@@ -129,6 +129,13 @@ Mikrogramm. Die Reihenfolge ist überall dieselbe (`Micronutrient`).
   Die gespeicherten Gerichte gehen ohne ihre Mikronährstoffe in den Auftrag:
   für ein bekanntes Gericht gelten ohnehin die gespeicherten Werte.
 
+In der Weboberfläche: aufgeklappte Einträge zeigen die Werte bei ihrer Menge,
+der Tag eine Übersicht mit der Zielerreichung je Nährstoff (auf dem Desktop
+links unter den Detailwerten, auf dem Handy nach den Mahlzeiten), und die
+Formulare für Gerichte, Vorschlag und Tagesziele einen Abschnitt mit den
+vierzehn Feldern. Unter dem Ziel steht nie „100 %"; eine 0 als Tagesziel heißt
+dort „kein Ziel".
+
 ## Gramm-basiert, mit optionaler Portion
 
 Ein Gericht speichert seine Nährwerte **je 100 g** — so stehen sie auf der

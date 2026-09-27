@@ -50,6 +50,36 @@ const DETAILS = [
 // dahin (und fuer alle anderen) sieht die Seite aus wie ohne sie.
 let detailedNutrients = false;
 
+// Die Mikronaehrstoffe - nur fuer Personen, die sie erfassen
+// (features.micronutrients). Reihenfolge und Schluessel wie im Dienst, die Einheit
+// steckt im Schluessel. Anders als bei den Detailwerten gibt es Tagesziele, als
+// Mindestwert gemeint wie beim Eiweiss.
+const MICROS = [
+    { key: 'vitaminAUg', label: 'Vitamin A', unit: 'µg', group: 'vitamins' },
+    { key: 'vitaminDUg', label: 'Vitamin D', unit: 'µg', group: 'vitamins' },
+    { key: 'vitaminEMg', label: 'Vitamin E', unit: 'mg', group: 'vitamins' },
+    { key: 'vitaminCMg', label: 'Vitamin C', unit: 'mg', group: 'vitamins' },
+    { key: 'vitaminB2Mg', label: 'Vitamin B2', unit: 'mg', group: 'vitamins' },
+    { key: 'vitaminB12Ug', label: 'Vitamin B12', unit: 'µg', group: 'vitamins' },
+    { key: 'folateUg', label: 'Folat', unit: 'µg', group: 'vitamins' },
+    { key: 'calciumMg', label: 'Calcium', unit: 'mg', group: 'minerals' },
+    { key: 'magnesiumMg', label: 'Magnesium', unit: 'mg', group: 'minerals' },
+    { key: 'potassiumMg', label: 'Kalium', unit: 'mg', group: 'minerals' },
+    { key: 'ironMg', label: 'Eisen', unit: 'mg', group: 'minerals' },
+    { key: 'zincMg', label: 'Zink', unit: 'mg', group: 'minerals' },
+    { key: 'iodineUg', label: 'Jod', unit: 'µg', group: 'minerals' },
+    { key: 'seleniumUg', label: 'Selen', unit: 'µg', group: 'minerals' },
+];
+const MICRO_GROUPS = [
+    { key: 'vitamins', label: 'Vitamine' },
+    { key: 'minerals', label: 'Mineralstoffe' },
+];
+// Obergrenze des Dienstes je 100 g: das Gegenstueck von 10 g.
+const MICRO_MAX = { mg: 10000, 'µg': 10000000 };
+
+// Ob diese Person Mikronaehrstoffe erfasst - wie detailedNutrients aus den Features.
+let micronutrients = false;
+
 // Die Weight-App liegt auf einer eigenen Subdomain, aber unter derselben Site -
 // der private Cookie reist also mit; credentials:'include' braucht es nur, weil
 // die Origin eine andere ist (dort per CORS genau fuer diese Seite freigegeben).
@@ -189,6 +219,20 @@ function detailGrams(value) {
     return `${rounded.toLocaleString('de-DE', { maximumFractionDigits: digits })} g`;
 }
 
+/**
+ * Die Zahl eines Mikronaehrstoffs, wie in der Android-App: unter 1 mit zwei
+ * Stellen, unter 10 mit einer, sonst ganz - ohne angehaengte Nullen und vorher
+ * gerundet wie im Dienst (siehe detailGrams). Der Tausenderpunkt kommt nur hier
+ * dazu, in Eingabefeldern steht die blanke Zahl.
+ */
+function microNumber(value) {
+    const abs = Math.abs(value);
+    const digits = abs < 1 ? 2 : abs < 10 ? 1 : 0;
+    const scale = 10 ** digits;
+    const rounded = Math.round(value * scale) / scale;
+    return rounded.toLocaleString('de-DE', { maximumFractionDigits: digits });
+}
+
 async function fetchJson(url, options) {
     const res = await fetch(url, options);
     if (!res.ok) {
@@ -312,6 +356,7 @@ function renderGauges() {
     document.getElementById('kcal-consumed').textContent = `${num(consumed)} kcal`;
     document.getElementById('kcal-target').textContent = `von ${num(target)} kcal`;
     renderDetailTotals();
+    renderMicros();
 }
 
 /**
@@ -337,6 +382,58 @@ function renderDetailTotals() {
     }).join('');
 }
 
+/**
+ * Die Mikronaehrstoffe des Tages gegen ihre Ziele, in Vitamine und Mineralstoffe
+ * geteilt. Die Ziele sind Mindestwerte wie beim Eiweiss: unter dem Ziel keine
+ * Warnfarbe, erreicht in der Toenung des erreichten Eiweiss-Tachos. Die Summe ist
+ * eine Untergrenze, wenn ein Eintrag keinen Wert hat (microGaps) - dann steht
+ * "≥" davor; kennt kein Eintrag den Wert, steht ein Strich.
+ */
+function renderMicros() {
+    const section = document.getElementById('micros');
+    const box = document.getElementById('micro-groups');
+    section.hidden = !micronutrients || !day;
+    if (section.hidden) {
+        box.replaceChildren();
+        return;
+    }
+    const consumed = day.consumed.micros || {};
+    const targets = day.targets.micros || {};
+    const gaps = day.microGaps || [];
+    box.innerHTML = MICRO_GROUPS.map(group => `
+        <div class="micro-group">
+            <h3>${group.label}</h3>
+            ${MICROS.filter(micro => micro.group === group.key)
+                .map(micro => microRow(micro, consumed[micro.key], targets[micro.key], gaps.includes(micro.key)))
+                .join('')}
+        </div>`).join('');
+}
+
+/** Eine Zeile der Uebersicht: "verzehrt / Ziel Einheit", Prozent und Balken - ohne Ziel nur die Summe. */
+function microRow(micro, value, target, partial) {
+    const sum = value == null ? '–' : `${partial ? '≥ ' : ''}${microNumber(value)}`;
+    if (target == null) {
+        return `
+            <div class="micro-row">
+                <span class="mr-name">${micro.label}</span>
+                <span class="mr-value"><span class="mr-sum">${sum}</span>${value == null ? '' : ` ${micro.unit}`}</span>
+            </div>`;
+    }
+    const ratio = value == null ? 0 : value / target;
+    const reached = value != null && value >= target;
+    // Unter dem Ziel nie "100 %" - sonst stuende bei 99,6 % die Zahl eines
+    // erreichten Ziels neben einem Balken, der es nicht ist (wie in der Android-App).
+    const percent = reached ? Math.round(ratio * 100) : Math.min(Math.round(ratio * 100), 99);
+    return `
+        <div class="micro-row">
+            <span class="mr-name">${micro.label}</span>
+            <span class="mr-value"><span class="mr-sum">${sum}</span> / ${microNumber(target)} ${micro.unit}</span>
+            <span class="mr-pct">${value == null ? '' : `${num(percent)} %`}</span>
+            <span class="mr-bar" aria-hidden="true"><span class="mr-fill${reached ? ' reached' : ''}"
+                  style="width: ${Math.min(ratio, 1) * 100}%"></span></span>
+        </div>`;
+}
+
 // --- Eintraege des Tages ----------------------------------------------------
 
 // Wischen zum Loeschen gibt es nur auf Touch-Geraeten. Mit Maus tut es der
@@ -353,6 +450,7 @@ const SWIPE_MAX_PX = 96;
 const ICON_PLUS = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>';
 const ICON_REMOVE = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg>';
 const ICON_MORE = '<svg class="e-more" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8"/></svg>';
+const ICON_CHEVRON = '<svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8"/></svg>';
 
 function renderEntries() {
     const container = document.getElementById('meals');
@@ -438,6 +536,11 @@ function hasDetails(per100g) {
     return !!per100g && DETAILS.some(detail => per100g[detail.key] != null);
 }
 
+/** Ob Naehrwerte mindestens einen Mikronaehrstoff tragen. */
+function hasMicros(per100g) {
+    return !!per100g && !!per100g.micros && Object.keys(per100g.micros).length > 0;
+}
+
 function buildEntryRow(entry) {
     const factor = entry.grams / 100;
     const row = document.createElement('div');
@@ -448,9 +551,12 @@ function buildEntryRow(entry) {
     backdrop.setAttribute('aria-hidden', 'true');
     backdrop.textContent = 'Löschen';
 
-    // Detailwerte zeigt die Liste erst auf Antippen: in jeder Zeile stuenden
-    // sonst acht Zahlen. Aufklappbar ist nur, was auch welche hat.
-    const expandable = detailedNutrients && hasDetails(entry.per100g);
+    // Detailwerte und Mikronaehrstoffe zeigt die Liste erst auf Antippen: in
+    // jeder Zeile stuenden sonst zwei Dutzend Zahlen. Aufklappbar ist nur, was
+    // auch welche hat.
+    const withDetails = detailedNutrients && hasDetails(entry.per100g);
+    const withMicros = micronutrients && hasMicros(entry.per100g);
+    const expandable = withDetails || withMicros;
     const name = expandable
         ? `<button type="button" class="e-toggle" aria-expanded="false"><span>${escapeHtml(entry.name)}</span>${ICON_MORE}</button>`
         : escapeHtml(entry.name);
@@ -475,16 +581,39 @@ function buildEntryRow(entry) {
     content.appendChild(remove);
 
     if (expandable) {
-        const details = document.createElement('dl');
-        details.className = 'entry-details';
-        details.hidden = true;
-        details.innerHTML = DETAILS.map(detail => {
-            const value = entry.per100g[detail.key];
-            const text = value == null ? '–' : detailGrams(value * factor);
-            return `<div><dt>${detail.short}</dt><dd>${text}</dd></div>`;
-        }).join('');
+        const panels = [];
+        if (withDetails) {
+            const details = document.createElement('dl');
+            details.className = 'entry-details';
+            details.innerHTML = DETAILS.map(detail => {
+                const value = entry.per100g[detail.key];
+                const text = value == null ? '–' : detailGrams(value * factor);
+                return `<div><dt>${detail.short}</dt><dd>${text}</dd></div>`;
+            }).join('');
+            panels.push(details);
+        }
+        if (withMicros) {
+            // Alle vierzehn an festem Platz, auch die ohne Wert: so stehen sie in
+            // jedem Eintrag untereinander, und eine Luecke faellt auf.
+            const micros = document.createElement('div');
+            micros.className = 'entry-micros';
+            micros.innerHTML = MICRO_GROUPS.map(group => `
+                <p class="em-title">${group.label}</p>
+                <dl>${MICROS.filter(micro => micro.group === group.key).map(micro => {
+                    const value = entry.per100g.micros[micro.key];
+                    // Erst auf zwei Stellen wie die Tagessumme im Dienst, dann nach
+                    // der Anzeige-Regel: so steht am Eintrag dieselbe Zahl wie in der
+                    // Summe eines Tages, an dem es nur ihn gibt.
+                    const text = value == null ? '–' : `${microNumber(round(value * factor, 2))} ${micro.unit}`;
+                    return `<div><dt>${micro.label}</dt><dd>${text}</dd></div>`;
+                }).join('')}</dl>`).join('');
+            panels.push(micros);
+        }
         // Im Inhalt, nicht daneben: so faehrt die Zeile beim Wischen als Ganzes.
-        content.appendChild(details);
+        panels.forEach(panel => {
+            panel.hidden = true;
+            content.appendChild(panel);
+        });
         content.classList.add('expandable');
 
         const toggle = content.querySelector('.e-toggle');
@@ -492,8 +621,8 @@ function buildEntryRow(entry) {
         // Vorlesen - sein Klick landet ueber das Bubbling ebenfalls hier.
         content.addEventListener('click', event => {
             if (event.target.closest('.row-remove')) return;
-            const open = details.hidden;
-            details.hidden = !open;
+            const open = panels[0].hidden;
+            panels.forEach(panel => { panel.hidden = !open; });
             row.classList.toggle('expanded', open);
             toggle.setAttribute('aria-expanded', String(open));
         });
@@ -846,6 +975,19 @@ function buildDishRow(dish) {
     actions.append(save, remove, msg);
     row.appendChild(actions);
 
+    // Die Mikronaehrstoffe zugeklappt je Gericht und hinter den Knoepfen: vierzehn
+    // Felder mehr in jeder Zeile machten die Liste unlesbar. Gespeichert werden sie
+    // auch zugeklappt - PUT ersetzt das Gericht, ohne sie waeren sie weg.
+    if (micronutrients) {
+        const values = dish.per100g.micros || {};
+        const count = Object.keys(values).length;
+        row.insertAdjacentHTML('beforeend', `
+            <details class="micro-fields dish-micros">
+                <summary><span>Mikronährstoffe</span><span class="mf-count">${count}/${MICROS.length}</span>${ICON_CHEVRON}</summary>
+                ${microInputs(null, values, true)}
+            </details>`);
+    }
+
     row.addEventListener('submit', async event => {
         event.preventDefault();
         await withMessage(msg, async () => {
@@ -860,6 +1002,7 @@ function buildDishRow(dish) {
                     fatG: parseFloat(fat.value),
                     portionG: portion.value === '' ? null : parseFloat(portion.value),
                     ...detailValues(detail => row.querySelector(`.${detail.css} input`).value),
+                    ...microPart(key => row.querySelector(`[data-micro="${key}"]`)?.value),
                 }),
             });
             await loadAll();
@@ -893,6 +1036,51 @@ function detailValues(readValue) {
         if (raw != null && raw !== '') values[detail.key] = parseFloat(raw);
     });
     return values;
+}
+
+/**
+ * Die ausgefuellten Mikronaehrstoffe als {schluessel: zahl}. Wie bei den
+ * Detailwerten fehlen leere Felder ganz, eine getippte 0 dagegen ist eine Angabe.
+ */
+function microValues(readValue) {
+    const values = {};
+    MICROS.forEach(micro => {
+        const raw = readValue(micro.key);
+        if (raw != null && raw !== '') values[micro.key] = parseFloat(raw);
+    });
+    return values;
+}
+
+/**
+ * Die Mikronaehrstoffe fuer ein Gericht, bereit zum Einmischen: ohne Erfassung
+ * oder ohne einen einzigen Wert nichts - die Anfrage sieht dann aus wie immer.
+ */
+function microPart(readValue) {
+    if (!micronutrients) return {};
+    const micros = microValues(readValue);
+    return Object.keys(micros).length ? { micros } : {};
+}
+
+/**
+ * Die vierzehn Eingabefelder, in Vitamine und Mineralstoffe geteilt. Mit
+ * `idPrefix` bekommt jedes Feld eine Id (Eingabefenster, Tagesziele); in der
+ * Gerichteliste gibt es viele davon, dort findet data-micro das Feld.
+ */
+function microInputs(idPrefix, values = {}, compact = false) {
+    return MICRO_GROUPS.map(group => `
+        <p class="micro-caption">${group.label}</p>
+        <div class="${compact ? 'micro-grid' : 'field-grid'}">
+            ${MICROS.filter(micro => micro.group === group.key).map(micro => `
+                <label>${micro.label} (${micro.unit})
+                    <input type="number" step="any" min="0" max="${MICRO_MAX[micro.unit]}"
+                           ${idPrefix ? `id="${idPrefix}-${micro.key}"` : ''} data-micro="${micro.key}"
+                           value="${values[micro.key] ?? ''}"></label>`).join('')}
+        </div>`).join('');
+}
+
+/** Ob in einem Block mit Mikronaehrstoff-Feldern irgendetwas steht. */
+function hasMicroInput(container) {
+    return [...container.querySelectorAll('[data-micro]')].some(input => input.value !== '');
 }
 
 /** Fuehrt eine Aktion aus und schreibt Erfolg/Fehler in das mitgegebene Feld. */
@@ -932,6 +1120,8 @@ function openAddDialog(meal) {
     proposal = null;
     renderProposal();
     onDishChange();
+    const ndMicros = document.getElementById('nd-micros');
+    ndMicros.open = hasMicroInput(ndMicros);
 
     document.getElementById('add-dialog').showModal();
 }
@@ -1036,35 +1226,27 @@ function renderProposal() {
     // Naehrwerte je 100 g als Eingabefelder, jeweils mit ihrer Herkunft daneben.
     const values = document.getElementById('proposal-values');
     values.replaceChildren();
-    proposalFields().forEach(field => {
-        // Ein Detailwert ohne Angabe hat auch keine Herkunft - "geschaetzt"
-        // daneben behauptete eine Schaetzung, die es nicht gibt.
-        const source = VALUE_SOURCES[proposal.valueSources[field.key]]
-            || (field.optional ? null : VALUE_SOURCES.estimated);
-        const row = document.createElement('div');
-        row.className = field.sub ? 'proposal-value sub' : 'proposal-value';
+    proposalFields().forEach(field => values.appendChild(proposalRow(field, proposal.per100g[field.key])));
 
-        const label = document.createElement('label');
-        label.className = 'pv-label';
-        label.htmlFor = `pf-${field.key}`;
-        label.textContent = field.label + (field.unit ? ` (${field.unit.trim()})` : '');
-
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.id = `pf-${field.key}`;
-        input.step = field.optional ? '0.01' : field.digits ? '0.1' : '1';
-        input.min = '0';
-        input.max = field.key === 'kcal' ? '1000' : '100';
-        input.value = round(proposal.per100g[field.key], field.digits);
-
-        const mark = document.createElement('span');
-        mark.className = source ? `pv-source src-${source.tone}` : 'pv-source';
-        mark.textContent = source ? source.label : '';
-        markEditedOnInput(input, mark);
-
-        row.append(label, input, mark);
-        values.appendChild(row);
-    });
+    // Die Mikronaehrstoffe in einem eigenen Abschnitt, aufgeklappt, sobald der
+    // Vorschlag welche hat - vierzehn Zeilen mehr, die niemand ungefragt sehen muss.
+    const microBox = document.getElementById('proposal-micros');
+    microBox.hidden = !micronutrients;
+    const microValuesBox = document.getElementById('proposal-micro-values');
+    microValuesBox.replaceChildren();
+    if (micronutrients) {
+        const micros = proposal.per100g.micros || {};
+        MICRO_GROUPS.forEach(group => {
+            const caption = document.createElement('p');
+            caption.className = 'micro-caption';
+            caption.textContent = group.label;
+            microValuesBox.appendChild(caption);
+            MICROS.filter(micro => micro.group === group.key).forEach(micro => microValuesBox.appendChild(
+                proposalRow({ key: micro.key, label: micro.label, unit: ` ${micro.unit}`, digits: 2,
+                    optional: true, step: 'any', max: MICRO_MAX[micro.unit] }, micros[micro.key])));
+        });
+        microBox.open = Object.keys(micros).length > 0;
+    }
 
     document.getElementById('proposal-unit').textContent = 'je 100 g';
 
@@ -1078,6 +1260,37 @@ function renderProposal() {
 
     document.getElementById('proposal-portion').value =
         proposal.portionG == null ? '' : Math.round(proposal.portionG);
+}
+
+/** Eine Zeile des Vorschlags: Beschriftung, Eingabefeld und die Herkunft des Werts. */
+function proposalRow(field, value) {
+    // Ein freiwilliger Wert ohne Angabe hat auch keine Herkunft - "geschaetzt"
+    // daneben behauptete eine Schaetzung, die es nicht gibt.
+    const source = VALUE_SOURCES[proposal.valueSources[field.key]]
+        || (field.optional ? null : VALUE_SOURCES.estimated);
+    const row = document.createElement('div');
+    row.className = field.sub ? 'proposal-value sub' : 'proposal-value';
+
+    const label = document.createElement('label');
+    label.className = 'pv-label';
+    label.htmlFor = `pf-${field.key}`;
+    label.textContent = field.label + (field.unit ? ` (${field.unit.trim()})` : '');
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.id = `pf-${field.key}`;
+    input.step = field.step || (field.optional ? '0.01' : field.digits ? '0.1' : '1');
+    input.min = '0';
+    input.max = field.max || (field.key === 'kcal' ? '1000' : '100');
+    input.value = round(value, field.digits);
+
+    const mark = document.createElement('span');
+    mark.className = source ? `pv-source src-${source.tone}` : 'pv-source';
+    mark.textContent = source ? source.label : '';
+    markEditedOnInput(input, mark);
+
+    row.append(label, input, mark);
+    return row;
 }
 
 /** Sobald jemand tippt, ist die Herkunft "geaendert" - und bleibt es. */
@@ -1112,6 +1325,8 @@ function proposalPayload() {
     const portionG = portionRaw === '' ? null : parseFloat(portionRaw);
 
     const details = detailValues(detail => document.getElementById(`pf-${detail.key}`).value);
+    const micros = microPart(key => document.getElementById(`pf-${key}`)?.value);
+    const proposedMicros = proposal.per100g.micros || {};
 
     const unchanged = proposal.known
         && name.toLowerCase() === proposal.name.toLowerCase()
@@ -1123,6 +1338,12 @@ function proposalPayload() {
             ? proposal.per100g[detail.key] != null
                 && Math.abs(details[detail.key] - proposal.per100g[detail.key]) < 0.005
             : !detailedNutrients || proposal.per100g[detail.key] == null))
+        // Ebenso die Mikronaehrstoffe: ein geaenderter oder nachgetragener Wert
+        // gehoert ins Gericht, leer gegen leer ist unveraendert.
+        && MICROS.every(micro => (micros.micros && micro.key in micros.micros
+            ? proposedMicros[micro.key] != null
+                && Math.abs(micros.micros[micro.key] - proposedMicros[micro.key]) < 0.005
+            : !micronutrients || proposedMicros[micro.key] == null))
         && (portionG ?? null) === (proposal.portionG == null ? null : Math.round(proposal.portionG));
 
     if (unchanged) {
@@ -1138,6 +1359,7 @@ function proposalPayload() {
             fatG: per100g.fatG,
             portionG,
             ...details,
+            ...micros,
         },
     };
 }
@@ -1329,18 +1551,23 @@ async function loadFeatures() {
         const features = await fetchJson('/api/food/features');
         quickCaptureAvailable = !!(features && features.quickCapture);
         detailedNutrients = !!(features && features.detailedNutrients);
+        micronutrients = !!(features && features.micronutrients);
     } catch (err) {
         quickCaptureAvailable = false;
         detailedNutrients = false;
+        micronutrients = false;
     }
     document.getElementById('quick-open').hidden =
         !quickCaptureAvailable || !document.getElementById('quick-capture').hidden;
     document.querySelectorAll('#new-dish [data-detail]').forEach(field => {
         field.hidden = !detailedNutrients;
     });
+    document.querySelectorAll('[data-micros]').forEach(block => {
+        block.hidden = !micronutrients;
+    });
     // Die Features kommen parallel zu den Tagesdaten. Waren die schneller, ist
     // schon ohne Detailwerte gezeichnet - dann einmal nachziehen.
-    if (detailedNutrients && day) {
+    if ((detailedNutrients || micronutrients) && day) {
         renderGauges();
         renderEntries();
         renderDishList();
@@ -1771,6 +1998,7 @@ function initEntryForm() {
                     ? null
                     : parseFloat(document.getElementById('nd-portion').value),
                 ...detailValues(detail => document.getElementById(detail.input).value),
+                ...microPart(key => document.getElementById(`nd-micro-${key}`).value),
             };
         } else if (select.value) {
             body.dishId = select.value;
@@ -1788,8 +2016,9 @@ function initEntryForm() {
             });
             grams.value = '';
             ['nd-name', 'nd-kcal', 'nd-protein', 'nd-carbs', 'nd-fat', 'nd-portion',
-                ...DETAILS.map(detail => detail.input)]
+                ...DETAILS.map(detail => detail.input), ...MICROS.map(micro => `nd-micro-${micro.key}`)]
                 .forEach(id => { document.getElementById(id).value = ''; });
+            document.getElementById('nd-micros').open = false;
             resetDishSearch();
             document.getElementById('add-dialog').close();
             showDayMessage('Eingetragen.');
@@ -1824,12 +2053,26 @@ function fillTargetsForm() {
         'tg-carbs': day.targets.carbsG,
         'tg-fat': day.targets.fatG,
     };
+    // Die Mikro-Ziele so, wie der Dienst sie liefert - die DGE-Vorgabe, solange
+    // nie welche gespeichert wurden. Ein leeres Feld heisst "kein Ziel".
+    const microTargets = day.targets.micros || {};
+    MICROS.forEach(micro => { fields[`tg-micro-${micro.key}`] = microTargets[micro.key] ?? ''; });
     Object.entries(fields).forEach(([id, value]) => {
         const input = document.getElementById(id);
         // Nicht ueberschreiben, waehrend jemand gerade tippt.
         if (document.activeElement !== input) input.value = value;
     });
     updateTargetsCheck();
+}
+
+/**
+ * Die Mikro-Ziele aus den Feldern. Eine 0 heisst hier dasselbe wie ein leeres
+ * Feld, kein Ziel: ein Mindestwert von 0 ist immer erreicht, und der Dienst
+ * nimmt ihn nicht an.
+ */
+function microTargetValues() {
+    const values = microValues(key => document.getElementById(`tg-micro-${key}`).value);
+    return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== 0));
 }
 
 /**
@@ -1878,6 +2121,10 @@ function initTargetsForm() {
                     // Prozent rein, Bruchteil raus - gespeichert wird der Anteil.
                     mealShares: Object.fromEntries(SHARE_FIELDS.map(f =>
                         [f.key, (parseFloat(document.getElementById(f.id).value) || 0) / 100])),
+                    // Immer mitschicken, auch leer: das leere Objekt heisst dann
+                    // "bewusst ohne Ziel". Ohne Erfassung fehlt das Feld, und die
+                    // Anfrage bleibt, wie sie war.
+                    ...(micronutrients ? { micros: microTargetValues() } : {}),
                 }),
             });
             await loadAll();
@@ -1892,6 +2139,16 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
     if (historyChart && historyShown) renderHistory(historyShown.from, historyShown.to);
 });
 
+/**
+ * Die Mikronaehrstoff-Felder im Eingabefenster und bei den Tageszielen. Sie
+ * entstehen fuer alle, sichtbar werden sie erst mit features.micronutrients.
+ */
+function initMicroFields() {
+    document.getElementById('nd-micro-inputs').innerHTML = microInputs('nd-micro');
+    document.getElementById('tg-micro-inputs').innerHTML = microInputs('tg-micro');
+}
+
+initMicroFields();
 initDayNav();
 initEntryForm();
 initTargetsForm();
