@@ -84,8 +84,13 @@ public class FeatureRequestTodos {
             return request;
         }
         synchronized (creating) {
-            // Frisch lesen: der Nachlauf kann sie inzwischen erledigt haben.
-            FeatureRequest current = repository.find(request.id()).orElse(request);
+            // Frisch lesen: der Nachlauf kann sie inzwischen erledigt haben - oder
+            // Felix hat sie geloescht, dann darf keine Unteraufgabe mehr entstehen.
+            Optional<FeatureRequest> fresh = repository.find(request.id());
+            if (fresh.isEmpty()) {
+                return request;
+            }
+            FeatureRequest current = fresh.get();
             if (current.todoId() != null) {
                 return current;
             }
@@ -140,6 +145,37 @@ public class FeatureRequestTodos {
         String todoId = client.createTodo(board, areaId, parentId, request.title(), link).id();
         log.info("Anfrage {} von {} als Unteraufgabe {} im To-Do", request.id(), request.author(), todoId);
         return todoId;
+    }
+
+    /**
+     * Entfernt die Anfrage und danach ihre Unteraufgabe.
+     *
+     * <p>Unter derselben Sperre wie das Anlegen: sonst koennte der Nachlauf einer
+     * gerade geloeschten Anfrage noch eine Unteraufgabe nachschieben, die dann ohne
+     * Anfrage im To-Do stuende.
+     *
+     * <p>Das To-Do darf dabei ausfallen, und die Unteraufgabe darf schon weg sein -
+     * Felix raeumt dort auch selbst auf. Geloescht ist die Anfrage dann trotzdem; eine
+     * verwaiste Unteraufgabe loescht man zur Not von Hand, eine Anfrage, die sich
+     * nicht loeschen laesst, waere schlimmer.
+     *
+     * @return die entfernte Anfrage, oder leer, wenn es sie nicht mehr gab
+     */
+    public Optional<FeatureRequest> remove(String id) {
+        synchronized (creating) {
+            Optional<FeatureRequest> removed = repository.remove(id);
+            removed.map(FeatureRequest::todoId)
+                    .filter(todoId -> client.isConfigured())
+                    .ifPresent(todoId -> {
+                        try {
+                            client.deleteTodo(todoId);
+                            log.info("Anfrage {} geloescht, Unteraufgabe {} ebenso", id, todoId);
+                        } catch (TodoException e) {
+                            log.warn("Anfrage {} geloescht, Unteraufgabe {} nicht: {}", id, todoId, e.getMessage());
+                        }
+                    });
+            return removed;
+        }
     }
 
     /**

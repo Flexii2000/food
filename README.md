@@ -492,6 +492,12 @@ den der Nachlauf mitschreibt.
 | POST | `/feature-requests/api/requests` | `{originalText, title, story, acceptanceCriteria[]}` → 201 mit der Anfrage |
 | GET | `/feature-requests/api/requests` | die sichtbaren Anfragen, neueste zuerst, je mit `status` (`open`/`done`), `doneAt`, `inTodo`, `url` |
 | GET | `/feature-requests/api/requests/{id}` | eine Anfrage — nur für Autor und Eigentümerin |
+| DELETE | `/feature-requests/api/requests/{id}` | 204 — nur die Eigentümerin, alle anderen 404; löscht auch die Unteraufgabe im To-Do |
+
+Beim Löschen verschwindet zuerst die Anfrage, danach die Unteraufgabe
+(`DELETE /todo/api/todos/{todoId}`). Ist die schon weg oder das To-Do nicht
+erreichbar, bleibt die Anfrage trotzdem gelöscht; der Fehler steht nur im
+Journal. Auf der Kartenseite hat nur die Eigentümerin den Knopf „Löschen".
 
 Prüfungen: Titel 1–120 Zeichen (eine Zeile), Story 1–2000, bis zu 10
 Akzeptanzkriterien mit je höchstens 300 (leere Zeilen fallen weg), Originaltext

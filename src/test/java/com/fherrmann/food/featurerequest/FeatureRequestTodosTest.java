@@ -241,4 +241,61 @@ class FeatureRequestTodosTest {
                 "http://localhost:48380/feature-requests/").cardUrl("abc"))
                 .isEqualTo("http://localhost:48380/feature-requests/abc");
     }
+
+    // MARK: - Loeschen
+
+    @Test
+    void removingARequestDeletesItsSubtaskToo() {
+        FeatureRequest request = todos.ensureTodo(stored("Weg damit"));
+        FeatureRequest other = todos.ensureTodo(stored("Bleibt"));
+
+        assertThat(todos.remove(request.id())).isPresent();
+
+        assertThat(repository.find(request.id())).isEmpty();
+        assertThat(todo.find(request.todoId())).isNull();
+        assertThat(todo.find(other.todoId())).isNotNull();
+        assertThat(todo.requests).contains("DELETE /todo/api/todos/" + request.todoId());
+    }
+
+    /** Felix raeumt im To-Do auch selbst auf - dann ist die Unteraufgabe eben schon weg. */
+    @Test
+    void anAlreadyDeletedSubtaskDoesNotKeepTheRequest() {
+        FeatureRequest request = todos.ensureTodo(stored("Schon abgeräumt"));
+        todo.todos.removeIf(t -> t.id.equals(request.todoId()));
+
+        assertThat(todos.remove(request.id())).isPresent();
+        assertThat(repository.find(request.id())).isEmpty();
+    }
+
+    @Test
+    void anUnreachableTodoDoesNotKeepTheRequest() {
+        FeatureRequest request = todos.ensureTodo(stored("To-Do schläft"));
+        todo.failStatus = 503;
+        todo.failBody = "Wartung";
+
+        assertThat(todos.remove(request.id())).isPresent();
+        assertThat(repository.find(request.id())).isEmpty();
+        // Die Unteraufgabe bleibt stehen - das ist der Preis, und er steht im Journal.
+        assertThat(todo.find(request.todoId())).isNotNull();
+
+        assertThat(todos("http://127.0.0.1:9/todo").remove(todos.ensureTodo(stored("Ganz weg")).id())).isPresent();
+    }
+
+    /** Ohne Unteraufgabe gibt es im To-Do nichts zu loeschen - und der Nachlauf legt keine mehr an. */
+    @Test
+    void aRemovedRequestGetsNoLateSubtask() {
+        FeatureRequest request = stored("Noch ohne Aufgabe");
+        todos.remove(request.id());
+
+        assertThat(todos.ensureTodo(request).todoId()).isNull();
+        todos.catchUp();
+        assertThat(todo.count("POST")).isZero();
+        assertThat(todo.count("DELETE")).isZero();
+    }
+
+    @Test
+    void removingAnUnknownRequestFindsNothing() {
+        assertThat(todos.remove("gibt-es-nicht")).isEmpty();
+        assertThat(todo.requests).isEmpty();
+    }
 }

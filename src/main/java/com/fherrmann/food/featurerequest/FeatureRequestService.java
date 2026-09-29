@@ -91,6 +91,18 @@ public class FeatureRequestService {
         return view(request, todos.board());
     }
 
+    /**
+     * Loescht eine Anfrage samt Unteraufgabe - nur die Eigentuemerin. Fuer alle anderen
+     * sieht es aus wie eine Anfrage, die es nicht gibt, auch bei der eigenen: ein 403
+     * verriete, dass es hier etwas zu loeschen gaebe, und die Seite bietet es ihnen
+     * ohnehin nicht an.
+     */
+    public void delete(String user, String id) {
+        if (!users.isOwner(user) || todos.remove(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Diese Anfrage gibt es nicht.");
+        }
+    }
+
     private boolean canSee(String user, FeatureRequest request) {
         return users.isOwner(user) || request.author().equals(user);
     }

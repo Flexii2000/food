@@ -57,6 +57,17 @@ public class FeatureRequestRepository {
         save(requests);
     }
 
+    /** Entfernt eine Anfrage; leer, wenn es sie nicht (mehr) gibt. */
+    public synchronized Optional<FeatureRequest> remove(String id) {
+        List<FeatureRequest> requests = new ArrayList<>(load());
+        Optional<FeatureRequest> removed = requests.stream().filter(r -> r.id().equals(id)).findFirst();
+        if (removed.isPresent()) {
+            requests.remove(removed.get());
+            save(requests);
+        }
+        return removed;
+    }
+
     /**
      * Aendert eine Anfrage an Ort und Stelle. Lesen, Aendern und Schreiben unter
      * einer Sperre: der Nachlauf und eine neue Anfrage duerfen sich nicht

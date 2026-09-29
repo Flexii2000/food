@@ -8,6 +8,7 @@ import com.fherrmann.food.featurerequest.FeatureRequestDtos.NewFeatureRequest;
 import com.fherrmann.food.security.HealthUsers;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -69,5 +70,12 @@ public class FeatureRequestController {
     @GetMapping("/requests/{id}")
     public FeatureRequestView request(@PathVariable String id, Principal principal) {
         return service.get(principal.getName(), id);
+    }
+
+    /** Nur fuer die Eigentuemerin; alle anderen bekommen 404. */
+    @DeleteMapping("/requests/{id}")
+    public ResponseEntity<Void> delete(@PathVariable String id, Principal principal) {
+        service.delete(principal.getName(), id);
+        return ResponseEntity.noContent().build();
     }
 }

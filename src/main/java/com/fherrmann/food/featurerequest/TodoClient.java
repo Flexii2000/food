@@ -7,6 +7,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -111,6 +112,11 @@ public class TodoClient {
             return new Created(fresh.getFirst().id(), after);
         }
         throw new TodoException("Die neue Aufgabe „" + title + "“ ist im Brett nicht eindeutig zu finden.");
+    }
+
+    /** Loescht eine Aufgabe samt ihren Unteraufgaben - so macht es das To-Do selbst. */
+    public void deleteTodo(String todoId) {
+        send(request("/api/todos/" + URLEncoder.encode(todoId, StandardCharsets.UTF_8)).DELETE());
     }
 
     private HttpRequest.Builder request(String path) {

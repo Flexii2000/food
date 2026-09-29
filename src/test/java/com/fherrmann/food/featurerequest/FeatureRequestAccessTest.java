@@ -26,6 +26,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -61,6 +64,9 @@ class FeatureRequestAccessTest {
     @MockitoBean
     private StoryDraftJobs drafts;
 
+    @Autowired
+    private FeatureRequestRepository repository;
+
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -72,6 +78,8 @@ class FeatureRequestAccessTest {
         when(todos.cardUrl(anyString())).thenAnswer(call -> "https://fherrmann.com/feature-requests/" + call.getArgument(0));
         when(todos.board()).thenReturn(Optional.empty());
         when(drafts.isAvailable()).thenReturn(true);
+        // Wie das Original, nur ohne To-Do dahinter: die Anfrage verschwindet aus der Ablage.
+        when(todos.remove(anyString())).thenAnswer(call -> repository.remove(call.getArgument(0)));
     }
 
     private static MockHttpServletRequestBuilder asTorben(MockHttpServletRequestBuilder request) {
@@ -125,6 +133,30 @@ class FeatureRequestAccessTest {
         mockMvc.perform(asFelix(get("/feature-requests/api/requests/" + id)))
                 .andExpect(status().isOk());
         mockMvc.perform(asJoana(get("/feature-requests/api/requests/" + id)))
+                .andExpect(status().isNotFound());
+    }
+
+    /** Loeschen darf nur Felix - fuer alle anderen gibt es die Anfrage nicht, auch fuer den Autor. */
+    @Test
+    void onlyTheOwnerDeletesAndTheSubtaskGoesWithIt() throws Exception {
+        String id = submit(asTorben(post("/feature-requests/api/requests")), "Doch nicht");
+
+        mockMvc.perform(asTorben(delete("/feature-requests/api/requests/" + id)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(asJoana(delete("/feature-requests/api/requests/" + id)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/feature-requests/api/requests/" + id))
+                .andExpect(status().isForbidden());
+        verify(todos, never()).remove(anyString());
+        mockMvc.perform(asTorben(get("/feature-requests/api/requests/" + id)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(asFelix(delete("/feature-requests/api/requests/" + id)))
+                .andExpect(status().isNoContent());
+        verify(todos).remove(id);
+        mockMvc.perform(asTorben(get("/feature-requests/api/requests/" + id)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(asFelix(delete("/feature-requests/api/requests/" + id)))
                 .andExpect(status().isNotFound());
     }
 

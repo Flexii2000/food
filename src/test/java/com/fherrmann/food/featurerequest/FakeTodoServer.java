@@ -132,7 +132,13 @@ final class FakeTodoServer implements AutoCloseable {
                         board("all=true".equals(query)));
                 case "POST /todo/api/areas" -> createArea(exchange, body(exchange));
                 case "POST /todo/api/todos" -> createTodo(exchange, body(exchange));
-                default -> respond(exchange, 404, "text/plain", "unbekannt");
+                default -> {
+                    if (exchange.getRequestMethod().equals("DELETE") && path.startsWith("/todo/api/todos/")) {
+                        deleteTodo(exchange, path.substring("/todo/api/todos/".length()));
+                    } else {
+                        respond(exchange, 404, "text/plain", "unbekannt");
+                    }
+                }
             }
         } catch (RuntimeException e) {
             respond(exchange, 500, "text/plain", e.toString());
@@ -178,6 +184,17 @@ final class FakeTodoServer implements AutoCloseable {
         todos.add(new Todo(UUID.randomUUID().toString(), areaId, parentId, body.path("title").asString("").trim(),
                 storesLinks ? body.path("link").asString(null) : null, Instant.now()));
         respond(exchange, 201, "application/json", board(false));
+    }
+
+    /** Wie das Original: die Aufgabe samt Unteraufgaben, 404 als Klartext, wenn es sie nicht gibt. */
+    private void deleteTodo(HttpExchange exchange, String id) throws IOException {
+        Todo todo = find(id);
+        if (todo == null) {
+            respond(exchange, 404, "text/plain;charset=UTF-8", "Aufgabe nicht gefunden.");
+            return;
+        }
+        todos.removeIf(t -> t.id.equals(id) || id.equals(t.parentId));
+        respond(exchange, 200, "application/json", board(false));
     }
 
     private boolean visible(Todo todo, boolean all) {
