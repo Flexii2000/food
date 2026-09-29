@@ -237,7 +237,7 @@ function renderCard(request) {
  * beim Loeschen eines Gerichts im Kalorienzaehler: geloescht ist geloescht.
  */
 async function deleteCard() {
-    if (!shownCard || !confirm(`„${shownCard.title}“ löschen? Die Unteraufgabe im To-Do verschwindet mit.`)) {
+    if (!shownCard || !confirm(`„${shownCard.title}“ löschen?`)) {
         return;
     }
     const button = $('cv-delete');
