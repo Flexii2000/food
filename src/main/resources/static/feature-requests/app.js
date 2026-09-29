@@ -18,6 +18,9 @@ const POLL_LIMIT_MS = 200000;
 
 let features = { me: '', owner: false, drafting: false };
 
+// Die gerade gezeigte Karte - fuer den Knopf "Loeschen".
+let shownCard = null;
+
 // Der angefangene Wunsch. Er bleibt stehen, wenn man zwischendurch zur Liste
 // geht: ein Entwurf ist eine Claude-Session, und die soll nicht an einem
 // versehentlichen Zurueck verloren gehen. Weg ist er erst nach dem Absenden.
@@ -224,7 +227,31 @@ function renderCard(request) {
 
     setStatus($('cv-status'), request.status);
     $('cv-status').hidden = false;
+    shownCard = request;
+    $('cv-actions').hidden = !features.owner;
     $('cv-card').hidden = false;
+}
+
+/**
+ * Loescht die gezeigte Karte samt Unteraufgabe im To-Do - nach Rueckfrage wie
+ * beim Loeschen eines Gerichts im Kalorienzaehler: geloescht ist geloescht.
+ */
+async function deleteCard() {
+    if (!shownCard || !confirm(`„${shownCard.title}“ löschen? Die Unteraufgabe im To-Do verschwindet mit.`)) {
+        return;
+    }
+    const button = $('cv-delete');
+    button.disabled = true;
+    try {
+        await fetchJson(`${API}/requests/${encodeURIComponent(shownCard.id)}`, { method: 'DELETE' });
+        shownCard = null;
+        navigate(BASE, true);
+        toast('Gelöscht.', true);
+    } catch (err) {
+        toast(`Nicht gelöscht: ${err.message}`);
+    } finally {
+        button.disabled = false;
+    }
 }
 
 // --- Neuer Wunsch ------------------------------------------------------------
@@ -490,6 +517,7 @@ function bind() {
         showNew();
     });
     $('card-form').addEventListener('submit', submitCard);
+    $('cv-delete').addEventListener('click', deleteCard);
 }
 
 async function init() {

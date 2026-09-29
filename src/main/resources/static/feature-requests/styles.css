@@ -199,6 +199,10 @@ button svg {
 .button.secondary:hover:not(:disabled) { background: var(--fill-strong); }
 .button.quiet { background: transparent; color: var(--text-2); font-weight: 500; }
 .button.quiet:hover:not(:disabled) { background: var(--fill); color: var(--text); }
+.button.danger { background: transparent; color: var(--bad); font-weight: 500; }
+.button.danger:hover:not(:disabled) { background: var(--danger-fill); }
+/* Leiser Knopf unter der Karte: die Schrift fluchtet mit dem Text darueber. */
+#cv-actions .button.danger { margin-left: -16px; }
 .button:disabled { opacity: 0.45; cursor: default; }
 
 .actions {
