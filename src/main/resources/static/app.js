@@ -80,6 +80,12 @@ const MICRO_MAX = { mg: 10000, 'µg': 10000000 };
 // Ob diese Person Mikronaehrstoffe erfasst - wie detailedNutrients aus den Features.
 let micronutrients = false;
 
+// Der vegane Modus dieser Person (features.veganMode). An: die Suche zeigt nur
+// vegane Gerichte, neue sind vegan, und ein nicht-veganer Vorschlag laesst sich
+// nicht uebernehmen. Durchgesetzt wird das auch im Dienst - hier geht es darum,
+// gar nicht erst anzubieten, was er ablehnen wuerde.
+let veganMode = false;
+
 // Die Weight-App liegt auf einer eigenen Subdomain, aber unter derselben Site -
 // der private Cookie reist also mit; credentials:'include' braucht es nur, weil
 // die Origin eine andere ist (dort per CORS genau fuer diese Seite freigegeben).
@@ -794,8 +800,36 @@ let dishHighlight = -1;
  */
 function dishMatches(query) {
     const needle = query.trim().toLowerCase();
-    if (!needle) return dishes;
-    return dishes.filter(d => d.name.toLowerCase().includes(needle));
+    // Im veganen Modus nur, was ausdruecklich vegan ist: ein nie eingeordnetes
+    // Gericht kann Kaese enthalten, und der Dienst lehnte es ohnehin ab.
+    const pickable = veganMode ? dishes.filter(d => d.vegan === true) : dishes;
+    if (!needle) return pickable;
+    return pickable.filter(d => d.name.toLowerCase().includes(needle));
+}
+
+/**
+ * Das Kennzeichen vegan aus einem Haekchen, bereit zum Einmischen. Ein nie
+ * eingeordnetes Gericht, dessen Haekchen niemand anfasst, bleibt unbekannt:
+ * sonst stuende nach jedem Speichern ein "nicht vegan" am Gericht, das niemand
+ * gesagt hat - und wer den Modus nie benutzt, bekaeme Kennzeichen, die er nie
+ * wollte.
+ */
+function veganPart(checkbox, stored) {
+    if (checkbox.dataset.touched || stored != null) return { vegan: checkbox.checked };
+    return {};
+}
+
+/** Merkt sich, dass ein Haekchen angefasst wurde - erst dann ist es eine Aussage. */
+function trackTouched(checkbox) {
+    checkbox.addEventListener('change', () => { checkbox.dataset.touched = '1'; });
+}
+
+/** Das Haekchen im Block fuer ein neues Gericht: im veganen Modus gesetzt und gesperrt. */
+function resetNewDishVegan() {
+    const box = document.getElementById('nd-vegan');
+    box.checked = veganMode;
+    box.disabled = veganMode;
+    delete box.dataset.touched;
 }
 
 function renderDishOptions() {
@@ -952,6 +986,10 @@ function buildDishRow(dish) {
 
     const [name, kcal, protein, carbs, fat, portion] = row.querySelectorAll('input');
 
+    // Im veganen Modus gedaempft, was die Suche nicht anbietet - so faellt auf,
+    // welches Gericht noch eingeordnet oder berichtigt werden will.
+    row.classList.toggle('not-vegan', veganMode && dish.vegan !== true);
+
     // Wer Detailwerte erfasst, bekommt sie hier mit - sonst liesse das Speichern
     // sie verschwinden, weil ein fehlender Wert beim Server "keine Angabe" heisst.
     if (detailedNutrients) {
@@ -972,7 +1010,13 @@ function buildDishRow(dish) {
     remove.textContent = 'Löschen';
     const msg = document.createElement('span');
     msg.className = 'form-msg';
-    actions.append(save, remove, msg);
+    const veganLabel = document.createElement('label');
+    veganLabel.className = 'check';
+    veganLabel.innerHTML = '<input type="checkbox" class="check-input"> <span>Vegan</span>';
+    const vegan = veganLabel.querySelector('input');
+    vegan.checked = dish.vegan === true;
+    trackTouched(vegan);
+    actions.append(veganLabel, save, remove, msg);
     row.appendChild(actions);
 
     // Die Mikronaehrstoffe zugeklappt je Gericht und hinter den Knoepfen: vierzehn
@@ -1003,6 +1047,8 @@ function buildDishRow(dish) {
                     portionG: portion.value === '' ? null : parseFloat(portion.value),
                     ...detailValues(detail => row.querySelector(`.${detail.css} input`).value),
                     ...microPart(key => row.querySelector(`[data-micro="${key}"]`)?.value),
+                    // PUT ersetzt das Gericht: das Kennzeichen muss mit.
+                    ...veganPart(vegan, dish.vegan),
                 }),
             });
             await loadAll();
@@ -1122,6 +1168,7 @@ function openAddDialog(meal) {
     onDishChange();
     const ndMicros = document.getElementById('nd-micros');
     ndMicros.open = hasMicroInput(ndMicros);
+    resetNewDishVegan();
 
     document.getElementById('add-dialog').showModal();
 }
@@ -1250,6 +1297,17 @@ function renderProposal() {
 
     document.getElementById('proposal-unit').textContent = 'je 100 g';
 
+    // Unbekannt erscheint als aus - im veganen Modus als an, denn dort gilt ein
+    // neues Gericht ohne Kennzeichen ohnehin als vegan.
+    const vegan = document.getElementById('proposal-vegan');
+    vegan.checked = proposal.vegan ?? veganMode;
+    delete vegan.dataset.touched;
+    const veganSource = VALUE_SOURCES[proposal.valueSources.vegan];
+    const veganMark = document.getElementById('proposal-vegan-source');
+    veganMark.className = veganSource ? `pv-source src-${veganSource.tone}` : 'pv-source';
+    veganMark.textContent = veganSource ? veganSource.label : '';
+    updateProposalVegan();
+
     const grams = document.getElementById('proposal-grams');
     grams.value = Math.round(proposal.grams);
     const gramsMark = document.getElementById('proposal-grams-source');
@@ -1260,6 +1318,16 @@ function renderProposal() {
 
     document.getElementById('proposal-portion').value =
         proposal.portionG == null ? '' : Math.round(proposal.portionG);
+}
+
+/**
+ * Im veganen Modus: ein nicht-veganer Vorschlag bekommt den Hinweis am Haekchen,
+ * und Uebernehmen ist gesperrt, bis jemand ihn als vegan berichtigt.
+ */
+function updateProposalVegan() {
+    const blocked = veganMode && !document.getElementById('proposal-vegan').checked;
+    document.getElementById('proposal-vegan-warn').hidden = !blocked;
+    document.getElementById('proposal-confirm').disabled = blocked;
 }
 
 /** Eine Zeile des Vorschlags: Beschriftung, Eingabefeld und die Herkunft des Werts. */
@@ -1327,6 +1395,10 @@ function proposalPayload() {
     const details = detailValues(detail => document.getElementById(`pf-${detail.key}`).value);
     const micros = microPart(key => document.getElementById(`pf-${key}`)?.value);
     const proposedMicros = proposal.per100g.micros || {};
+    // Im veganen Modus immer mit Kennzeichen - dort ist ein Gericht ohne keins,
+    // das sich buchen liesse.
+    const veganBox = document.getElementById('proposal-vegan');
+    const vegan = veganMode ? { vegan: veganBox.checked } : veganPart(veganBox, proposal.vegan);
 
     const unchanged = proposal.known
         && name.toLowerCase() === proposal.name.toLowerCase()
@@ -1344,7 +1416,10 @@ function proposalPayload() {
             ? proposedMicros[micro.key] != null
                 && Math.abs(micros.micros[micro.key] - proposedMicros[micro.key]) < 0.005
             : !micronutrients || proposedMicros[micro.key] == null))
-        && (portionG ?? null) === (proposal.portionG == null ? null : Math.round(proposal.portionG));
+        && (portionG ?? null) === (proposal.portionG == null ? null : Math.round(proposal.portionG))
+        // Ein berichtigtes Kennzeichen gehoert ins Gericht - ebenso eines, das ein
+        // bekanntes Gericht ohne Kennzeichen jetzt erst bekommt.
+        && (!('vegan' in vegan) || vegan.vegan === proposal.vegan);
 
     if (unchanged) {
         return { dishId: proposal.dishId, name };
@@ -1360,6 +1435,7 @@ function proposalPayload() {
             portionG,
             ...details,
             ...micros,
+            ...vegan,
         },
     };
 }
@@ -1499,6 +1575,17 @@ function initQuickCapture() {
         run();
     });
 
+    const proposalVegan = document.getElementById('proposal-vegan');
+    trackTouched(proposalVegan);
+    // Nicht ueber markEditedOnInput: das Haekchen bleibt ueber alle Vorschlaege
+    // dasselbe Element, ein einmaliger Horcher griffe nur beim ersten.
+    proposalVegan.addEventListener('change', () => {
+        const mark = document.getElementById('proposal-vegan-source');
+        mark.className = 'pv-source src-edited';
+        mark.textContent = VALUE_SOURCES.edited.label;
+        updateProposalVegan();
+    });
+
     document.getElementById('proposal-discard').addEventListener('click', () => {
         proposal = null;
         renderProposal();
@@ -1552,11 +1639,15 @@ async function loadFeatures() {
         quickCaptureAvailable = !!(features && features.quickCapture);
         detailedNutrients = !!(features && features.detailedNutrients);
         micronutrients = !!(features && features.micronutrients);
+        veganMode = !!(features && features.veganMode);
     } catch (err) {
         quickCaptureAvailable = false;
         detailedNutrients = false;
         micronutrients = false;
+        veganMode = false;
     }
+    document.getElementById('vegan-mode').checked = veganMode;
+    resetNewDishVegan();
     document.getElementById('quick-open').hidden =
         !quickCaptureAvailable || !document.getElementById('quick-capture').hidden;
     document.querySelectorAll('#new-dish [data-detail]').forEach(field => {
@@ -1567,7 +1658,7 @@ async function loadFeatures() {
     });
     // Die Features kommen parallel zu den Tagesdaten. Waren die schneller, ist
     // schon ohne Detailwerte gezeichnet - dann einmal nachziehen.
-    if ((detailedNutrients || micronutrients) && day) {
+    if ((detailedNutrients || micronutrients || veganMode) && day) {
         renderGauges();
         renderEntries();
         renderDishList();
@@ -1999,6 +2090,7 @@ function initEntryForm() {
                     : parseFloat(document.getElementById('nd-portion').value),
                 ...detailValues(detail => document.getElementById(detail.input).value),
                 ...microPart(key => document.getElementById(`nd-micro-${key}`).value),
+                ...(veganMode ? { vegan: true } : veganPart(document.getElementById('nd-vegan'), null)),
             };
         } else if (select.value) {
             body.dishId = select.value;
@@ -2019,6 +2111,7 @@ function initEntryForm() {
                 ...DETAILS.map(detail => detail.input), ...MICROS.map(micro => `nd-micro-${micro.key}`)]
                 .forEach(id => { document.getElementById(id).value = ''; });
             document.getElementById('nd-micros').open = false;
+            resetNewDishVegan();
             resetDishSearch();
             document.getElementById('add-dialog').close();
             showDayMessage('Eingetragen.');
@@ -2140,6 +2233,37 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 });
 
 /**
+ * Der Schalter "Veganer Modus". Die Antwort sind die neuen Features; danach wird
+ * alles neu geladen, weil das erste Einschalten die Gerichte markiert. Scheitert
+ * es, springt der Schalter zurueck - er soll nie etwas anzeigen, das nicht gilt.
+ */
+function initVeganMode() {
+    const toggle = document.getElementById('vegan-mode');
+    toggle.addEventListener('change', async () => {
+        const enabled = toggle.checked;
+        toggle.disabled = true;
+        try {
+            const features = await fetchJson('/api/food/vegan-mode', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled }),
+            });
+            veganMode = !!(features && features.veganMode);
+            resetNewDishVegan();
+            await loadAll();
+        } catch (err) {
+            const el = document.getElementById('load-msg');
+            el.classList.remove('ok');
+            el.textContent = `Fehler: ${err.message}`;
+        } finally {
+            toggle.checked = veganMode;
+            toggle.disabled = false;
+        }
+    });
+    trackTouched(document.getElementById('nd-vegan'));
+}
+
+/**
  * Die Mikronaehrstoff-Felder im Eingabefenster und bei den Tageszielen. Sie
  * entstehen fuer alle, sichtbar werden sie erst mit features.micronutrients.
  */
@@ -2156,5 +2280,6 @@ initHistoryControls();
 initAddDialog();
 initDishSearch();
 initQuickCapture();
+initVeganMode();
 loadFeatures();
 reload();

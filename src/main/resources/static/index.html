@@ -151,6 +151,14 @@
                 <span id="targets-msg" class="form-msg"></span>
             </div>
         </details>
+
+        <!-- Schaltet sofort, ohne Speichern: ein Schalter, der erst nach einem
+             zweiten Klick gilt, waere keiner. Fuer alle sichtbar - aus ist er
+             fuer jeden, der ihn nie umlegt. -->
+        <label class="switch-row">
+            <span>Veganer Modus</span>
+            <input type="checkbox" role="switch" id="vegan-mode" class="switch">
+        </label>
     </section>
 </main>
 
@@ -207,6 +215,15 @@
                     <summary><span>Mikronährstoffe</span><svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8"/></svg></summary>
                     <div id="proposal-micro-values"></div>
                 </details>
+
+                <!-- Vegan wie ein Wert des Vorschlags: mit Herkunft, und im
+                     veganen Modus mit Hinweis, wenn es nicht passt. -->
+                <div class="proposal-value proposal-vegan">
+                    <label class="pv-label" for="proposal-vegan">Vegan
+                        <span class="vegan-warn" id="proposal-vegan-warn" hidden>Nicht vegan</span></label>
+                    <input type="checkbox" id="proposal-vegan" class="check-input">
+                    <span class="pv-source" id="proposal-vegan-source"></span>
+                </div>
 
                 <div class="proposal-amounts">
                     <label>Menge (g)
@@ -272,6 +289,8 @@
                 <label class="d-fiber" data-detail hidden>Ballaststoffe (g) <input type="number" id="nd-fiber" step="0.01" min="0" max="100"></label>
                 <label class="d-salt" data-detail hidden>Salz (g) <input type="number" id="nd-salt" step="0.01" min="0" max="100"></label>
             </div>
+            <!-- Im veganen Modus gesetzt und gesperrt: angelegt wird dann nur Veganes. -->
+            <label class="check nd-vegan"><input type="checkbox" id="nd-vegan" class="check-input"> <span>Vegan</span></label>
             <!-- Mikronaehrstoffe, zugeklappt, solange alle Felder leer sind. -->
             <details class="micro-fields" id="nd-micros" data-micros hidden>
                 <summary><span>Mikronährstoffe</span><svg class="chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 8 10 12.5 14.5 8"/></svg></summary>

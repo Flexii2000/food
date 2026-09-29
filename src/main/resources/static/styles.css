@@ -1112,6 +1112,80 @@ main {
 
 #targets-check { margin-top: 16px; }
 
+/* Der Schalter "Veganer Modus": eine Zeile wie die Tafeln darueber, nur ohne
+   etwas zum Aufklappen. */
+.switch-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 56px;
+    border-bottom: 1px solid var(--line);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.switch {
+    position: relative;
+    flex: none;
+    width: 44px;
+    height: 26px;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--line-strong);
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.switch::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: transform 0.15s ease;
+}
+
+.switch:checked { background: var(--good); }
+.switch:checked::before { transform: translateX(18px); }
+.switch:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.switch:disabled { opacity: 0.6; cursor: default; }
+
+/* Ein Haekchen mit Beschriftung daneben statt darueber. */
+.check {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.check-input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--good);
+    cursor: pointer;
+}
+
+.check-input:disabled { cursor: default; }
+.check:has(.check-input:disabled) { color: var(--text-2); cursor: default; }
+
+/* Im veganen Modus: was die Suche nicht anbietet, tritt zurueck. */
+.dish-row.not-vegan > label,
+.dish-row.not-vegan .dish-micros { opacity: 0.5; }
+
+.dish-actions .check { margin-right: 6px; }
+
 /* --- Gerichte-Verwaltung ------------------------------------------------ */
 
 .dish-list { display: flex; flex-direction: column; }
@@ -1290,6 +1364,7 @@ main {
 /* Name breit, Portion in der Spalte, unter der auch Fett steht - so fluchten
    die beiden Zeilen. */
 .new-dish .name-row { clear: both; }
+.new-dish .nd-vegan { margin-top: 16px; }
 .new-dish .name-row .wide { grid-column: span 3; }
 
 /* Wie auf der Packung: "davon"-Werte unter ihrem Oberbegriff. */
@@ -1466,6 +1541,22 @@ main {
 }
 
 .proposal .group-label { margin-top: 16px; margin-bottom: 4px; }
+
+/* Das Haekchen sitzt rechtsbuendig in der Spalte der Zahlen. */
+.proposal-vegan .check-input { justify-self: end; }
+.proposal-vegan label.pv-label { gap: 10px; align-items: center; }
+
+.vegan-warn {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--danger-fill);
+    color: var(--bad);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.vegan-warn[hidden] { display: none; }
 .proposal .micro-fields { margin-top: 12px; }
 
 .proposal-value {
