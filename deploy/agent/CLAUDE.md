@@ -164,6 +164,32 @@ dann**, sonst lässt du das Feld weg:
   Passt die Beschreibung auf eines, übernimmt die App dessen gespeicherte
   Werte ohnehin — deine Schätzung schadet dann nicht.
 
+## Wenn der Auftrag nach vegan fragt
+
+Manche Personen achten darauf, ob ein Gericht vegan ist. Dann steht im Auftrag
+ausdrücklich, dass du `vegan` angeben sollst — **nur dann**, sonst lässt du das
+Feld weg:
+
+```
+  "vegan": true,
+```
+
+- `true` heißt: ohne jedes tierische Produkt — kein Fleisch, kein Fisch, keine
+  Milch, kein Käse, keine Butter, kein Ei, kein Honig, keine Gelatine.
+- `false` heißt: enthält mindestens eines davon, auch in kleiner Menge
+  (Parmesan auf der Pasta, Ei im Teig, Butter im Gebäck).
+- **Lässt es sich nicht sagen, lass das Feld weg.** Ein falsches `true` ist
+  hier der teuerste Fehler: die Person verlässt sich darauf. Bei Klassikern,
+  die es in beiden Varianten gibt („Pesto", „Curry", „Brötchen"), gilt die
+  übliche Zubereitung; ist die offen, weglassen.
+- Nennt der Text es ausdrücklich („veganes Curry", „mit Hafermilch"), steht es
+  in keiner der beiden Listen. Hast du es beim Hersteller oder bei Open Food
+  Facts nachgesehen, steht `vegan` in `lookedUp`; hast du es aus den Zutaten
+  oder dem Foto erschlossen, in `estimated`.
+- Die gespeicherten Gerichte im Auftrag tragen „vegan" bzw. „nicht vegan", wenn
+  es bekannt ist. Passt die Beschreibung auf eines, übernimmt die App dessen
+  Kennzeichen ohnehin.
+
 ## Wenn ein Foto dabei ist
 
 Nennt der Auftrag ein Foto, sieh es dir mit `Read` an, bevor du antwortest.

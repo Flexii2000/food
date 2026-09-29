@@ -136,6 +136,45 @@ Formulare für Gerichte, Vorschlag und Tagesziele einen Abschnitt mit den
 vierzehn Feldern. Unter dem Ziel steht nie „100 %"; eine 0 als Tagesziel heißt
 dort „kein Ziel".
 
+## Veganer Modus
+
+Ein Wunsch von Torben (Feature Request 340fa6ce): beim Erfassen nicht aus
+Versehen ein nicht-veganes Gericht erwischen. Anders als Detailwerte und
+Mikronährstoffe ist das **keine Serverfreigabe**, sondern ein Schalter, den jede
+Person selbst umlegt — im Web unter „Tagesziele", in der Android-App im Menü.
+
+- **Kennzeichen am Gericht:** `Dish.vegan` ist `true`, `false` oder fehlt
+  (unbekannt). Ebenso `vegan` im Rumpf von `POST/PUT /dishes` und im neuen
+  Gericht eines Eintrags. `PUT` ersetzt das Gericht ganz: fehlt `vegan`, ist es
+  danach unbekannt. Einträge tragen kein Kennzeichen.
+- **Schalter:** `PUT /api/food/vegan-mode` mit `{enabled}` antwortet mit den
+  neuen `features`, dort steht `veganMode` (fehlt nie). Gespeichert wird er als
+  `veganMode` in der `food.json` der Person; fehlt das Feld, war er nie an.
+- **Erstes Einschalten markiert:** alle Gerichte mit unbekanntem Kennzeichen
+  werden einmalig `true`, ausdrücklich `false` bleibt. Späteres Aus- und
+  Einschalten markiert nichts mehr — was dann noch unbekannt ist, kam ohne
+  Einordnung dazu.
+- **Durchgesetzt im Dienst, solange er an ist:** ein Eintrag mit `dishId` eines
+  Gerichts, das nicht `vegan: true` ist, wird mit 400 abgelehnt; ein neues
+  Gericht (im Eintrag oder über `POST /dishes`) ohne `vegan` gilt als vegan, mit
+  `vegan: false` ist es ein 400. Korrigieren per `PUT` auf `false` geht immer.
+  `GET /dishes` liefert weiter alle Gerichte — filtern tun die Oberflächen.
+- **Schnellerfassung:** wer den Modus je eingeschaltet hat, bekommt im Auftrag
+  die Frage nach `vegan` (siehe `deploy/agent/CLAUDE.md`); der Vorschlag trägt
+  dann `vegan` mit Herkunft in `valueSources.vegan`. Ein bekanntes Gericht
+  bringt sein gespeichertes Kennzeichen mit (`stored`).
+- **Felix bleibt unverändert:** wer den Modus nie einschaltet, bekommt jede
+  Antwort wie zuvor, nur `features` hat `veganMode: false` —
+  `VeganModeApiTest` vergleicht das Zeichen für Zeichen.
+
+In der Weboberfläche: der Schalter unter „Tagesziele", ein Häkchen „Vegan" im
+Formular für ein neues Gericht, in der Gerichteliste und im Vorschlag. Im Modus
+zeigt die Suche nur vegane Gerichte, das Häkchen eines neuen Gerichts ist
+gesetzt und gesperrt, ein nicht-veganer Vorschlag lässt sich nicht übernehmen,
+und die Gerichteliste zeigt nicht-vegane gedämpft. Ein Gericht mit unbekanntem
+Kennzeichen, dessen Häkchen niemand anfasst, wird ohne `vegan` gespeichert und
+bleibt unbekannt.
+
 ## Gramm-basiert, mit optionaler Portion
 
 Ein Gericht speichert seine Nährwerte **je 100 g** — so stehen sie auf der
@@ -666,7 +705,8 @@ vier Zahlen noch zusammenpassen.
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne — liest die Weight-App        |
 | GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
-| GET     | `/api/food/features`      | `{quickCapture, me, detailedNutrients, micronutrients}` — was dieser Person angeboten wird, und wer sie ist |
+| GET     | `/api/food/features`      | `{quickCapture, me, detailedNutrients, micronutrients, veganMode}` — was dieser Person angeboten wird, und wer sie ist |
+| PUT     | `/api/food/vegan-mode`    | `{enabled}` — veganen Modus schalten, Antwort: die neuen `features` (siehe „Veganer Modus") |
 | POST    | `/api/food/quick-capture` | Freitext und/oder Foto → **Vorschlag** (schreibt nichts); 403, wenn für diese Person nicht freigeschaltet |
 | GET     | `/api/food/quick-capture/{id}` | Stand eines Auftrags; der einer anderen Person ist 404 |
 | POST    | `/api/food/devices`       | Push-Kennung anmelden, `{token, platform?}`             |

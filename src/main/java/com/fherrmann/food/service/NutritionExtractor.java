@@ -34,4 +34,17 @@ public interface NutritionExtractor {
      */
     ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed,
                           boolean micronutrients);
+
+    /**
+     * Wie oben, dazu die Frage nach vegan.
+     *
+     * @param vegan ob der Agent auch sagen soll, ob das Gericht vegan ist - nur fuer
+     *              Personen, die den veganen Modus je eingeschaltet haben. Die
+     *              Vorgabe fragt nicht danach, damit eine Auswertung ohne diese Frage
+     *              genau bleibt, wie sie war
+     */
+    default ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed,
+                                  boolean micronutrients, boolean vegan) {
+        return extract(text, photo, targets, known, detailed, micronutrients);
+    }
 }

@@ -152,4 +152,49 @@ class ClaudeSessionNutritionExtractorTest {
 
         assertThat(dish.estimatedFields()).contains("kcalPer100g", "ironMg", "folateUg", "seleniumUg");
     }
+
+    // MARK: - vegan
+
+    private static final String ANSWER_VEGAN = ANSWER.replace(",\\\"meal\\\"", ",\\\"vegan\\\":false,\\\"meal\\\"");
+
+    private static final List<Dish> KNOWN_WITH_FLAGS = List.of(
+            new Dish("d1", "Skyr natur", new Nutrients(63, 11, 4, 0.2), 150.0, null, false),
+            new Dish("d2", "Hummus", new Nutrients(170, 8, 14, 10), 50.0, null, true),
+            new Dish("d3", "Brötchen", new Nutrients(270, 9, 50, 2), 60.0, null));
+
+    @Test
+    void whoKnowsTheVeganModeIsAskedAndGetsTheVerdict() throws Exception {
+        assertThat(ANSWER_VEGAN).isNotEqualTo(ANSWER);
+        Path prompt = tempDir.resolve("prompt.txt");
+        ExtractedDish dish = extractor(prompt, ANSWER_VEGAN)
+                .extract("Pasta", null, new Nutrients(2800, 180, 300, 90), KNOWN_WITH_FLAGS, false, false, true);
+
+        String sent = Files.readString(prompt);
+        assertThat(sent).contains("Gib zusaetzlich vegan an");
+        assertThat(sent).contains("- Skyr natur: 63 kcal, 11 g E, 4 g KH, 0.2 g F, Portion 150 g, nicht vegan\n",
+                "- Hummus: 170 kcal, 8 g E, 14 g KH, 10 g F, Portion 50 g, vegan\n",
+                "- Brötchen: 270 kcal, 9 g E, 50 g KH, 2 g F, Portion 60 g\n");
+        assertThat(dish.vegan()).isFalse();
+    }
+
+    /** Felix: keine Frage, keine Kennzeichen im Auftrag, und was ungefragt kommt, wird nicht gelesen. */
+    @Test
+    void everyoneElseIsNotAskedAboutVegan() throws Exception {
+        Path prompt = tempDir.resolve("prompt.txt");
+        ExtractedDish dish = extractor(prompt, ANSWER_VEGAN)
+                .extract("Pasta", null, new Nutrients(2300, 200, 235.5, 62), KNOWN_WITH_FLAGS, false, false);
+
+        assertThat(Files.readString(prompt)).doesNotContain("vegan");
+        assertThat(dish.vegan()).isNull();
+    }
+
+    /** Nur ein echter Wahrheitswert zaehlt - "unklar" oder ein Text heisst unbekannt. */
+    @Test
+    void anythingButABooleanLeavesVeganUnknown() throws Exception {
+        String answer = ANSWER.replace(",\\\"meal\\\"", ",\\\"vegan\\\":\\\"vielleicht\\\",\\\"meal\\\"");
+        ExtractedDish dish = extractor(tempDir.resolve("prompt.txt"), answer)
+                .extract("Pasta", null, new Nutrients(2300, 200, 235.5, 62), KNOWN, false, false, true);
+
+        assertThat(dish.vegan()).isNull();
+    }
 }

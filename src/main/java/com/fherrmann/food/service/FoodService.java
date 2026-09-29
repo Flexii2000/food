@@ -67,6 +67,10 @@ public class FoodService {
     private static final double MAX_MACRO_PER_100G = 100;
     private static final int MAX_NAME_LENGTH = 80;
 
+    /** Die Begruendungen, wenn der vegane Modus etwas ablehnt - die Clients zeigen sie so an. */
+    static final String VEGAN_ONLY_ENTRIES = "Im veganen Modus lassen sich nur vegane Gerichte eintragen.";
+    static final String VEGAN_ONLY_DISHES = "Im veganen Modus lassen sich nur vegane Gerichte anlegen.";
+
     /** Genug fuer eine Mahlzeitbeschreibung; alles darueber ist kein Tagebucheintrag mehr. */
     private static final int MAX_QUICK_CAPTURE_LENGTH = 1000;
 
@@ -188,6 +192,11 @@ public class FoodService {
 
     public Nutrients targets(String user) {
         return targetsOf(user, repository.load(user)).rounded();
+    }
+
+    /** Ob der vegane Modus dieser Person an ist - fuer die Features. */
+    public boolean veganMode(String user) {
+        return repository.load(user).veganModeOn();
     }
 
     /**
@@ -334,8 +343,14 @@ public class FoodService {
                     .filter(d -> d.id().equals(request.dishId()))
                     .findFirst()
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown dishId"));
+            // Unbekannt zaehlt wie nicht vegan: der Modus verspricht, dass nichts
+            // Nicht-Veganes durchrutscht, und ein nie eingeordnetes Gericht kann das sein.
+            if (data.veganModeOn() && !dish.markedVegan()) {
+                throw badRequest(VEGAN_ONLY_ENTRIES);
+            }
         } else if (request.dish() != null) {
-            dish = upsertDish(dishes, request.dish(), null, micronutrients.isEnabled(user));
+            dish = upsertDish(dishes, veganChecked(data, request.dish(), VEGAN_ONLY_ENTRIES), null,
+                    micronutrients.isEnabled(user));
         } else {
             throw badRequest("either dishId or dish is required");
         }
@@ -345,7 +360,8 @@ public class FoodService {
         LocalDate lastUsed = dish.lastUsedOn() == null || date.isAfter(dish.lastUsedOn())
                 ? date
                 : dish.lastUsedOn();
-        replaceDish(dishes, dish.id(), new Dish(dish.id(), dish.name(), dish.per100g(), dish.portionG(), lastUsed));
+        replaceDish(dishes, dish.id(),
+                new Dish(dish.id(), dish.name(), dish.per100g(), dish.portionG(), lastUsed, dish.vegan()));
 
         List<FoodEntry> entries = new ArrayList<>(data.entries());
         entries.add(new FoodEntry(
@@ -394,6 +410,10 @@ public class FoodService {
 
         FoodData data = repository.load(user);
         boolean withMicros = micronutrients.isEnabled(user);
+        // Nach vegan fragt die Auswertung nur, wer den Modus je eingeschaltet hat -
+        // auch wenn er gerade aus ist, damit die Kennzeichen beim naechsten
+        // Einschalten schon stimmen. Alle anderen bekommen den Vorschlag wie immer.
+        boolean askVegan = data.veganMode() != null;
         Path photo = null;
         ExtractedDish extracted;
         try {
@@ -401,7 +421,7 @@ public class FoodService {
                 photo = storePhoto(jobId, image);
             }
             extracted = extractor.extract(text, photo, data.targets(), data.dishes(), detailed.isDetailed(user),
-                    withMicros);
+                    withMicros, askVegan);
         } finally {
             if (photo != null) {
                 try {
@@ -435,6 +455,11 @@ public class FoodService {
                         extracted.saturatedFatG(), extracted.sugarG(),
                         extracted.fiberG(), extracted.saltG(), micros));
 
+        // Das gespeicherte Kennzeichen gewinnt wie die gespeicherten Naehrwerte. Nur
+        // wo das bekannte Gericht keins hat, zaehlt die Einschaetzung des Agents.
+        Boolean storedVegan = known.map(Dish::vegan).orElse(null);
+        Boolean vegan = storedVegan != null ? storedVegan : askVegan ? extracted.vegan() : null;
+
         return new QuickCapturePreview(
                 known.isPresent(),
                 known.map(Dish::id).orElse(null),
@@ -443,10 +468,11 @@ public class FoodService {
                 known.map(Dish::portionG).orElseGet(extracted::portionG),
                 extracted.grams(),
                 meal == null ? Meal.SNACK : meal,
-                valueSources(extracted, micros, known.map(Dish::per100g).orElse(null)),
+                valueSources(extracted, micros, known.map(Dish::per100g).orElse(null), vegan, storedVegan != null),
                 known.isPresent()
                         ? "Bekanntes Gericht erkannt - die gespeicherten Nährwerte werden übernommen."
-                        : extracted.note());
+                        : extracted.note(),
+                vegan);
     }
 
     /**
@@ -572,7 +598,7 @@ public class FoodService {
      * unterscheiden, ist die eine Pruefung, die er selbst nicht nachholen kann.
      */
     private static Map<String, String> valueSources(ExtractedDish extracted, Map<String, Double> micros,
-                                                    Nutrients stored) {
+                                                    Nutrients stored, Boolean vegan, boolean veganStored) {
         boolean known = stored != null;
         Map<String, String> sources = new LinkedHashMap<>();
         // Reihenfolge ist Absicht: nachgeschlagen schlaegt geschaetzt, und was in
@@ -612,6 +638,12 @@ public class FoodService {
         // Die Menge steht im Text oder eben nicht - unabhaengig davon, ob das
         // Gericht bekannt ist.
         put.accept("grams", "grams");
+        // Das Kennzeichen hat nur eine Herkunft, wenn es eins gibt.
+        if (veganStored) {
+            sources.put("vegan", "stored");
+        } else if (vegan != null) {
+            put.accept("vegan", "vegan");
+        }
         return sources;
     }
 
@@ -659,9 +691,28 @@ public class FoodService {
     public synchronized Dish createDish(String user, DishRequest request) {
         FoodData data = repository.load(user);
         List<Dish> dishes = new ArrayList<>(data.dishes());
-        Dish dish = upsertDish(dishes, request, null, micronutrients.isEnabled(user));
+        Dish dish = upsertDish(dishes, veganChecked(data, request, VEGAN_ONLY_DISHES), null,
+                micronutrients.isEnabled(user));
         repository.save(user, data.with(dishes, data.entries()));
         return dish;
+    }
+
+    /**
+     * Im veganen Modus: ein neues Gericht ohne Kennzeichen ist vegan - wer im Modus
+     * anlegt, legt Veganes an. Ein ausdruecklich nicht-veganes wird abgelehnt.
+     * Ausserhalb des Modus bleibt die Anfrage, wie sie ist.
+     */
+    private static DishRequest veganChecked(FoodData data, DishRequest request, String reason) {
+        if (request == null || !data.veganModeOn()) {
+            return request;
+        }
+        if (request.vegan() == null) {
+            return request.withVegan(true);
+        }
+        if (!request.vegan()) {
+            throw badRequest(reason);
+        }
+        return request;
     }
 
     /**
@@ -711,9 +762,35 @@ public class FoodService {
         Map<String, Double> microTargets = micronutrients.isEnabled(user) && request.micros() != null
                 ? validMicroTargets(request.micros())
                 : data.microTargets();
-        FoodData updated = new FoodData(targets, shares, data.dishes(), data.entries(), microTargets);
+        FoodData updated = new FoodData(targets, shares, data.dishes(), data.entries(), microTargets,
+                data.veganMode());
         repository.save(user, updated);
         return targetsOf(user, updated).rounded();
+    }
+
+    /**
+     * Schaltet den veganen Modus ein oder aus.
+     *
+     * <p>Beim <b>ersten</b> Einschalten werden alle Gerichte ohne Kennzeichen als vegan
+     * markiert - so hat Felix es entschieden: wer den Modus einschaltet, hat bisher
+     * vegan gegessen, und eine leere Suche waere der schlechteste Start. Ausdruecklich
+     * nicht-vegane bleiben, was sie sind. Spaeteres Aus- und Einschalten markiert
+     * nichts mehr: dann waere ein unbekanntes Gericht eines, das seitdem ohne
+     * Einordnung dazukam, und das heimlich vegan zu nennen, waere geraten.
+     *
+     * <p>Wer ihn nie eingeschaltet hat und ausschaltet, aendert nichts - auch nicht an
+     * der Datei, sonst zaehlte das spaetere erste Einschalten nicht mehr als erstes.
+     */
+    public synchronized void setVeganMode(String user, boolean enabled) {
+        FoodData data = repository.load(user);
+        if (data.veganMode() == null && !enabled) {
+            return;
+        }
+        List<Dish> dishes = data.veganMode() == null
+                ? data.dishes().stream().map(d -> d.vegan() == null ? d.withVegan(true) : d).toList()
+                : data.dishes();
+        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, data.entries(),
+                data.microTargets(), enabled));
     }
 
     // --- helpers ------------------------------------------------------------
@@ -792,7 +869,7 @@ public class FoodService {
                 .map(Dish::lastUsedOn)
                 .orElse(null);
 
-        Dish dish = new Dish(targetId, name, per100g, portionG, lastUsed);
+        Dish dish = new Dish(targetId, name, per100g, portionG, lastUsed, request.vegan());
         replaceDish(dishes, targetId, dish);
         return dish;
     }

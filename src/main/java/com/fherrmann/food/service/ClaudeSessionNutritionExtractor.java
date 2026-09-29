@@ -60,7 +60,7 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      */
     private static final List<String> ALL_ESTIMATABLE = Stream.concat(
             Stream.of("kcalPer100g", "proteinPer100g", "carbsPer100g", "fatPer100g", "grams", "portionG",
-                    "saturatedFatPer100g", "sugarPer100g", "fiberPer100g", "saltPer100g"),
+                    "saturatedFatPer100g", "sugarPer100g", "fiberPer100g", "saltPer100g", "vegan"),
             Micronutrient.KEYS.stream()).toList();
 
     private final List<String> command;
@@ -95,14 +95,20 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
     @Override
     public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed,
                                  boolean micronutrients) {
+        return extract(text, photo, targets, known, detailed, micronutrients, false);
+    }
+
+    @Override
+    public ExtractedDish extract(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed,
+                                 boolean micronutrients, boolean vegan) {
         if (!isAvailable()) {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "Schnellerfassung ist auf diesem Server nicht eingerichtet.");
         }
 
-        String output = run(prompt(text, photo, targets, known, detailed, micronutrients));
-        return parse(output, detailed, micronutrients);
+        String output = run(prompt(text, photo, targets, known, detailed, micronutrients, vegan));
+        return parse(output, detailed, micronutrients, vegan);
     }
 
     /** Startet die Session, schiebt den Prompt hinein und gibt aus, was zurueckkam. */
@@ -178,7 +184,7 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      * steckt die Antwort in {@code result}) oder die blanke Antwort. Beides wird
      * akzeptiert, damit ein Wechsel des Ausgabeformats im Wrapper nichts bricht.
      */
-    private ExtractedDish parse(String output, boolean detailed, boolean micronutrients) {
+    private ExtractedDish parse(String output, boolean detailed, boolean micronutrients, boolean vegan) {
         String payload = output;
         JsonNode envelope = tryReadJson(output);
         if (envelope != null && envelope.has("result")) {
@@ -217,7 +223,14 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                 detailed ? optionalValue(node.path("fiberPer100g")) : null,
                 detailed ? optionalValue(node.path("saltPer100g")) : null,
                 // Dasselbe fuer die Mikronaehrstoffe.
-                micronutrients ? readMicros(node.path("microsPer100g")) : Map.of());
+                micronutrients ? readMicros(node.path("microsPer100g")) : Map.of(),
+                // Und fuer vegan: nur wer den Modus kennt, bekommt die Einschaetzung.
+                vegan ? optionalBoolean(node.path("vegan")) : null);
+    }
+
+    /** Ein echter Wahrheitswert, oder null - "unklar", ein Text oder nichts heissen unbekannt. */
+    private static Boolean optionalBoolean(JsonNode node) {
+        return node.isBoolean() ? node.asBoolean() : null;
     }
 
     /** Die bekannten Schluessel mit einer Zahl >= 0; alles andere ist keine Angabe. */
@@ -307,7 +320,7 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
      * gespeicherten Gerichte.
      */
     private String prompt(String text, Path photo, Nutrients targets, List<Dish> known, boolean detailed,
-                          boolean micronutrients) {
+                          boolean micronutrients, boolean vegan) {
         StringBuilder sb = new StringBuilder();
         sb.append("Tagesziele: ")
                 .append(fmt(targets.kcal())).append(" kcal, ")
@@ -328,6 +341,7 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                     .append(fmt(d.per100g().fatG())).append(" g F")
                     .append(detailed ? details(d.per100g()) : "")
                     .append(d.portionG() == null ? "" : ", Portion " + fmt(d.portionG()) + " g")
+                    .append(vegan && d.vegan() != null ? (d.vegan() ? ", vegan" : ", nicht vegan") : "")
                     .append("\n"));
             sb.append("\n");
         }
@@ -353,6 +367,14 @@ public class ClaudeSessionNutritionExtractor implements NutritionExtractor {
                     .append(" (Einheit im Namen: Mg = Milligramm, Ug = Mikrogramm). Schaetzen ist hier ")
                     .append("ausdruecklich erwuenscht; bei einem konkreten Produkt schlag nach. Fuehre sie ")
                     .append("mit ihren Schluesseln in lookedUp bzw. estimated.\n\n");
+        }
+
+        // Nur fuer Personen, die den veganen Modus je eingeschaltet haben - allen
+        // anderen bleibt der Auftrag, wie er war.
+        if (vegan) {
+            sb.append("Diese Person achtet darauf, ob ein Gericht vegan ist. Gib zusaetzlich vegan an ")
+                    .append("(true oder false; weglassen, wenn es sich nicht sagen laesst) und fuehre es in ")
+                    .append("lookedUp bzw. estimated wie die uebrigen Werte.\n\n");
         }
 
         // Das Foto liegt als Datei im Postfach, das der Agent lesen darf -

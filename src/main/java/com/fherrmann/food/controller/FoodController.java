@@ -12,6 +12,7 @@ import com.fherrmann.food.dto.QuickCaptureJob;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.dto.UpdateEntryRequest;
+import com.fherrmann.food.dto.VeganModeRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.push.DeviceTokens;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
 import java.time.LocalDate;
@@ -99,9 +101,26 @@ public class FoodController {
     /** Welche optionalen Funktionen dieser Server dieser Person anbietet - und wer sie ist. */
     @GetMapping("/features")
     public Features features(Principal principal) {
-        String user = principal.getName();
+        return features(principal.getName());
+    }
+
+    /**
+     * Schaltet den veganen Modus und antwortet mit den neuen Features - dieselbe
+     * Antwort, die ein Client beim Start ohnehin liest, also kein zweiter Weg,
+     * den Stand zu erfahren.
+     */
+    @PutMapping("/vegan-mode")
+    public Features veganMode(@RequestBody(required = false) VeganModeRequest request, Principal principal) {
+        if (request == null || request.enabled() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "enabled is required");
+        }
+        service.setVeganMode(principal.getName(), request.enabled());
+        return features(principal.getName());
+    }
+
+    private Features features(String user) {
         return new Features(service.quickCaptureAvailable() && quickCaptureAccess.allows(user), user,
-                detailedNutrition.isDetailed(user), micronutrients.isEnabled(user));
+                detailedNutrition.isDetailed(user), micronutrients.isEnabled(user), service.veganMode(user));
     }
 
     /**

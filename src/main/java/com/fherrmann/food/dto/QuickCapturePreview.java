@@ -1,5 +1,6 @@
 package com.fherrmann.food.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
 
@@ -26,8 +27,10 @@ import java.util.Map;
  *                     {@code stored} aus der Gerichteliste, {@code read} als Zahl
  *                     im Text gestanden, {@code estimated} geschaetzt. Detailwerte
  *                     und Mikronaehrstoffe stehen mit ihrem Schluessel darin, soweit
- *                     der Vorschlag sie hat
+ *                     der Vorschlag sie hat, ebenso {@code vegan}
  * @param note         ein Satz zur Herleitung
+ * @param vegan        ob das Gericht vegan ist, oder {@code null}, wenn unklar oder
+ *                     nie danach gefragt - dann fehlt es im JSON
  */
 public record QuickCapturePreview(
         boolean known,
@@ -38,5 +41,12 @@ public record QuickCapturePreview(
         double grams,
         Meal meal,
         Map<String, String> valueSources,
-        String note) {
+        String note,
+        @JsonInclude(JsonInclude.Include.NON_NULL) Boolean vegan) {
+
+    /** Ohne Kennzeichen vegan. */
+    public QuickCapturePreview(boolean known, String dishId, String name, Nutrients per100g, Double portionG,
+                               double grams, Meal meal, Map<String, String> valueSources, String note) {
+        this(known, dishId, name, per100g, portionG, grams, meal, valueSources, note, null);
+    }
 }

@@ -23,13 +23,18 @@ import java.util.Map;
  *                   fehlender Schluessel darin heisst "bewusst ohne Ziel". In
  *                   {@code targets} liesse sich beides nicht auseinanderhalten, weil
  *                   eine leere Liste dort gar nicht im JSON steht
+ * @param veganMode  der vegane Modus: {@code null} heisst "nie eingeschaltet" und
+ *                   fehlt in der Datei, {@code true} an, {@code false} aus, aber schon
+ *                   einmal an gewesen. Den Unterschied braucht das erste Einschalten -
+ *                   nur dann werden die vorhandenen Gerichte als vegan markiert
  */
 public record FoodData(
         Nutrients targets,
         Map<Meal, Double> mealShares,
         List<Dish> dishes,
         List<FoodEntry> entries,
-        @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Double> microTargets) {
+        @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Double> microTargets,
+        @JsonInclude(JsonInclude.Include.NON_NULL) Boolean veganMode) {
 
     /**
      * Daily goals used when {@code food.json} does not exist yet: 2300 kcal with 200 g
@@ -61,9 +66,15 @@ public record FoodData(
         microTargets = microTargets == null ? null : Micronutrient.ordered(microTargets);
     }
 
+    /** Ohne veganen Modus - so sieht jedes Tagebuch aus, das ihn nie eingeschaltet hat. */
+    public FoodData(Nutrients targets, Map<Meal, Double> mealShares, List<Dish> dishes, List<FoodEntry> entries,
+                    Map<String, Double> microTargets) {
+        this(targets, mealShares, dishes, entries, microTargets, null);
+    }
+
     /** Ohne gespeicherte Mikro-Ziele - so sieht jedes Tagebuch aus, das sie nie hatte. */
     public FoodData(Nutrients targets, Map<Meal, Double> mealShares, List<Dish> dishes, List<FoodEntry> entries) {
-        this(targets, mealShares, dishes, entries, null);
+        this(targets, mealShares, dishes, entries, null, null);
     }
 
     public static FoodData empty() {
@@ -72,9 +83,15 @@ public record FoodData(
 
     /**
      * Derselbe Stand mit anderen Gerichten und Eintraegen, die Ziele bleiben. Jede
-     * Aenderung am Tagebuch geht hierueber, damit keine davon die Mikro-Ziele verliert.
+     * Aenderung am Tagebuch geht hierueber, damit keine davon die Mikro-Ziele oder den
+     * veganen Modus verliert.
      */
     public FoodData with(List<Dish> dishes, List<FoodEntry> entries) {
-        return new FoodData(targets, mealShares, dishes, entries, microTargets);
+        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode);
+    }
+
+    /** Ob der vegane Modus gerade an ist. */
+    public boolean veganModeOn() {
+        return Boolean.TRUE.equals(veganMode);
     }
 }

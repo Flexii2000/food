@@ -29,6 +29,9 @@ import java.util.Map;
  * @param saltG     Salz je 100 g, dito
  * @param micros    Mikronaehrstoffe je 100 g, nur fuer Personen, die sie erfassen;
  *                  leer, wenn der Agent keine liefert oder niemand danach gefragt hat
+ * @param vegan     ob das Gericht vegan ist, oder {@code null}, wenn der Agent es
+ *                  offen laesst oder niemand danach gefragt hat. Herkunft ueber den
+ *                  Feldnamen {@code vegan} in denselben beiden Listen
  */
 public record ExtractedDish(
         String name,
@@ -46,7 +49,8 @@ public record ExtractedDish(
         Double sugarG,
         Double fiberG,
         Double saltG,
-        Map<String, Double> micros) {
+        Map<String, Double> micros,
+        Boolean vegan) {
 
     public ExtractedDish {
         lookedUpFields = lookedUpFields == null ? List.of() : List.copyOf(lookedUpFields);
@@ -54,12 +58,21 @@ public record ExtractedDish(
         micros = Micronutrient.ordered(micros);
     }
 
+    /** Ohne Kennzeichen vegan. */
+    public ExtractedDish(String name, double kcal, double proteinG, double carbsG, double fatG, double grams,
+                         Double portionG, List<String> lookedUpFields, List<String> estimatedFields,
+                         String note, Meal meal, Double saturatedFatG, Double sugarG, Double fiberG, Double saltG,
+                         Map<String, Double> micros) {
+        this(name, kcal, proteinG, carbsG, fatG, grams, portionG, lookedUpFields, estimatedFields, note, meal,
+                saturatedFatG, sugarG, fiberG, saltG, micros, null);
+    }
+
     /** Mit Detailwerten, ohne Mikronaehrstoffe. */
     public ExtractedDish(String name, double kcal, double proteinG, double carbsG, double fatG, double grams,
                          Double portionG, List<String> lookedUpFields, List<String> estimatedFields,
                          String note, Meal meal, Double saturatedFatG, Double sugarG, Double fiberG, Double saltG) {
         this(name, kcal, proteinG, carbsG, fatG, grams, portionG, lookedUpFields, estimatedFields, note, meal,
-                saturatedFatG, sugarG, fiberG, saltG, null);
+                saturatedFatG, sugarG, fiberG, saltG, null, null);
     }
 
     /** Ohne Detailwerte - so antwortet der Agent, wenn niemand danach fragt. */
@@ -67,6 +80,6 @@ public record ExtractedDish(
                          Double portionG, List<String> lookedUpFields, List<String> estimatedFields,
                          String note, Meal meal) {
         this(name, kcal, proteinG, carbsG, fatG, grams, portionG, lookedUpFields, estimatedFields, note, meal,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 }

@@ -26,6 +26,8 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -34,21 +36,18 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 /**
- * Die Mikronaehrstoffe durch den ganzen Dienst - Filter, Controller, Dienst, Datei und
- * die JSON-Einstellungen, mit denen die Clients die Antworten wirklich bekommen.
+ * Der vegane Modus durch den ganzen Dienst - Filter, Controller, Dienst, Datei und die
+ * JSON-Einstellungen, mit denen die Clients die Antworten wirklich bekommen.
  *
- * <p>Fuer Felix steht jede Antwort Zeichen fuer Zeichen da, und zwar so, wie sie vor den
- * Mikronaehrstoffen aussah: aufgenommen mit genau diesen Anfragen gegen den alten Stand.
- * Seine Anfragen schicken dabei sogar {@code micros} mit - die muessen spurlos
- * verschwinden. Die einzige Aenderung ist {@code micronutrients: false} in
- * {@code /features}, und die verlangt der Vertrag - ebenso das spaeter dazugekommene
- * {@code veganMode: false} (siehe {@code VeganModeApiTest}).
- *
- * <p>Nur die Ids werden vor dem Vergleich ersetzt; die Uhr steht still.
+ * <p>Fuer Felix, der den Modus nie einschaltet, steht jede Antwort Zeichen fuer Zeichen
+ * so da wie vor dem veganen Modus - dieselben Anfragen und Erwartungen wie in
+ * {@code MicronutrientsApiTest}, und der Agent liefert hier sogar {@code vegan} mit.
+ * Die einzige Aenderung ist {@code veganMode: false} in {@code /features}, und die
+ * verlangt der Vertrag. Seine Datei bekommt kein einziges Kennzeichen.
  */
 @SpringBootTest
-@Import(MicronutrientsApiTest.FixedClock.class)
-class MicronutrientsApiTest {
+@Import(VeganModeApiTest.FixedClock.class)
+class VeganModeApiTest {
 
     private static final String TORBEN = "0123456789abcdef0123456789abcdef";
     private static final String JOANA = "fedcba9876543210fedcba9876543210";
@@ -58,7 +57,7 @@ class MicronutrientsApiTest {
 
     static {
         try {
-            DATA = Files.createTempDirectory("micronutrients-api");
+            DATA = Files.createTempDirectory("vegan-mode-api");
             // Steht fuer die Claude-Session: liefert immer dieselbe Antwort, mit
             // Detailwerten und Mikronaehrstoffen.
             AGENT = DATA.resolve("agent.sh");
@@ -67,7 +66,8 @@ class MicronutrientsApiTest {
                     + "\\\"proteinPer100g\\\":6,\\\"carbsPer100g\\\":12,\\\"fatPer100g\\\":2.5,\\\"grams\\\":400,"
                     + "\\\"portionG\\\":400,\\\"sugarPer100g\\\":1.2,\\\"saltPer100g\\\":0.7,"
                     + "\\\"microsPer100g\\\":{\\\"ironMg\\\":2.1,\\\"folateUg\\\":60},"
-                    + "\\\"lookedUp\\\":[],\\\"estimated\\\":[\\\"kcalPer100g\\\",\\\"grams\\\",\\\"ironMg\\\"],"
+                    + "\\\"vegan\\\":true,"
+                    + "\\\"lookedUp\\\":[],\\\"estimated\\\":[\\\"kcalPer100g\\\",\\\"grams\\\",\\\"ironMg\\\",\\\"vegan\\\"],"
                     + "\\\"note\\\":\\\"geschaetzt\\\",\\\"meal\\\":\\\"LUNCH\\\"}\"}\n"
                     + "JSON\n");
             AGENT.toFile().setExecutable(true);
@@ -214,7 +214,7 @@ class MicronutrientsApiTest {
         assertThat(call("felix", get("/api/food/daily").param("from", "2026-09-20").param("to", "2026-09-27")))
                 .isEqualTo("200 [{\"date\":\"2026-09-27\",\"consumed\":{\"kcal\":463.2,\"proteinG\":32.1,"
                         + "\"carbsG\":53.2,\"fatG\":8.1}}]");
-        // Der Agent liefert Mikronaehrstoffe mit - im Vorschlag fuer Felix stehen sie nicht.
+        // Der Agent liefert vegan mit - im Vorschlag fuer Felix steht es nicht.
         assertThat(quickCapture("felix"))
                 .isEqualTo("200 {\"id\":\"<id>\",\"status\":\"done\",\"preview\":{\"known\":false,\"dishId\":null,"
                         + "\"name\":\"Linsensuppe\",\"per100g\":{\"kcal\":95.0,\"proteinG\":6.0,\"carbsG\":12.0,"
@@ -225,92 +225,50 @@ class MicronutrientsApiTest {
         assertThat(call("felix", get("/api/food/features")))
                 .isEqualTo("200 {\"quickCapture\":true,\"me\":\"felix\",\"detailedNutrients\":false,"
                         + "\"micronutrients\":false,\"veganMode\":false}");
-        assertThat(Files.readString(DATA.resolve("food.json"))).doesNotContain("micro");
+        assertThat(Files.readString(DATA.resolve("food.json"))).doesNotContain("vegan");
     }
 
     @Test
-    void torbenGetsMicrosWithEveryEntryAndTheDayAddsThemUp() throws Exception {
-        assertThat(call("torben", get("/api/food/features")))
+    void torbenSwitchesTheModeAndTheServiceHoldsHimToIt() throws Exception {
+        String cheese = read("torben", json(post("/api/food/dishes"),
+                "{\"name\":\"Käsebrot\",\"kcal\":280,\"proteinG\":12,\"carbsG\":30,\"fatG\":12,\"vegan\":false}"))
+                .path("id").asString("");
+        send("torben", json(post("/api/food/dishes"),
+                "{\"name\":\"Haferflocken\",\"kcal\":372,\"proteinG\":13.5,\"carbsG\":58.7,\"fatG\":7}"));
+
+        assertThat(send("torben", json(put("/api/food/vegan-mode"), "{}")).getStatus()).isEqualTo(400);
+        assertThat(call("torben", json(put("/api/food/vegan-mode"), "{\"enabled\":true}")))
                 .isEqualTo("200 {\"quickCapture\":true,\"me\":\"torben\",\"detailedNutrients\":true,"
-                        + "\"micronutrients\":true,\"veganMode\":false}");
+                        + "\"micronutrients\":true,\"veganMode\":true}");
+        assertThat(call("torben", get("/api/food/features"))).endsWith("\"veganMode\":true}");
 
-        // Unbekannter Schluessel, zu grosser Wert: 400 mit Grund, nichts gespeichert.
-        MockHttpServletResponse rejected = send("torben", json(post("/api/food/dishes"),
-                "{\"name\":\"Kaputt\",\"kcal\":100,\"proteinG\":1,\"carbsG\":1,\"fatG\":1,\"micros\":{\"vitaminKUg\":5}}"));
+        // Das erste Einschalten hat die Haferflocken markiert, das Kaesebrot bleibt.
+        Map<String, String> flags = new HashMap<>();
+        read("torben", get("/api/food/dishes")).forEach(dish ->
+                flags.put(dish.path("name").asString(""), dish.path("vegan").toString()));
+        assertThat(flags).containsExactlyInAnyOrderEntriesOf(Map.of("Haferflocken", "true", "Käsebrot", "false"));
+
+        MockHttpServletResponse rejected = send("torben", json(post("/api/food/entries"),
+                "{\"date\":\"2026-09-27\",\"grams\":100,\"dishId\":\"" + cheese + "\"}"));
         assertThat(rejected.getStatus()).isEqualTo(400);
-        assertThat(rejected.getErrorMessage()).contains("micros.vitaminKUg is not a known micronutrient");
+        assertThat(rejected.getErrorMessage()).isEqualTo("Im veganen Modus lassen sich nur vegane Gerichte eintragen.");
         assertThat(send("torben", json(post("/api/food/dishes"),
-                "{\"name\":\"Kaputt\",\"kcal\":100,\"proteinG\":1,\"carbsG\":1,\"fatG\":1,\"micros\":{\"ironMg\":10001}}"))
-                .getErrorMessage()).contains("micros.ironMg must be at most");
-
+                "{\"name\":\"Butter\",\"kcal\":740,\"proteinG\":1,\"carbsG\":1,\"fatG\":82,\"vegan\":false}"))
+                .getErrorMessage()).isEqualTo("Im veganen Modus lassen sich nur vegane Gerichte anlegen.");
         assertThat(call("torben", json(post("/api/food/dishes"),
-                "{\"name\":\"Haferflocken\",\"kcal\":372,\"proteinG\":13.5,\"carbsG\":58.7,\"fatG\":7,"
-                        + "\"portionG\":60,\"micros\":{\"ironMg\":4.2,\"magnesiumMg\":130}}")))
-                .isEqualTo("201 {\"id\":\"<id>\",\"name\":\"Haferflocken\",\"per100g\":{\"kcal\":372.0,"
-                        + "\"proteinG\":13.5,\"carbsG\":58.7,\"fatG\":7.0,\"micros\":{\"magnesiumMg\":130.0,"
-                        + "\"ironMg\":4.2}},\"portionG\":60.0,\"lastUsedOn\":null}");
-        send("torben", json(post("/api/food/entries"),
-                "{\"date\":\"2026-09-27\",\"grams\":300,\"meal\":\"BREAKFAST\",\"dish\":{\"name\":\"Skyr mit Beeren\","
-                        + "\"kcal\":80,\"proteinG\":8,\"carbsG\":6,\"fatG\":1.3,\"portionG\":300,"
-                        + "\"micros\":{\"calciumMg\":120,\"vitaminB12Ug\":0.4}}}"));
-        String oats = dishId("torben", "Haferflocken");
-        send("torben", json(post("/api/food/entries"),
-                "{\"date\":\"2026-09-27\",\"grams\":60,\"meal\":\"BREAKFAST\",\"dishId\":\"" + oats + "\"}"));
+                "{\"name\":\"Hummus\",\"kcal\":170,\"proteinG\":8,\"carbsG\":14,\"fatG\":10}")))
+                .startsWith("201 ").endsWith("\"vegan\":true}");
 
-        JsonNode day = read("torben", get("/api/food/day").param("date", "2026-09-27"));
-        // Nie gespeichert: die DGE-Vorgabe.
-        assertThat(day.path("targets").path("micros").size()).isEqualTo(14);
-        assertThat(day.path("targets").path("micros").path("vitaminDUg").asDouble()).isEqualTo(20.0);
-        // Teilsummen: jeder Wert aus den Eintraegen, die ihn kennen.
-        assertThat(day.path("consumed").path("micros").toString()).isEqualTo(
-                "{\"vitaminB12Ug\":1.2,\"calciumMg\":360.0,\"magnesiumMg\":78.0,\"ironMg\":2.52}");
-        // Jeder Schluessel fehlt in mindestens einem der beiden Eintraege.
-        assertThat(day.path("microGaps").size()).isEqualTo(14);
-        assertThat(day.path("remaining").has("micros")).isFalse();
-        assertThat(day.path("entries").get(0).path("per100g").path("micros").toString())
-                .isEqualTo("{\"vitaminB12Ug\":0.4,\"calciumMg\":120.0}");
-        assertThat(read("torben", get("/api/food/daily").param("from", "2026-09-27").param("to", "2026-09-27"))
-                .get(0).path("consumed").path("micros").path("calciumMg").asDouble()).isEqualTo(360.0);
+        // Der Vorschlag traegt das Kennzeichen mit seiner Herkunft.
+        assertThat(quickCapture("torben"))
+                .contains("\"vegan\":\"estimated\"")
+                .endsWith("\"note\":\"geschaetzt\",\"vegan\":true},\"error\":null,\"elapsedSeconds\":0}");
 
-        // PUT ersetzt: was nicht mitkommt, ist weg.
-        assertThat(call("torben", json(put("/api/food/dishes/" + oats),
-                "{\"name\":\"Haferflocken\",\"kcal\":370,\"proteinG\":13.5,\"carbsG\":58.7,\"fatG\":7,"
-                        + "\"portionG\":50,\"micros\":{\"ironMg\":4.0}}")))
-                .contains("\"micros\":{\"ironMg\":4.0}}");
-
-        assertThat(quickCapture("torben")).isEqualTo("200 {\"id\":\"<id>\",\"status\":\"done\",\"preview\":{\"known\":false,\"dishId\":null,"
-                        + "\"name\":\"Linsensuppe\",\"per100g\":{\"kcal\":95.0,\"proteinG\":6.0,\"carbsG\":12.0,"
-                        + "\"fatG\":2.5,\"sugarG\":1.2,\"saltG\":0.7,\"micros\":{\"folateUg\":60.0,\"ironMg\":2.1}},"
-                        + "\"portionG\":400.0,\"grams\":400.0,\"meal\":\"LUNCH\","
-                        + "\"valueSources\":{\"kcal\":\"estimated\",\"proteinG\":\"read\",\"carbsG\":\"read\","
-                        + "\"fatG\":\"read\",\"portionG\":\"read\",\"sugarG\":\"read\",\"saltG\":\"read\","
-                        + "\"folateUg\":\"read\",\"ironMg\":\"estimated\",\"grams\":\"estimated\"},"
-                        + "\"note\":\"geschaetzt\"},\"error\":null,\"elapsedSeconds\":0}");
-    }
-
-    @Test
-    void microTargetsStartWithTheDgeValuesAndCanBeDeliberatelyLeftOut() throws Exception {
-        assertThat(call("joana", get("/api/food/targets"))).isEqualTo("200 {\"kcal\":2300.0,\"proteinG\":200.0,\"carbsG\":235.5,\"fatG\":62.0,"
-                        + "\"micros\":{\"vitaminAUg\":850.0,\"vitaminDUg\":20.0,\"vitaminEMg\":8.0,"
-                        + "\"vitaminCMg\":110.0,\"vitaminB2Mg\":1.4,\"vitaminB12Ug\":4.0,\"folateUg\":300.0,"
-                        + "\"calciumMg\":1000.0,\"magnesiumMg\":350.0,\"potassiumMg\":4000.0,\"ironMg\":11.0,"
-                        + "\"zincMg\":16.0,\"iodineUg\":150.0,\"seleniumUg\":70.0}}");
-
-        String base = "\"kcal\":2000,\"proteinG\":120,\"carbsG\":230,\"fatG\":65";
-        assertThat(call("joana", json(put("/api/food/targets"), "{" + base + ",\"micros\":{\"ironMg\":15,\"folateUg\":300}}")))
-                .isEqualTo("200 {\"kcal\":2000.0,\"proteinG\":120.0,\"carbsG\":230.0,\"fatG\":65.0,"
-                        + "\"micros\":{\"folateUg\":300.0,\"ironMg\":15.0}}");
-        // Ein Client ohne das Feld laesst die Mikro-Ziele stehen.
-        assertThat(call("joana", json(put("/api/food/targets"), "{" + base + "}")))
-                .endsWith("\"micros\":{\"folateUg\":300.0,\"ironMg\":15.0}}");
-        // Ein Ziel von 0 ist keines - dafuer laesst man den Schluessel weg.
-        assertThat(send("joana", json(put("/api/food/targets"), "{" + base + ",\"micros\":{\"ironMg\":0}}"))
-                .getErrorMessage()).contains("micros.ironMg must be greater than 0");
-        // Bewusst ohne jedes Ziel: kein micros mehr - und auch nicht wieder die Vorgabe.
-        assertThat(call("joana", json(put("/api/food/targets"), "{" + base + ",\"micros\":{}}")))
-                .isEqualTo("200 {\"kcal\":2000.0,\"proteinG\":120.0,\"carbsG\":230.0,\"fatG\":65.0}");
-        assertThat(call("joana", get("/api/food/targets")))
-                .isEqualTo("200 {\"kcal\":2000.0,\"proteinG\":120.0,\"carbsG\":230.0,\"fatG\":65.0}");
-        assertThat(read("joana", get("/api/food/day").param("date", "2026-09-27")).path("targets").has("micros")).isFalse();
+        // Aus: alles wieder erlaubt, die Kennzeichen bleiben.
+        assertThat(call("torben", json(put("/api/food/vegan-mode"), "{\"enabled\":false}")))
+                .endsWith("\"veganMode\":false}");
+        assertThat(send("torben", json(post("/api/food/entries"),
+                "{\"date\":\"2026-09-27\",\"grams\":100,\"dishId\":\"" + cheese + "\"}")).getStatus())
+                .isEqualTo(201);
     }
 }

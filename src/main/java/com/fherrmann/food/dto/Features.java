@@ -13,10 +13,14 @@ package com.fherrmann.food.dto;
  *                     Oberflaechen die Felder an
  * @param micronutrients ob diese Person Mikronaehrstoffe erfasst - dann gibt es die
  *                     Felder, die Tagesziele dafuer und die Uebersicht des Tages
+ * @param veganMode    ob der vegane Modus dieser Person an ist - dann zeigen die
+ *                     Oberflaechen nur vegane Gerichte zur Auswahl. Fehlt nie, damit
+ *                     ein Client nicht zwischen "aus" und "unbekannt" raten muss
  */
-public record Features(boolean quickCapture, String me, boolean detailedNutrients, boolean micronutrients) {
+public record Features(boolean quickCapture, String me, boolean detailedNutrients, boolean micronutrients,
+                       boolean veganMode) {
 
     public Features(boolean quickCapture, String me) {
-        this(quickCapture, me, false, false);
+        this(quickCapture, me, false, false, false);
     }
 }

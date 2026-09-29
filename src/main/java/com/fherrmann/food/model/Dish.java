@@ -1,5 +1,7 @@
 package com.fherrmann.food.model;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import java.time.LocalDate;
 
 /**
@@ -18,11 +20,34 @@ import java.time.LocalDate;
  * @param portionG   usual serving size in grams, or {@code null} if there is none
  * @param lastUsedOn day this dish was last logged, or {@code null} if never; only used
  *                   to sort the picker so the things eaten regularly stay on top
+ * @param vegan      ob das Gericht vegan ist: {@code true}, {@code false}, oder
+ *                   {@code null} fuer unbekannt. Unbekannt fehlt im JSON ganz - so
+ *                   sieht jedes Gericht aus, das nie jemand eingeordnet hat, und
+ *                   Felix' Liste bleibt, wie sie war
  */
 public record Dish(
         String id,
         String name,
         Nutrients per100g,
         Double portionG,
-        LocalDate lastUsedOn) {
+        LocalDate lastUsedOn,
+        @JsonInclude(JsonInclude.Include.NON_NULL) Boolean vegan) {
+
+    /** Ohne Kennzeichen - vegan unbekannt. */
+    public Dish(String id, String name, Nutrients per100g, Double portionG, LocalDate lastUsedOn) {
+        this(id, name, per100g, portionG, lastUsedOn, null);
+    }
+
+    /**
+     * Ob das Gericht ausdruecklich als vegan gekennzeichnet ist - unbekannt zaehlt nicht.
+     * Bewusst nicht {@code isVegan}: das hielte Jackson fuer den Getter von {@code vegan}
+     * und schriebe ein unbekanntes Gericht als {@code false} in die Datei.
+     */
+    public boolean markedVegan() {
+        return Boolean.TRUE.equals(vegan);
+    }
+
+    public Dish withVegan(Boolean vegan) {
+        return new Dish(id, name, per100g, portionG, lastUsedOn, vegan);
+    }
 }
