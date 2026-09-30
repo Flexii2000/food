@@ -38,6 +38,9 @@ set -euo pipefail
 BUILD_DIR="$HOME/services/food"
 FOOD_ENV="/etc/food.env"
 WEIGHT_ENV="/etc/health-viz.env"
+# coHabit (Dienst habits) kennt die Healthy-Personen auch - ein Token, drei Dienste.
+# Die Datei gibt es erst nach setup-cohabit.sh; vorher bleibt sie aussen vor.
+HABITS_ENV="/etc/habits.env"
 ANDROID_DIR="/opt/healthy-android"
 FCM_TARGET="/etc/fcm-healthy.json"
 DOMAIN="food.fherrmann.com"
@@ -134,6 +137,12 @@ done
 set_env "$FOOD_ENV" HEALTH_TOKENS "$JOINED"
 set_env "$WEIGHT_ENV" HEALTH_TOKENS "$JOINED"
 echo "    HEALTH_TOKENS in $FOOD_ENV und $WEIGHT_ENV: ${#TOKENS[@]} Person(en)."
+HABITS_RESTART=""
+if sudo test -f "$HABITS_ENV" && sudo grep -q '^HEALTH_TOKENS=' "$HABITS_ENV"; then
+    set_env "$HABITS_ENV" HEALTH_TOKENS "$JOINED"
+    HABITS_RESTART="habits"
+    echo "    ebenso in $HABITS_ENV (coHabit)."
+fi
 
 step "2/6 Schnellerfassung, Detailwerte und Mikronaehrstoffe"
 ALLOWED="$(get_env "$FOOD_ENV" FOOD_QUICK_CAPTURE)"
@@ -208,7 +217,7 @@ nginx_apply
 echo "    $DOMAIN ausgeliefert."
 
 step "6/6 Neustart und Pruefung"
-sudo systemctl restart food health-viz
+sudo systemctl restart food health-viz $HABITS_RESTART
 for port in $FOOD_PORT $WEIGHT_PORT; do
     for i in $(seq 1 45); do
         code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:$port/" || true)"
