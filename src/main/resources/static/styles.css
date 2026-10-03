@@ -957,7 +957,7 @@ main {
 }
 
 /* Umschalter mit einer gewaehlten Stelle - ein Zeitraum ist immer aktiv, das
-   soll man ihm ansehen, statt es aus drei gleichen Knoepfen zu erraten. */
+   soll man ihm ansehen, statt es aus vier gleichen Knoepfen zu erraten. */
 .segmented {
     display: inline-flex;
     gap: 2px;
@@ -1669,6 +1669,11 @@ main {
 
 @media (max-width: 640px) {
     main { padding-top: 16px; gap: 40px; }
+
+    /* Vier Zeitraeume brauchen bei 14 px 343 px, ein 360er Handy hat 328:
+       eigene Zeile ueber die ganze Breite, Knoepfe nach Inhalt, etwas kleiner. */
+    #range-select { display: flex; flex: 1 1 100%; }
+    #range-select button { flex: 1 1 auto; padding: 0 4px; font-size: 0.8125rem; }
 
     /* Titel und "Heute" in einer Zeile, darunter das Datum mit Zurueck und Vor
        ueber die ganze Breite - dort trifft der Daumen. */

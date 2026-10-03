@@ -93,7 +93,7 @@ const WEIGHT_API = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
     ? `${location.protocol}//${location.hostname}:48173`
     : 'https://weight.fherrmann.com';
 
-const HISTORY_RANGES = [14, 30, 90];
+const HISTORY_RANGES = [14, 30, 90, 180];
 
 // Reihenfolge wie der Tag verlaeuft, nicht alphabetisch. `null` steht fuer
 // Eintraege aus der Zeit vor dieser Aufteilung: der Abschnitt taucht nur auf,
@@ -176,6 +176,8 @@ const showWeight = { avg7: false, measured: false };
 // Je Serie eine Zuordnung Datum -> Wert.
 let weightByDate = { avg7: {}, measured: {} };
 let weightError = null;
+// Wie weit die geladene Gewichtsreihe zurueckreicht: 90 oder 180 Tage, 0 = nichts.
+let weightDays = 0;
 
 function todayIso() {
     const now = new Date();
@@ -1672,17 +1674,22 @@ async function loadFeatures() {
  * Ein Aufruf liefert ohnehin beides, also wird auch beides abgelegt und die
  * Auswahl erst beim Zeichnen getroffen.
  */
-async function loadWeightSeries() {
+async function loadWeightSeries(days) {
+    // last180 nur fuer den 180-Tage-Verlauf: die kuerzeren Zeitraeume kommen
+    // mit last90 aus und haengen so nicht an einem neueren Weight Tracker.
+    const range = days > 90 ? 'last180' : 'last90';
     try {
-        const points = await fetchJson(`${WEIGHT_API}/api/weight/last90`, { credentials: 'include' });
+        const points = await fetchJson(`${WEIGHT_API}/api/weight/${range}`, { credentials: 'include' });
         const byKey = key => Object.fromEntries(
             (points || []).filter(p => p[key] != null).map(p => [p.date, p[key]]));
         weightByDate = { avg7: byKey('avg7'), measured: byKey('measured') };
         weightError = null;
+        weightDays = days;
     } catch (err) {
         // Kein harter Fehler: der kcal-Verlauf steht auch ohne Gewicht.
         weightByDate = { avg7: {}, measured: {} };
         weightError = err.message;
+        weightDays = 0;
     }
 }
 
@@ -1692,12 +1699,11 @@ async function loadHistory() {
     const to = todayIso();
     const from = shiftDate(to, -(historyDays - 1));
     const wantsWeight = showWeight.avg7 || showWeight.measured;
-    const haveWeight = Object.keys(weightByDate.avg7).length
-        || Object.keys(weightByDate.measured).length;
+    const neededWeightDays = historyDays > 90 ? 180 : 90;
     const [totals, averages] = await Promise.all([
         fetchJson(`/api/food/daily?from=${from}&to=${to}`),
         fetchJson(`/api/food/daily-average?from=${from}&to=${to}`),
-        wantsWeight && !haveWeight ? loadWeightSeries() : Promise.resolve(),
+        wantsWeight && weightDays < neededWeightDays ? loadWeightSeries(neededWeightDays) : Promise.resolve(),
     ]);
     dailyTotals = totals || [];
     dailyAverages = averages || [];
