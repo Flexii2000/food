@@ -8,6 +8,8 @@ import java.util.List;
  * und daneben ihr eigener Text.
  *
  * @param author       wer ihn abgeschickt hat - der Name zum Token
+ * @param app          fuer welche App, als Kennung aus {@link FeatureApp}. Fehlt bei
+ *                     Anfragen von vor der Auswahl - die waren alle fuer Healthy
  * @param originalText was die Person selbst geschrieben hat. Bleibt neben der Karte
  *                     stehen, damit sich die Karte am Wortlaut messen laesst
  * @param todoId       die Unteraufgabe in Felix' To-Do, oder {@code null}, solange
@@ -20,6 +22,7 @@ import java.util.List;
 public record FeatureRequest(
         String id,
         String author,
+        String app,
         Instant createdAt,
         String originalText,
         String title,
@@ -29,16 +32,21 @@ public record FeatureRequest(
         Instant doneAt) {
 
     public FeatureRequest {
+        app = FeatureApp.stored(app).id();
         acceptanceCriteria = acceptanceCriteria == null ? List.of() : List.copyOf(acceptanceCriteria);
     }
 
+    public FeatureApp featureApp() {
+        return FeatureApp.stored(app);
+    }
+
     public FeatureRequest withTodoId(String todoId) {
-        return new FeatureRequest(id, author, createdAt, originalText, title, story, acceptanceCriteria,
+        return new FeatureRequest(id, author, app, createdAt, originalText, title, story, acceptanceCriteria,
                 todoId, doneAt);
     }
 
     public FeatureRequest withDoneAt(Instant doneAt) {
-        return new FeatureRequest(id, author, createdAt, originalText, title, story, acceptanceCriteria,
+        return new FeatureRequest(id, author, app, createdAt, originalText, title, story, acceptanceCriteria,
                 todoId, doneAt);
     }
 }

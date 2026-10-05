@@ -17,7 +17,7 @@ class FeatureRequestRepositoryTest {
     Path tempDir;
 
     private static FeatureRequest request(String id, String author) {
-        return new FeatureRequest(id, author, Instant.parse("2026-09-26T12:00:00Z"), "ich will",
+        return new FeatureRequest(id, author, null, Instant.parse("2026-09-26T12:00:00Z"), "ich will",
                 "Titel " + id, "Als … möchte ich …", List.of("eins", "zwei"), null, null);
     }
 
@@ -39,6 +39,19 @@ class FeatureRequestRepositoryTest {
         FeatureRequestRepository reopened = new FeatureRequestRepository(file.toString(), new ObjectMapper());
         assertThat(reopened.all()).extracting(FeatureRequest::author).containsExactly("torben", "felix");
         assertThat(reopened.find("a")).contains(request("a", "torben"));
+    }
+
+    /** Anfragen von vor der App-Auswahl haben kein Feld dafuer - sie waren alle fuer Healthy. */
+    @Test
+    void requestsWithoutAnAppAreForHealthy() throws Exception {
+        Path file = tempDir.resolve("feature-requests.json");
+        Files.writeString(file, """
+                {"requests":[{"id":"a","author":"torben","createdAt":"2026-09-26T12:00:00Z",
+                  "originalText":"","title":"T","story":"S","acceptanceCriteria":[]}]}
+                """);
+        FeatureRequestRepository repository = new FeatureRequestRepository(file.toString(), new ObjectMapper());
+
+        assertThat(repository.find("a").orElseThrow().app()).isEqualTo("healthy");
     }
 
     /** Geschrieben wird daneben und dann umbenannt - es bleibt keine halbe oder temporaere Datei liegen. */

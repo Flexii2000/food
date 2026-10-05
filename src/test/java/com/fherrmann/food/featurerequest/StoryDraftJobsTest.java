@@ -47,7 +47,7 @@ class StoryDraftJobsTest {
         }
 
         @Override
-        public StoryCard draft(String author, String wish) {
+        public StoryCard draft(String author, FeatureApp app, String wish) {
             calls.incrementAndGet();
             return answer.apply(author, wish);
         }
@@ -69,7 +69,7 @@ class StoryDraftJobsTest {
         FakeAgent agent = new FakeAgent(true, (author, wish) -> CARD);
         StoryDraftJobs jobs = new StoryDraftJobs(agent, Clock.systemUTC());
 
-        DraftJob started = jobs.start("torben", "  ein dunkles Widget bitte  ");
+        DraftJob started = jobs.start("torben", FeatureApp.HEALTHY, "  ein dunkles Widget bitte  ");
         assertThat(started.status()).isEqualTo(DraftJob.RUNNING);
         assertThat(started.jobId()).isNotBlank();
 
@@ -92,7 +92,7 @@ class StoryDraftJobsTest {
             return CARD;
         }), Clock.systemUTC());
 
-        awaitFinished(jobs, "torben", jobs.start("torben", "\n  Export als CSV \n").jobId());
+        awaitFinished(jobs, "torben", jobs.start("torben", FeatureApp.HEALTHY, "\n  Export als CSV \n").jobId());
 
         assertThat(seen.toString()).isEqualTo("torben|Export als CSV");
     }
@@ -104,7 +104,7 @@ class StoryDraftJobsTest {
             throw new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "Der Entwurf hat länger als 120 Sekunden gedauert.");
         }), Clock.systemUTC());
 
-        DraftJob failed = awaitFinished(jobs, "torben", jobs.start("torben", "irgendwas").jobId());
+        DraftJob failed = awaitFinished(jobs, "torben", jobs.start("torben", FeatureApp.HEALTHY, "irgendwas").jobId());
 
         assertThat(failed.status()).isEqualTo(DraftJob.FAILED);
         assertThat(failed.error()).isEqualTo("Der Entwurf hat länger als 120 Sekunden gedauert.");
@@ -117,7 +117,7 @@ class StoryDraftJobsTest {
             throw new IllegalStateException("kaputt");
         }), Clock.systemUTC());
 
-        DraftJob failed = awaitFinished(jobs, "torben", jobs.start("torben", "irgendwas").jobId());
+        DraftJob failed = awaitFinished(jobs, "torben", jobs.start("torben", FeatureApp.HEALTHY, "irgendwas").jobId());
 
         assertThat(failed.error()).isEqualTo("Der Entwurf ist fehlgeschlagen.");
     }
@@ -127,9 +127,9 @@ class StoryDraftJobsTest {
         FakeAgent agent = new FakeAgent(true, (author, wish) -> CARD);
         StoryDraftJobs jobs = new StoryDraftJobs(agent, Clock.systemUTC());
 
-        assertThatThrownBy(() -> jobs.start("torben", "   ")).hasMessageContaining("400");
-        assertThatThrownBy(() -> jobs.start("torben", null)).hasMessageContaining("400");
-        assertThatThrownBy(() -> jobs.start("torben", "x".repeat(4001))).hasMessageContaining("400");
+        assertThatThrownBy(() -> jobs.start("torben", FeatureApp.HEALTHY, "   ")).hasMessageContaining("400");
+        assertThatThrownBy(() -> jobs.start("torben", FeatureApp.HEALTHY, null)).hasMessageContaining("400");
+        assertThatThrownBy(() -> jobs.start("torben", FeatureApp.HEALTHY, "x".repeat(4001))).hasMessageContaining("400");
         assertThat(agent.calls).hasValue(0);
     }
 
@@ -138,7 +138,7 @@ class StoryDraftJobsTest {
         StoryDraftJobs jobs = new StoryDraftJobs(new FakeAgent(false, (author, wish) -> CARD), Clock.systemUTC());
 
         assertThat(jobs.isAvailable()).isFalse();
-        assertThatThrownBy(() -> jobs.start("torben", "ein Wunsch")).hasMessageContaining("503");
+        assertThatThrownBy(() -> jobs.start("torben", FeatureApp.HEALTHY, "ein Wunsch")).hasMessageContaining("503");
     }
 
     /** Eine Seite, die sich verheddert, soll keine Warteschlange voller Sessions aufbauen. */
@@ -155,17 +155,17 @@ class StoryDraftJobsTest {
         StoryDraftJobs jobs = new StoryDraftJobs(agent, Clock.systemUTC());
 
         for (int i = 0; i < StoryDraftJobs.MAX_OPEN_PER_PERSON; i++) {
-            jobs.start("torben", "Wunsch " + i);
+            jobs.start("torben", FeatureApp.HEALTHY, "Wunsch " + i);
         }
-        assertThatThrownBy(() -> jobs.start("torben", "noch einer"))
+        assertThatThrownBy(() -> jobs.start("torben", FeatureApp.HEALTHY, "noch einer"))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("429");
         // Die Grenze gilt je Person.
-        DraftJob felix = jobs.start("felix", "meiner");
+        DraftJob felix = jobs.start("felix", FeatureApp.HEALTHY, "meiner");
 
         release.countDown();
         assertThat(awaitFinished(jobs, "felix", felix.jobId()).status()).isEqualTo(DraftJob.DONE);
         // Wieder frei, sobald die eigenen fertig sind.
-        assertThat(jobs.start("torben", "jetzt wieder").status()).isEqualTo(DraftJob.RUNNING);
+        assertThat(jobs.start("torben", FeatureApp.HEALTHY, "jetzt wieder").status()).isEqualTo(DraftJob.RUNNING);
     }
 }

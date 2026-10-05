@@ -56,7 +56,7 @@ class FeatureRequestServiceTest {
     }
 
     private static NewFeatureRequest card(String title) {
-        return new NewFeatureRequest("Ich hätte gern …", title, "Als Android-Nutzer möchte ich …, damit …",
+        return new NewFeatureRequest(null, "Ich hätte gern …", title, "Als Android-Nutzer möchte ich …, damit …",
                 List.of("Kriterium eins", "Kriterium zwei"));
     }
 
@@ -97,6 +97,28 @@ class FeatureRequestServiceTest {
         assertThat(repository.all()).hasSize(1);
     }
 
+    @Test
+    void withoutAnAppTheRequestIsForHealthy() {
+        FeatureRequestView view = service.create("torben", card("Dunkles Widget"));
+
+        assertThat(view.app()).isEqualTo("healthy");
+        assertThat(view.appName()).isEqualTo("Healthy");
+    }
+
+    @Test
+    void theChosenAppIsStoredAndShown() {
+        FeatureRequestView view = service.create("torben",
+                new NewFeatureRequest("coHabit", "", "Streak einfrieren", "Als … möchte ich …", List.of()));
+
+        assertThat(repository.find(view.id()).orElseThrow().app()).isEqualTo("cohabit");
+        assertThat(view.appName()).isEqualTo("coHabit");
+    }
+
+    @Test
+    void anUnknownAppIsABadRequest() {
+        assertBadRequest(new NewFeatureRequest("vault", "", "T", "S", List.of()), "App");
+    }
+
     // MARK: - Pruefungen
 
     @Test
@@ -114,17 +136,17 @@ class FeatureRequestServiceTest {
 
     @Test
     void storyIsRequiredAndAtMost2000Characters() {
-        assertBadRequest(new NewFeatureRequest("", "T", " ", List.of()), "User Story");
-        assertBadRequest(new NewFeatureRequest("", "T", repeat(2001), List.of()), "2000");
-        assertThat(service.create("torben", new NewFeatureRequest("", "T", repeat(2000), null)).story()).hasSize(2000);
+        assertBadRequest(new NewFeatureRequest(null, "", "T", " ", List.of()), "User Story");
+        assertBadRequest(new NewFeatureRequest(null, "", "T", repeat(2001), List.of()), "2000");
+        assertThat(service.create("torben", new NewFeatureRequest(null, "", "T", repeat(2000), null)).story()).hasSize(2000);
     }
 
     @Test
     void atMostTenCriteriaOfAtMost300Characters() {
-        assertBadRequest(new NewFeatureRequest("", "T", "S", Collections.nCopies(11, "k")), "10");
-        assertBadRequest(new NewFeatureRequest("", "T", "S", List.of(repeat(301))), "300");
+        assertBadRequest(new NewFeatureRequest(null, "", "T", "S", Collections.nCopies(11, "k")), "10");
+        assertBadRequest(new NewFeatureRequest(null, "", "T", "S", List.of(repeat(301))), "300");
         FeatureRequestView view = service.create("torben",
-                new NewFeatureRequest("", "T", "S", Collections.nCopies(10, repeat(300))));
+                new NewFeatureRequest(null, "", "T", "S", Collections.nCopies(10, repeat(300))));
         assertThat(view.acceptanceCriteria()).hasSize(10);
     }
 
@@ -134,15 +156,15 @@ class FeatureRequestServiceTest {
         List<String> criteria = new ArrayList<>(Collections.nCopies(10, "k"));
         criteria.addAll(List.of("", "  "));
         criteria.add(1, null);
-        FeatureRequestView view = service.create("torben", new NewFeatureRequest("", "T", "S", criteria));
+        FeatureRequestView view = service.create("torben", new NewFeatureRequest(null, "", "T", "S", criteria));
         assertThat(view.acceptanceCriteria()).hasSize(10);
     }
 
     @Test
     void theOriginalTextIsOptionalAndAtMost4000Characters() {
-        assertBadRequest(new NewFeatureRequest(repeat(4001), "T", "S", List.of()), "4000");
-        assertThat(service.create("torben", new NewFeatureRequest(null, "T", "S", List.of())).originalText()).isEmpty();
-        assertThat(service.create("torben", new NewFeatureRequest(repeat(4000), "T", "S", List.of())).originalText())
+        assertBadRequest(new NewFeatureRequest(null, repeat(4001), "T", "S", List.of()), "4000");
+        assertThat(service.create("torben", new NewFeatureRequest(null, null, "T", "S", List.of())).originalText()).isEmpty();
+        assertThat(service.create("torben", new NewFeatureRequest(null, repeat(4000), "T", "S", List.of())).originalText())
                 .hasSize(4000);
     }
 
@@ -177,9 +199,9 @@ class FeatureRequestServiceTest {
 
     @Test
     void theListShowsTheNewestFirst() {
-        FeatureRequest older = new FeatureRequest("a", "torben", Instant.parse("2026-09-01T10:00:00Z"),
+        FeatureRequest older = new FeatureRequest("a", "torben", null, Instant.parse("2026-09-01T10:00:00Z"),
                 "", "Älter", "S", List.of(), null, null);
-        FeatureRequest newer = new FeatureRequest("b", "torben", Instant.parse("2026-09-20T10:00:00Z"),
+        FeatureRequest newer = new FeatureRequest("b", "torben", null, Instant.parse("2026-09-20T10:00:00Z"),
                 "", "Neuer", "S", List.of(), null, null);
         repository.add(older);
         repository.add(newer);
@@ -216,7 +238,7 @@ class FeatureRequestServiceTest {
     // MARK: - Stand
 
     private static FeatureRequest request(String todoId, Instant rememberedDoneAt) {
-        return new FeatureRequest("r", "torben", Instant.now(), "", "T", "S", List.of(), todoId, rememberedDoneAt);
+        return new FeatureRequest("r", "torben", null, Instant.now(), "", "T", "S", List.of(), todoId, rememberedDoneAt);
     }
 
     private static TodoBoard board(TodoBoard.Todo... todos) {

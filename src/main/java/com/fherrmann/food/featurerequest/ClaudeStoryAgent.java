@@ -75,23 +75,25 @@ public class ClaudeStoryAgent implements StoryAgent {
     }
 
     @Override
-    public StoryCard draft(String author, String wish) {
+    public StoryCard draft(String author, FeatureApp app, String wish) {
         if (!isAvailable()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Entwürfe sind auf diesem Server nicht eingerichtet.");
         }
-        return parse(run(prompt(author, wish)));
+        return parse(run(prompt(author, app, wish)));
     }
 
     /**
      * Der veraenderliche Teil des Auftrags. Was immer gilt, steht in der
      * {@code CLAUDE.md} des Agent-Verzeichnisses.
      */
-    static String prompt(String author, String wish) {
+    static String prompt(String author, FeatureApp app, String wish) {
         String text = WISH_TAG.matcher(wish == null ? "" : wish).replaceAll("[$1wunsch]");
         // Der Nutzertext kommt zuletzt und klar abgegrenzt: alles davor ist Angabe
         // der Anwendung, alles dazwischen Zitat.
-        return "Der Wunsch kommt von " + displayName(author) + ".\n\n"
+        FeatureApp target = app == null ? FeatureApp.DEFAULT : app;
+        return "Der Wunsch kommt von " + displayName(author) + ".\n"
+                + "Er ist für die App „" + target.displayName() + "“.\n\n"
                 + "<wunsch>\n" + text + "\n</wunsch>\n";
     }
 

@@ -259,6 +259,80 @@ textarea {
 
 .wish-text { min-height: 8.5rem; }
 
+/* --- App-Auswahl --------------------------------------------------------- */
+
+.app-field {
+    margin: 0 0 18px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+
+.app-field legend {
+    padding: 0;
+    margin-bottom: 8px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+/* Echte Radioknoepfe, nur anders angezogen: Tastatur und Screenreader
+   bekommen eine Gruppe, die sie kennen. */
+.app-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.app-option {
+    position: relative;
+    flex-direction: row;
+    gap: 0;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--text-2);
+}
+
+.app-option input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+
+.app-option span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--field);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.app-option span:hover { background: var(--fill); color: var(--text); }
+
+.app-option input:checked + span {
+    border-color: var(--accent);
+    background: var(--accent-fill);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.app-option input:focus-visible + span { box-shadow: 0 0 0 3px var(--focus-ring); }
+.app-option input:disabled + span { opacity: 0.6; cursor: default; }
+
+.card-app {
+    margin: 0 0 14px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.card-app:empty { display: none; }
+
 input::placeholder,
 textarea::placeholder { color: var(--muted); opacity: 1; }
 

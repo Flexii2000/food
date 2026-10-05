@@ -15,9 +15,10 @@ public interface StoryAgent {
 
     /**
      * @param author wer den Wunsch geschickt hat - Kontext fuer die Rolle in der User Story
+     * @param app    fuer welche App der Wunsch ist
      * @param wish   der Wunsch, so wie er eingetippt wurde
      * @throws org.springframework.web.server.ResponseStatusException mit einer Meldung
      *         fuer die Oberflaeche, wenn kein Entwurf zustande kommt
      */
-    StoryCard draft(String author, String wish);
+    StoryCard draft(String author, FeatureApp app, String wish);
 }

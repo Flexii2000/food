@@ -16,7 +16,7 @@ const MAX_CRITERIA = 10;
 const POLL_INTERVAL_MS = 1500;
 const POLL_LIMIT_MS = 200000;
 
-let features = { me: '', owner: false, drafting: false };
+let features = { me: '', owner: false, drafting: false, apps: [] };
 
 // Die gerade gezeigte Karte - fuer den Knopf "Loeschen".
 let shownCard = null;
@@ -25,6 +25,7 @@ let shownCard = null;
 // geht: ein Entwurf ist eine Claude-Session, und die soll nicht an einem
 // versehentlichen Zurueck verloren gehen. Weg ist er erst nach dem Absenden.
 const wish = {
+    app: '',        // Kennung der App, fuer die der Wunsch ist
     text: '',
     step: 'wish',   // 'wish' = eigener Text, 'card' = Karte bearbeiten
     card: null,     // { title, story, acceptanceCriteria[] }
@@ -66,6 +67,11 @@ function displayName(name) {
 
 function formatDate(iso) {
     return new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** Der Name der App, wie der Dienst ihn liefert - aeltere Antworten kennen ihn nicht. */
+function appName(request) {
+    return request.appName || 'Healthy';
 }
 
 function setStatus(element, status) {
@@ -161,12 +167,11 @@ function renderList(requests) {
         title.className = 'request-title';
         title.textContent = request.title;
 
-        // Das Datum reicht fuer die eigenen; nur wer alle sieht, braucht den Namen.
+        // Datum und App reichen fuer die eigenen; nur wer alle sieht, braucht den Namen.
         const meta = document.createElement('span');
         meta.className = 'request-meta';
-        meta.textContent = features.owner
-            ? `${formatDate(request.createdAt)} · ${displayName(request.author)}`
-            : formatDate(request.createdAt);
+        meta.textContent = [formatDate(request.createdAt), appName(request),
+            features.owner ? displayName(request.author) : ''].filter(Boolean).join(' · ');
 
         const main = document.createElement('span');
         main.className = 'request-main';
@@ -209,9 +214,8 @@ async function loadCard(id) {
 function renderCard(request) {
     document.title = `${request.title} – Feature Requests`;
     $('cv-title').textContent = request.title;
-    $('cv-meta').textContent = features.owner
-        ? `${displayName(request.author)} · ${formatDate(request.createdAt)}`
-        : formatDate(request.createdAt);
+    $('cv-meta').textContent = [features.owner ? displayName(request.author) : '',
+        appName(request), formatDate(request.createdAt)].filter(Boolean).join(' · ');
     $('cv-story').textContent = request.story;
 
     const criteria = request.acceptanceCriteria || [];
@@ -256,7 +260,48 @@ async function deleteCard() {
 
 // --- Neuer Wunsch ------------------------------------------------------------
 
+/**
+ * Die App, die beim Oeffnen vorgewaehlt ist: was schon gewaehlt war, sonst
+ * ?app= aus der Adresse (so koennen andere Apps direkt hierher verlinken),
+ * sonst die erste.
+ */
+function initialApp() {
+    const ids = features.apps.map(app => app.id);
+    if (ids.includes(wish.app)) return wish.app;
+    const fromUrl = (new URLSearchParams(location.search).get('app') || '').toLowerCase();
+    if (ids.includes(fromUrl)) return fromUrl;
+    return ids[0] || '';
+}
+
+function renderAppPicker() {
+    wish.app = initialApp();
+    $('app-field').hidden = features.apps.length < 2;
+    $('app-picker').replaceChildren(...features.apps.map(app => {
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'app';
+        input.value = app.id;
+        input.checked = app.id === wish.app;
+        input.disabled = wish.drafting;
+        input.addEventListener('change', () => { wish.app = app.id; });
+
+        const text = document.createElement('span');
+        text.textContent = app.name;
+
+        const label = document.createElement('label');
+        label.className = 'app-option';
+        label.append(input, text);
+        return label;
+    }));
+}
+
+function selectedAppName() {
+    const app = features.apps.find(a => a.id === wish.app);
+    return app ? app.name : '';
+}
+
 function showNew() {
+    renderAppPicker();
     $('draft-button').textContent = features.drafting ? 'Entwurf erstellen' : 'Weiter';
     $('wish-text').value = wish.text;
     $('wish-step').hidden = wish.step !== 'wish';
@@ -275,6 +320,7 @@ let progressTimer = null;
 function showDrafting() {
     const on = wish.drafting;
     $('wish-text').disabled = on;
+    $('app-picker').querySelectorAll('input').forEach(input => { input.disabled = on; });
     $('draft-button').disabled = on;
     $('draft-progress').hidden = !on;
     clearInterval(progressTimer);
@@ -333,7 +379,7 @@ async function startDraft() {
     try {
         // Der Start antwortet sofort mit einer Auftragsnummer, das Ergebnis wird
         // abgefragt - keine Anfrage haengt eine halbe Minute am Draht.
-        const started = await postJson(`${API}/drafts`, { text });
+        const started = await postJson(`${API}/drafts`, { text, app: wish.app });
         const card = await awaitDraft(started.jobId);
         if (run === wish.run) openEditor(card, '');
     } catch (err) {
@@ -369,6 +415,8 @@ function openEditor(card, error) {
 
 function renderEditor() {
     $('draft-error').textContent = wish.error;
+    const app = selectedAppName();
+    $('card-app').textContent = app && features.apps.length > 1 ? `Wunsch für ${app}` : '';
     $('card-title').value = wish.card.title;
     $('card-story').value = wish.card.story;
     renderCriteria();
@@ -454,8 +502,8 @@ async function submitCard(event) {
     const button = $('submit-button');
     button.disabled = true;
     try {
-        await postJson(`${API}/requests`, { originalText: wish.text.trim(), ...card });
-        Object.assign(wish, { text: '', step: 'wish', card: null, error: '' });
+        await postJson(`${API}/requests`, { app: wish.app, originalText: wish.text.trim(), ...card });
+        Object.assign(wish, { app: '', text: '', step: 'wish', card: null, error: '' });
         navigate(BASE, true);
         toast('Wunsch abgeschickt.', true);
     } catch (err) {
@@ -523,7 +571,7 @@ function bind() {
 async function init() {
     bind();
     try {
-        features = await fetchJson(`${API}/features`);
+        features = { ...features, ...await fetchJson(`${API}/features`) };
     } catch (err) {
         toast(`Nicht geladen: ${err.message}`);
     }

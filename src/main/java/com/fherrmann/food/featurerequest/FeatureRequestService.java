@@ -59,6 +59,7 @@ public class FeatureRequestService {
         FeatureRequest saved = new FeatureRequest(
                 UUID.randomUUID().toString(),
                 user,
+                FeatureApp.parse(request.app()).id(),
                 Instant.now(clock),
                 cleanOriginal(request.originalText()),
                 cleanTitle(request.title()),
@@ -110,7 +111,8 @@ public class FeatureRequestService {
     private FeatureRequestView view(FeatureRequest request, Optional<TodoBoard> board) {
         Status status = status(request, board);
         return new FeatureRequestView(
-                request.id(), request.author(), request.createdAt(), request.title(), request.story(),
+                request.id(), request.author(), request.app(), request.featureApp().displayName(),
+                request.createdAt(), request.title(), request.story(),
                 request.acceptanceCriteria(), request.originalText(), status.value(), status.doneAt(),
                 request.todoId() != null, todos.cardUrl(request.id()));
     }

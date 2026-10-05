@@ -1,5 +1,6 @@
 package com.fherrmann.food.featurerequest;
 
+import com.fherrmann.food.featurerequest.FeatureRequestDtos.AppOption;
 import com.fherrmann.food.featurerequest.FeatureRequestDtos.DraftJob;
 import com.fherrmann.food.featurerequest.FeatureRequestDtos.DraftRequest;
 import com.fherrmann.food.featurerequest.FeatureRequestDtos.FeatureRequestView;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -42,14 +44,17 @@ public class FeatureRequestController {
     @GetMapping("/features")
     public Features features(Principal principal) {
         String user = principal.getName();
-        return new Features(user, users.isOwner(user), drafts.isAvailable());
+        return new Features(user, users.isOwner(user), drafts.isAvailable(),
+                Arrays.stream(FeatureApp.values()).map(AppOption::of).toList());
     }
 
     /** Startet einen Entwurf und antwortet sofort mit der Auftragsnummer. */
     @PostMapping("/drafts")
     public ResponseEntity<DraftJob> startDraft(@RequestBody DraftRequest request, Principal principal) {
         return ResponseEntity.accepted()
-                .body(drafts.start(principal.getName(), request == null ? null : request.text()));
+                .body(drafts.start(principal.getName(),
+                        FeatureApp.parse(request == null ? null : request.app()),
+                        request == null ? null : request.text()));
     }
 
     @GetMapping("/drafts/{jobId}")

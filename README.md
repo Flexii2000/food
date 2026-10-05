@@ -438,7 +438,9 @@ sonst aus, statt einen Knopf anzubieten, der beim Drücken scheitert.
 ## Feature Requests
 
 Unter <https://fherrmann.com/feature-requests/> schreibt Torben (oder jede andere
-Person mit Token) einen Wunsch in eigenen Worten auf. Claude entwirft daraus eine
+Person mit Token) einen Wunsch in eigenen Worten auf — für **Healthy, coHabit,
+Fokus oder die Einkaufsliste** (Auswahl oben im Formular, vorwählbar per
+`/feature-requests/neu?app=cohabit`). Claude entwirft daraus eine
 **Story Card** — Titel, User Story („Als … möchte ich …, damit …") und
 Akzeptanzkriterien —, die Person **bearbeitet jedes Feld und gibt sie frei**, und
 beim Absenden entsteht in Felix' To-Do eine Unteraufgabe. Die Liste zeigt jeder
@@ -452,6 +454,7 @@ Anfrage, sobald Felix ihre Unteraufgabe abhakt.
 | Anmeldung | wie überall hier (`health_token`, Bearer, `fh_private`), **kein** `permitAll` — ohne Token sind auch Seite und Dateien 403 |
 | Ablage | `data/feature-requests.json`, eine Datei für alle, jede Anfrage mit `author`. Atomar geschrieben (daneben schreiben, umbenennen) |
 | Originaltext | bleibt neben der Karte stehen, damit sich die Karte am Wortlaut messen lässt |
+| App | `app` je Anfrage (`healthy`, `cohabit`, `fokus`, `einkaufsliste`, Liste in `FeatureApp`). Fehlt sie — Anfragen von vor der Auswahl —, gilt Healthy. Der Story-Agent bekommt sie in der Zeile vor dem Zitat, was die Apps können, steht in seiner `CLAUDE.md` |
 
 nginx reicht `location /feature-requests/` in `sites-available/fherrmann.com`
 unverändert an `:48180` weiter, **ohne Privat-Gate** — Torben hat keinen
@@ -499,8 +502,9 @@ Beim Absenden wird die Anfrage **zuerst gespeichert**, erst dann legt
 
 1. den Bereich **„Server"** — fehlt er, wird er angelegt (Groß- und Kleinschreibung
    egal, wie im To-Do selbst);
-2. darin die offene Aufgabe **„Healthy"** der obersten Ebene — fehlt sie oder ist
-   die vorhandene erledigt, eine neue;
+2. darin die offene Aufgabe mit dem **Namen der App** („Healthy", „coHabit",
+   „Fokus", „Einkaufsliste") der obersten Ebene — fehlt sie oder ist die
+   vorhandene erledigt, eine neue;
 3. darunter die Unteraufgabe: Titel der Karte, `link` =
    `https://fherrmann.com/feature-requests/<id>` (Basis in `FOOD_FEATURE_REQUESTS_URL`).
 

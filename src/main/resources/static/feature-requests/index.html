@@ -38,6 +38,11 @@
         </div>
 
         <div id="wish-step">
+            <!-- Fuer welche App - die Knoepfe kommen aus /api/features. -->
+            <fieldset class="app-field" id="app-field">
+                <legend>Für welche App?</legend>
+                <div class="app-picker" id="app-picker" role="radiogroup"></div>
+            </fieldset>
             <label>Was wünschst du dir?
                 <textarea id="wish-text" class="wish-text" rows="4" maxlength="4000"></textarea>
             </label>
@@ -53,6 +58,7 @@
 
         <form id="card-form" class="card-form" novalidate hidden>
             <p class="form-msg err" id="draft-error"></p>
+            <p class="card-app" id="card-app"></p>
             <label>Titel
                 <input type="text" id="card-title" maxlength="120" autocomplete="off">
             </label>

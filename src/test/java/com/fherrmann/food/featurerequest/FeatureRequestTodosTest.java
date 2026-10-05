@@ -45,7 +45,7 @@ class FeatureRequestTodosTest {
     }
 
     private FeatureRequest stored(String title) {
-        FeatureRequest request = new FeatureRequest(UUID.randomUUID().toString(), "torben", Instant.now(),
+        FeatureRequest request = new FeatureRequest(UUID.randomUUID().toString(), "torben", null, Instant.now(),
                 "ich will", title, "Als … möchte ich …, damit …", List.of("a"), null, null);
         repository.add(request);
         return request;
@@ -67,6 +67,23 @@ class FeatureRequestTodosTest {
         assertThat(todo.areas).hasSize(1);
         assertThat(todo.count("POST")).isEqualTo(1);
         assertThat(repository.find(request.id()).orElseThrow().todoId()).isEqualTo(result.todoId());
+    }
+
+    /** Jede App hat ihre eigene Elternaufgabe im Bereich „Server". */
+    @Test
+    void aRequestForAnotherAppLandsUnderThatApp() {
+        FakeTodoServer.Area server = todo.area("Server");
+        todo.todo(server, null, "Healthy");
+        FeatureRequest request = new FeatureRequest(UUID.randomUUID().toString(), "torben", "cohabit", Instant.now(),
+                "ich will", "Streak einfrieren", "Als … möchte ich …, damit …", List.of(), null, null);
+        repository.add(request);
+
+        FeatureRequest result = todos.ensureTodo(request);
+
+        FakeTodoServer.Todo parent = todo.find(todo.find(result.todoId()).parentId);
+        assertThat(parent.title).isEqualTo("coHabit");
+        assertThat(parent.parentId).isNull();
+        assertThat(parent.areaId).isEqualTo(server.id());
     }
 
     /** Gross/klein wie im To-Do selbst - sonst lehnte es den zweiten „server" als Doublette ab. */

@@ -13,8 +13,8 @@ import java.util.Optional;
 
 /**
  * Bringt Anfragen als Unteraufgaben in Felix' To-Do: Bereich „Server", darin die
- * offene Aufgabe „Healthy", darunter je Anfrage eine Unteraufgabe mit dem Titel der
- * Karte und dem Link auf die Kartenseite.
+ * offene Aufgabe mit dem Namen der App („Healthy", „coHabit", …), darunter je
+ * Anfrage eine Unteraufgabe mit dem Titel der Karte und dem Link auf die Kartenseite.
  *
  * <p>Das To-Do darf dabei ausfallen. Die Anfrage ist zu dem Zeitpunkt schon
  * gespeichert; scheitert das Anlegen, bleibt sie ohne {@code todoId}, und
@@ -27,7 +27,6 @@ public class FeatureRequestTodos {
     private static final Logger log = LoggerFactory.getLogger(FeatureRequestTodos.class);
 
     static final String AREA = "Server";
-    static final String PARENT = "Healthy";
 
     private final TodoClient client;
     private final FeatureRequestRepository repository;
@@ -36,7 +35,7 @@ public class FeatureRequestTodos {
     /**
      * Eine Sperre fuer alles, was im To-Do anlegt. Ohne sie legten eine neue Anfrage
      * und der Nachlauf, die sich zeitlich treffen, dieselbe Unteraufgabe doppelt an -
-     * oder zweimal „Healthy".
+     * oder zweimal dieselbe Elternaufgabe.
      */
     private final Object creating = new Object();
 
@@ -131,15 +130,16 @@ public class FeatureRequestTodos {
 
         // Nur eine offene Aufgabe der obersten Ebene taugt als Eltern: unter einer
         // erledigten ginge die neue Unteraufgabe mit ihr aus dem Brett.
+        String parentTitle = request.featureApp().displayName();
         String parentId;
-        Optional<TodoBoard.Todo> parent = board.openTopLevel(areaId, PARENT);
+        Optional<TodoBoard.Todo> parent = board.openTopLevel(areaId, parentTitle);
         if (parent.isPresent()) {
             parentId = parent.get().id();
         } else {
-            TodoClient.Created created = client.createTodo(board, areaId, null, PARENT, null);
+            TodoClient.Created created = client.createTodo(board, areaId, null, parentTitle, null);
             parentId = created.id();
             board = created.board();
-            log.info("Aufgabe „{}“ im Bereich „{}“ angelegt", PARENT, AREA);
+            log.info("Aufgabe „{}“ im Bereich „{}“ angelegt", parentTitle, AREA);
         }
 
         String todoId = client.createTodo(board, areaId, parentId, request.title(), link).id();

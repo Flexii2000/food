@@ -16,8 +16,8 @@ public final class FeatureRequestDtos {
         }
     }
 
-    /** Der Wunsch in eigenen Worten, aus dem Claude eine Karte entwirft. */
-    public record DraftRequest(String text) {
+    /** Der Wunsch in eigenen Worten, aus dem Claude eine Karte entwirft - und fuer welche App. */
+    public record DraftRequest(String text, String app) {
     }
 
     /**
@@ -34,8 +34,9 @@ public final class FeatureRequestDtos {
         public static final String FAILED = "failed";
     }
 
-    /** Die freigegebene Karte samt Originaltext. */
-    public record NewFeatureRequest(String originalText, String title, String story, List<String> acceptanceCriteria) {
+    /** Die freigegebene Karte samt Originaltext; {@code app} leer heisst Healthy. */
+    public record NewFeatureRequest(String app, String originalText, String title, String story,
+                                    List<String> acceptanceCriteria) {
     }
 
     /**
@@ -49,6 +50,8 @@ public final class FeatureRequestDtos {
     public record FeatureRequestView(
             String id,
             String author,
+            String app,
+            String appName,
             Instant createdAt,
             String title,
             String story,
@@ -68,7 +71,14 @@ public final class FeatureRequestDtos {
      *
      * @param owner    die Eigentuemerin sieht alle Anfragen, alle anderen ihre eigenen
      * @param drafting ob Claude entwirft - sonst oeffnet der Editor leer
+     * @param apps     wofuer man sich etwas wuenschen kann, die erste ist vorgewaehlt
      */
-    public record Features(String me, boolean owner, boolean drafting) {
+    public record Features(String me, boolean owner, boolean drafting, List<AppOption> apps) {
+    }
+
+    public record AppOption(String id, String name) {
+        static AppOption of(FeatureApp app) {
+            return new AppOption(app.id(), app.displayName());
+        }
     }
 }

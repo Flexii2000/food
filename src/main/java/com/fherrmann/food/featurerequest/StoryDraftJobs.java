@@ -90,7 +90,7 @@ public class StoryDraftJobs {
      * geprueft - ein leerer Text soll als 400 ankommen und nicht erst eine halbe
      * Minute spaeter als fehlgeschlagener Entwurf.
      */
-    public DraftJob start(String user, String text) {
+    public DraftJob start(String user, FeatureApp app, String text) {
         if (!agent.isAvailable()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Entwürfe sind auf diesem Server nicht eingerichtet.");
@@ -118,7 +118,7 @@ public class StoryDraftJobs {
 
         executor.submit(() -> {
             try {
-                job.card = agent.draft(user, wish);
+                job.card = agent.draft(user, app, wish);
                 job.status = DraftJob.DONE;
             } catch (ResponseStatusException e) {
                 job.error = e.getReason() == null ? "Der Entwurf ist fehlgeschlagen." : e.getReason();
