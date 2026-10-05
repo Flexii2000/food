@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -54,6 +55,8 @@ final class FakeTodoServer implements AutoCloseable {
 
     final List<Area> areas = new CopyOnWriteArrayList<>();
     final List<Todo> todos = new CopyOnWriteArrayList<>();
+    /** Die Benachrichtigung, die beim Anlegen mitkam, je Aufgaben-Id - wie das To-Do sie an Fokus weitergaebe. */
+    final Map<String, JsonNode> notifications = new ConcurrentHashMap<>();
     /** Jede Anfrage als "METHODE pfad?query". */
     final List<String> requests = new CopyOnWriteArrayList<>();
     final List<String> cookies = new CopyOnWriteArrayList<>();
@@ -181,8 +184,12 @@ final class FakeTodoServer implements AutoCloseable {
             sneakInATodo = false;
             todos.add(new Todo(UUID.randomUUID().toString(), areaId, parentId, "Zwischendurch", null, Instant.now()));
         }
-        todos.add(new Todo(UUID.randomUUID().toString(), areaId, parentId, body.path("title").asString("").trim(),
-                storesLinks ? body.path("link").asString(null) : null, Instant.now()));
+        Todo created = new Todo(UUID.randomUUID().toString(), areaId, parentId, body.path("title").asString("").trim(),
+                storesLinks ? body.path("link").asString(null) : null, Instant.now());
+        todos.add(created);
+        if (body.has("notification")) {
+            notifications.put(created.id, body.get("notification"));
+        }
         respond(exchange, 201, "application/json", board(false));
     }
 

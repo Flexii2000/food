@@ -1,6 +1,7 @@
 package com.fherrmann.food.featurerequest;
 
 import com.fherrmann.food.featurerequest.TodoClient.TodoException;
+import com.fherrmann.food.security.HealthUsers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -20,6 +22,10 @@ import java.util.Optional;
  * gespeichert; scheitert das Anlegen, bleibt sie ohne {@code todoId}, und
  * {@link #catchUp()} versucht es alle zehn Minuten wieder. Eine abgeschickte Anfrage
  * geht so nie verloren, sie kommt hoechstens spaeter an.
+ *
+ * <p>Mit der Unteraufgabe meldet das To-Do Felix den Wunsch per Push in Fokus - ausser
+ * er stammt von ihm selbst. Die Meldung haengt am Anlegen, nicht am Abschicken: kommt
+ * die Unteraufgabe erst mit dem Nachlauf, kommt die Meldung eben auch dann.
  */
 @Component
 public class FeatureRequestTodos {
@@ -30,6 +36,7 @@ public class FeatureRequestTodos {
 
     private final TodoClient client;
     private final FeatureRequestRepository repository;
+    private final HealthUsers users;
     private final String baseUrl;
 
     /**
@@ -45,9 +52,11 @@ public class FeatureRequestTodos {
     public FeatureRequestTodos(
             TodoClient client,
             FeatureRequestRepository repository,
+            HealthUsers users,
             @Value("${food.feature-requests.base-url:https://fherrmann.com/feature-requests}") String baseUrl) {
         this.client = client;
         this.repository = repository;
+        this.users = users;
         String url = baseUrl == null ? "" : baseUrl.trim();
         this.baseUrl = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
@@ -136,15 +145,30 @@ public class FeatureRequestTodos {
         if (parent.isPresent()) {
             parentId = parent.get().id();
         } else {
-            TodoClient.Created created = client.createTodo(board, areaId, null, parentTitle, null);
+            TodoClient.Created created = client.createTodo(board, areaId, null, parentTitle, null, null);
             parentId = created.id();
             board = created.board();
             log.info("Aufgabe „{}“ im Bereich „{}“ angelegt", parentTitle, AREA);
         }
 
-        String todoId = client.createTodo(board, areaId, parentId, request.title(), link).id();
+        String todoId = client.createTodo(board, areaId, parentId, request.title(), link, notification(request)).id();
         log.info("Anfrage {} von {} als Unteraufgabe {} im To-Do", request.id(), request.author(), todoId);
         return todoId;
+    }
+
+    /**
+     * „Feature Request · coHabit“ / „Torben: Streak einfrieren“ - oder nichts, wenn
+     * Felix den Wunsch selbst abgeschickt hat.
+     */
+    TodoClient.Notification notification(FeatureRequest request) {
+        if (users.isOwner(request.author())) {
+            return null;
+        }
+        // Wie auf der Kartenseite: „torben“ wird „Torben“.
+        String author = request.author().isEmpty() ? ""
+                : request.author().substring(0, 1).toUpperCase(Locale.ROOT) + request.author().substring(1);
+        return new TodoClient.Notification("Feature Request · " + request.featureApp().displayName(),
+                author + ": " + request.title());
     }
 
     /**

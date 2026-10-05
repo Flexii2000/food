@@ -71,7 +71,7 @@ class TodoClientTest {
         todo.sneakInATodo = true;
 
         TodoClient.Created created = client.createTodo(before, server.id(), healthy.id, "Dunkles Widget",
-                "https://fherrmann.com/feature-requests/abc");
+                "https://fherrmann.com/feature-requests/abc", null);
 
         FakeTodoServer.Todo stored = todo.find(created.id());
         assertThat(stored.title).isEqualTo("Dunkles Widget");
@@ -83,11 +83,23 @@ class TodoClientTest {
     @Test
     void aTopLevelTodoIsSentWithoutParentAndLink() {
         FakeTodoServer.Area server = todo.area("Server");
-        TodoClient.Created created = client.createTodo(client.board(), server.id(), null, "Healthy", null);
+        TodoClient.Created created = client.createTodo(client.board(), server.id(), null, "Healthy", null, null);
 
         FakeTodoServer.Todo stored = todo.find(created.id());
         assertThat(stored.parentId).isNull();
         assertThat(stored.link).isNull();
+        assertThat(todo.notifications).as("ohne Benachrichtigung fehlt das Feld ganz").isEmpty();
+    }
+
+    @Test
+    void aNotificationGoesAlongAsTitleAndBody() {
+        FakeTodoServer.Area server = todo.area("Server");
+        TodoClient.Created created = client.createTodo(client.board(), server.id(), null, "Dunkles Widget",
+                "https://fherrmann.com/feature-requests/abc",
+                new TodoClient.Notification("Feature Request · Healthy", "Torben: Dunkles Widget"));
+
+        assertThat(todo.notifications.get(created.id()).path("title").asString()).isEqualTo("Feature Request · Healthy");
+        assertThat(todo.notifications.get(created.id()).path("body").asString()).isEqualTo("Torben: Dunkles Widget");
     }
 
     /** Das To-Do schickt Fehler als Klartext - der Grund steht dann in der Ausnahme und im Journal. */

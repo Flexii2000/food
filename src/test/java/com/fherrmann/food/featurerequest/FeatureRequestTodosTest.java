@@ -1,5 +1,6 @@
 package com.fherrmann.food.featurerequest;
 
+import com.fherrmann.food.security.HealthUsers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FeatureRequestTodosTest {
 
     private static final String BASE = "https://fherrmann.com/feature-requests";
+    private static final HealthUsers USERS = new HealthUsers("felix", "");
 
     @TempDir
     Path tempDir;
@@ -41,7 +43,7 @@ class FeatureRequestTodosTest {
     }
 
     private FeatureRequestTodos todos(String url) {
-        return new FeatureRequestTodos(new TodoClient(url, FakeTodoServer.TOKEN, new ObjectMapper()), repository, BASE);
+        return new FeatureRequestTodos(new TodoClient(url, FakeTodoServer.TOKEN, new ObjectMapper()), repository, USERS, BASE);
     }
 
     private FeatureRequest stored(String title) {
@@ -181,6 +183,7 @@ class FeatureRequestTodosTest {
         String todoId = repository.find(request.id()).orElseThrow().todoId();
         assertThat(todoId).isNotNull();
         assertThat(todo.find(todoId).title).isEqualTo("Später");
+        assertThat(todo.notifications).as("die Meldung kommt mit der Aufgabe, also auch spaeter").containsKey(todoId);
     }
 
     @Test
@@ -254,9 +257,37 @@ class FeatureRequestTodosTest {
 
     @Test
     void theCardUrlIsTheBaseUrlPlusTheId() {
-        assertThat(new FeatureRequestTodos(new TodoClient("", "x", new ObjectMapper()), repository,
+        assertThat(new FeatureRequestTodos(new TodoClient("", "x", new ObjectMapper()), repository, USERS,
                 "http://localhost:48380/feature-requests/").cardUrl("abc"))
                 .isEqualTo("http://localhost:48380/feature-requests/abc");
+    }
+
+    // MARK: - Benachrichtigung
+
+    @Test
+    void aRequestFromSomeoneElseAnnouncesItselfWithAppAndAuthor() {
+        FeatureRequest request = new FeatureRequest(UUID.randomUUID().toString(), "torben", "cohabit", Instant.now(),
+                "ich will", "Streak einfrieren", "Als … möchte ich …, damit …", List.of(), null, null);
+        repository.add(request);
+
+        FeatureRequest result = todos.ensureTodo(request);
+
+        assertThat(todo.notifications).as("nur die Unteraufgabe meldet sich, nicht die neue Elternaufgabe")
+                .containsOnlyKeys(result.todoId());
+        assertThat(todo.notifications.get(result.todoId()).path("title").asString()).isEqualTo("Feature Request · coHabit");
+        assertThat(todo.notifications.get(result.todoId()).path("body").asString()).isEqualTo("Torben: Streak einfrieren");
+    }
+
+    @Test
+    void felixOwnRequestAnnouncesNothing() {
+        FeatureRequest request = new FeatureRequest(UUID.randomUUID().toString(), "felix", "fokus", Instant.now(),
+                "ich will", "Wald nach Kategorie", "Als … möchte ich …, damit …", List.of(), null, null);
+        repository.add(request);
+
+        FeatureRequest result = todos.ensureTodo(request);
+
+        assertThat(result.todoId()).isNotNull();
+        assertThat(todo.notifications).isEmpty();
     }
 
     // MARK: - Loeschen

@@ -508,6 +508,13 @@ Beim Absenden wird die Anfrage **zuerst gespeichert**, erst dann legt
 3. darunter die Unteraufgabe: Titel der Karte, `link` =
    `https://fherrmann.com/feature-requests/<id>` (Basis in `FOOD_FEATURE_REQUESTS_URL`).
 
+Stammt die Anfrage **nicht von Felix**, gibt das Anlegen der Unteraufgabe eine
+`notification` mit („Feature Request · coHabit“ / „Torben: <Titel>“). Die
+schickt das To-Do als Push an Fokus, sobald die Aufgabe steht; ein Tipp öffnet
+die Karte. Weil sie am Anlegen hängt, kommt sie bei einem Ausfall mit dem
+Nachlauf, und eine übernommene Aufgabe (siehe unten) meldet sich nicht doppelt.
+Ein To-Do von vor der Benachrichtigung übergeht das Feld still.
+
 Angemeldet wird mit dem Privat-Cookie, es ist derselbe `FH_PRIVATE_TOKEN`. Das
 To-Do antwortet auf jedes Anlegen mit dem ganzen Brett statt mit einer Id; die
 neue Id ergibt sich aus dem Vergleich vorher/nachher, bei zwei neuen entscheiden

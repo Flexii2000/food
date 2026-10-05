@@ -37,6 +37,10 @@ public class TodoClient {
     public record Created(String id, TodoBoard board) {
     }
 
+    /** Was Felix beim Anlegen zusaetzlich als Push in der Fokus-App sieht. */
+    public record Notification(String title, String body) {
+    }
+
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
     private final String baseUrl;
@@ -85,10 +89,13 @@ public class TodoClient {
      * dazu (etwa die Elternaufgabe aus dem Schritt davor, oder Felix tippt gerade
      * selbst), entscheiden Titel und Elternaufgabe.
      *
-     * @param parentId die Aufgabe darueber, oder {@code null} fuer die oberste Ebene
-     * @param link     wohin die Aufgabe zeigt, oder {@code null}
+     * @param parentId     die Aufgabe darueber, oder {@code null} fuer die oberste Ebene
+     * @param link         wohin die Aufgabe zeigt, oder {@code null}
+     * @param notification was Fokus dazu meldet, oder {@code null} fuer nichts. Ein
+     *                     To-Do von vor der Benachrichtigung uebergeht das Feld still.
      */
-    public Created createTodo(TodoBoard before, String areaId, String parentId, String title, String link) {
+    public Created createTodo(TodoBoard before, String areaId, String parentId, String title, String link,
+                              Notification notification) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("areaId", areaId);
         if (parentId != null) {
@@ -97,6 +104,9 @@ public class TodoClient {
         body.put("title", title);
         if (link != null) {
             body.put("link", link);
+        }
+        if (notification != null) {
+            body.put("notification", Map.of("title", notification.title(), "body", notification.body()));
         }
         TodoBoard after = TodoBoard.parse(send(post("/api/todos", body)));
         List<TodoBoard.Todo> fresh = after.todos()
