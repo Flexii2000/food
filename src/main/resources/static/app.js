@@ -2137,17 +2137,20 @@ function buildToggle(checkbox, series) {
 // --- Laden und Formulare ----------------------------------------------------
 
 async function loadAll() {
+    // Der Verbrauch kommt vom Weight Tracker, der seinerseits hier nach der Aufnahme fragt -
+    // der Tag soll darauf nicht warten: erst zeichnen, die zwei Zeilen ziehen nach.
+    // Kuenftige Tage haben keinen Verbrauch - dafuer gar nicht erst fragen.
+    const energy = currentDate <= todayIso() ? loadEnergy(currentDate, currentDate) : Promise.resolve();
     const [dayData, dishData] = await Promise.all([
         fetchJson(`/api/food/day?date=${currentDate}`),
         fetchJson('/api/food/dishes'),
-        // Kuenftige Tage haben keinen Verbrauch - dafuer gar nicht erst fragen.
-        currentDate <= todayIso() ? loadEnergy(currentDate, currentDate) : Promise.resolve(),
     ]);
     day = dayData;
     dishes = dishData || [];
     document.getElementById('day-date').value = currentDate;
     renderGauges();
     renderEnergy();
+    energy.then(renderEnergy);
     renderEntries();
     renderDishList();
     fillTargetsForm();
