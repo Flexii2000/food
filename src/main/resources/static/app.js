@@ -1771,7 +1771,8 @@ function renderEnergy() {
         balance.hidden = true;
     } else {
         balance.hidden = false;
-        balance.textContent = `${energy.deficitKcal < 0 ? 'Überschuss' : 'Defizit'} ${approx}${kcalText(energy.deficitKcal)}`;
+        // Erst runden, dann das Wort waehlen - sonst stuende bei -0,3 "Überschuss 0 kcal".
+        balance.textContent = `${Math.round(energy.deficitKcal) < 0 ? 'Überschuss' : 'Defizit'} ${approx}${kcalText(energy.deficitKcal)}`;
     }
 }
 
