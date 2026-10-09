@@ -35,6 +35,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -222,16 +223,22 @@ public class FoodService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "from and to are required, and to must not precede from");
         }
         Map<LocalDate, Nutrients> byDate = new LinkedHashMap<>();
+        Map<LocalDate, EnumSet<Meal>> mealsByDate = new HashMap<>();
         for (FoodEntry entry : repository.load(user).entries()) {
             LocalDate date = entry.date();
             if (date == null || date.isBefore(from) || date.isAfter(to)) {
                 continue;
             }
             byDate.merge(date, entry.total(), Nutrients::plus);
+            EnumSet<Meal> meals = mealsByDate.computeIfAbsent(date, d -> EnumSet.noneOf(Meal.class));
+            if (entry.meal() != null) {
+                meals.add(entry.meal());
+            }
         }
         return byDate.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
-                .map(e -> new DayTotal(e.getKey(), e.getValue().rounded()))
+                .map(e -> new DayTotal(e.getKey(), e.getValue().rounded(),
+                        List.copyOf(mealsByDate.get(e.getKey()))))
                 .toList();
     }
 

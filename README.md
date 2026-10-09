@@ -713,7 +713,7 @@ vier Zahlen noch zusammenpassen.
 | PUT | `/api/food/entries/{id}` | `{grams, meal?, date?}` — Menge, Mahlzeit oder Tag berichtigen; Name und Nährwerte je 100 g bleiben, wie sie beim Eintragen waren. Antwort: der Tag, auf dem der Eintrag danach liegt |
 | GET     | `/api/food/targets`       | Tagesziele                                              |
 | PUT     | `/api/food/targets`       | Tagesziele ändern (mit `micros` die Mikro-Ziele, siehe oben) |
-| GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne — liest die Weight-App        |
+| GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne mit `meals` — liest die Weight-App |
 | GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
 | GET     | `/api/food/features`      | `{quickCapture, me, detailedNutrients, micronutrients, veganMode}` — was dieser Person angeboten wird, und wer sie ist |
@@ -775,6 +775,13 @@ denselben Wert, statt ihn viermal nachzubauen.
 `/api/food/daily` liefert **nur Tage mit Einträgen**. Ein Tag ohne Eintrag ist
 „unbekannt", nicht „nichts gegessen" — als 0 kcal in einer Kurve wäre das eine
 Falschaussage.
+
+Je Tag steht außerdem `meals`: die Mahlzeiten mit mindestens einem Eintrag, in
+der Reihenfolge Frühstück, Mittag, Abend, Snack (`[]` ist möglich). Der Weight
+Tracker braucht das für seine Energiebilanz: ein Tag zählt dort als **getrackt**,
+wenn er mindestens 80 % des kcal-Ziels erreicht oder Frühstück, Mittag und Abend
+je einen Eintrag haben — dieselbe Regel wie „Track food“ in coHabit. Einträge
+ohne Mahlzeit (Altbestand) machen keine Mahlzeit voll.
 
 ## Zugriffsschutz
 

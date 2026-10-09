@@ -211,9 +211,11 @@ class MicronutrientsApiTest {
                         + "\"lastUsedOn\":\"2026-09-27\"}]");
         assertThat(call("felix", get("/api/food/targets")))
                 .isEqualTo("200 {\"kcal\":2300.0,\"proteinG\":200.0,\"carbsG\":235.5,\"fatG\":62.0}");
+        // "meals" kam am 09.10. fuer alle dazu (Regel "getrackter Tag" im Weight
+        // Tracker) - keine Sonderausgabe einer Person.
         assertThat(call("felix", get("/api/food/daily").param("from", "2026-09-20").param("to", "2026-09-27")))
                 .isEqualTo("200 [{\"date\":\"2026-09-27\",\"consumed\":{\"kcal\":463.2,\"proteinG\":32.1,"
-                        + "\"carbsG\":53.2,\"fatG\":8.1}}]");
+                        + "\"carbsG\":53.2,\"fatG\":8.1},\"meals\":[\"BREAKFAST\"]}]");
         // Der Agent liefert Mikronaehrstoffe mit - im Vorschlag fuer Felix stehen sie nicht.
         assertThat(quickCapture("felix"))
                 .isEqualTo("200 {\"id\":\"<id>\",\"status\":\"done\",\"preview\":{\"known\":false,\"dishId\":null,"

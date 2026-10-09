@@ -145,6 +145,20 @@ class FoodControllerTest {
 
     @Test
     @WithMockUser
+    void dailyNamesTheMealsOfEachDay() throws Exception {
+        when(service.dailyTotals(anyString(), any(), any())).thenReturn(List.of(
+                new com.fherrmann.food.dto.DayTotal(java.time.LocalDate.of(2026, 10, 8),
+                        com.fherrmann.food.model.Nutrients.ZERO,
+                        List.of(com.fherrmann.food.model.Meal.BREAKFAST, com.fherrmann.food.model.Meal.DINNER))));
+        mockMvc.perform(get("/api/food/daily")
+                        .param("from", "2026-10-08").param("to", "2026-10-08"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].meals[0]").value("BREAKFAST"))
+                .andExpect(jsonPath("$[0].meals[1]").value("DINNER"));
+    }
+
+    @Test
+    @WithMockUser
     void dailyAveragesAreReadableFromTheWeightTrackersOrigin() throws Exception {
         when(service.dailyAverages(anyString(), any(), any())).thenReturn(List.of(
                 new com.fherrmann.food.dto.DayAverage(java.time.LocalDate.of(2026, 8, 30), 2100, 6, false)));

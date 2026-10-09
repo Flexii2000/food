@@ -11,6 +11,8 @@ import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.model.Dish;
+import com.fherrmann.food.model.FoodData;
+import com.fherrmann.food.model.FoodEntry;
 import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Micronutrient;
 import com.fherrmann.food.model.Nutrients;
@@ -26,11 +28,13 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.nio.file.Files;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -266,6 +270,34 @@ class FoodServiceTest {
         assertThat(totals.get(0).date()).isEqualTo(TODAY.minusDays(2));
         assertThat(totals.get(0).consumed().kcal()).isEqualTo(240.0);
         assertThat(totals.get(1).consumed().kcal()).isEqualTo(370.0);
+    }
+
+    @Test
+    void dailyTotalsNameTheMealsThatHaveEntries() {
+        service.addEntry(ME, new NewEntryRequest(TODAY.minusDays(1), null, skyr(), 300.0, Meal.DINNER));
+        service.addEntry(ME, new NewEntryRequest(TODAY.minusDays(1), null, skyr(), 100.0, Meal.BREAKFAST));
+        service.addEntry(ME, new NewEntryRequest(TODAY.minusDays(1), null, skyr(), 100.0, Meal.BREAKFAST));
+        // Altbestand aus der Zeit vor der Aufteilung, direkt in die Datei: zaehlt in
+        // die kcal, macht aber keine Mahlzeit voll (neue Eintraege ohne Angabe
+        // landen dagegen unter Snacks).
+        FoodRepository repository = new FoodRepository(
+                tempDir.resolve("food.json").toString(), new ObjectMapper(), FILES);
+        FoodData data = repository.load(ME);
+        List<FoodEntry> entries = new ArrayList<>(data.entries());
+        entries.add(new FoodEntry("alt-1", TODAY.minusDays(1), null, "Altbestand", 100.0,
+                new Nutrients(80, 8, 6, 1.3), null, Instant.EPOCH));
+        entries.add(new FoodEntry("alt-2", TODAY, null, "Altbestand", 100.0,
+                new Nutrients(80, 8, 6, 1.3), null, Instant.EPOCH));
+        repository.save(ME, data.with(data.dishes(), entries));
+
+        List<DayTotal> totals = service.dailyTotals(ME, TODAY.minusDays(1), TODAY);
+
+        // Reihenfolge des Enums, jede Mahlzeit einmal - der Weight Tracker prueft
+        // daran "Fruehstueck, Mittag und Abend" wie coHabit bei "Track food".
+        assertThat(totals.get(0).meals()).containsExactly(Meal.BREAKFAST, Meal.DINNER);
+        assertThat(totals.get(0).consumed().kcal()).isEqualTo(480.0);
+        assertThat(totals.get(1).meals()).isEmpty();
+        assertThat(totals.get(1).consumed().kcal()).isEqualTo(80.0);
     }
 
     /** Ein Eintrag mit genau {@code kcal} an einem Tag: 1000 g von einem Gericht mit {@code kcal/10} je 100 g. */
