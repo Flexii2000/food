@@ -51,6 +51,21 @@ willkürlich.
 Unterhalb des Ziels passiert bewusst **nichts**: ein Tacho, der schon bei 85 %
 warnt, warnt an jedem normalen Tag und wird dadurch bedeutungslos.
 
+### Verbrauch und Defizit (seit 2026-10)
+
+Unter dem kcal-Tacho stehen zwei Zeilen aus der Energiebilanz des
+[Weight Trackers](https://github.com/Flexii2000/weight-app) (`GET /api/energy`,
+dort per CORS für diese Seite freigegeben): `Verbrauch 2.610 kcal · Uhr 2.840 ·
+−8 %` und `Defizit 460 kcal` bzw. `Überschuss …`. Der Verbrauch ist Ruhe- plus
+Aktivenergie aus Apple Health bzw. Health Connect, **am Gewicht kalibriert** —
+gerechnet wird drüben, hier wird nur gezeigt. Heute steht ein „≈“ davor: die
+Ruheenergie ist auf den ganzen Tag hochgerechnet, die Aufnahme ist die bisherige.
+Für künftige Tage und Tage ohne Werte der Uhr fehlen die Zeilen; ein Tag, der
+nicht als getrackt gilt (unter 80 % des Ziels und nicht Frühstück, Mittag und
+Abend), hat Verbrauch, aber kein Defizit. Eine Fehlermeldung erscheint nur, wenn
+es für die Person schon einmal Verbrauchswerte gab — wer keine Uhr hat, sieht
+keine rote Zeile.
+
 ## Detailwerte je Person
 
 Für alle gibt es kcal und die drei Makros. Wer mehr will, bekommt die ganze
@@ -225,6 +240,10 @@ ohne kcal-Eintrag bedeutet, dass nichts erfasst wurde.
 
 Die beiden Apps zeigen damit dieselbe Beziehung von zwei Seiten: hier die
 Gewichtskurve über den Kalorien, dort die Kalorien unter der Gewichtskurve.
+
+Vorgewählt steht neben dem kcal-Mittel der **Verbrauch im 7-Tage-Mittel**
+(indigo, aus `/api/energy`, gestrichelt, solange das Fenster noch offen ist):
+die Lücke zwischen beiden Kurven ist das Defizit.
 
 ## Nach Mahlzeiten getrennt
 
