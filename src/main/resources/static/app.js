@@ -128,6 +128,11 @@ const CHART_COLORS = {
     // Der kalibrierte Verbrauch aus dem Weight Tracker, kuehles Indigo wie dort:
     // die Luecke zur gelben kcal-Kurve ist das Defizit.
     expenditure: '--chart-expenditure',
+    // Das Defizit im 7-Tage-Mittel auf eigener Skala; die Flaeche zwischen Verbrauch
+    // und Aufnahme nimmt dieselbe Farbe blass, einen Ueberschuss in Rot.
+    deficit: '--chart-deficit',
+    deficitFill: '--chart-deficit-fill',
+    surplusFill: '--chart-surplus-fill',
     grid: '--chart-grid',
     tick: '--chart-tick',
     tooltipBg: '--tooltip-bg',
@@ -184,6 +189,10 @@ let weightByDate = { avg7: {}, measured: {} };
 const EXPENDITURE_SERIES = { key: 'expenditure', label: 'Verbrauch (7-Tage-Mittel)', color: CHART_COLORS.expenditure };
 // Vorgewaehlt: die Luecke zwischen Verbrauch und Aufnahme ist das Defizit (Felix, 09.10.).
 let showExpenditure = true;
+// Das Defizit im 7-Tage-Mittel als eigene Linie, dazu die eingefaerbte Flaeche zwischen
+// Verbrauch und Aufnahme - im Verlauf hier vorgewaehlt (Felix, 09.10.).
+const DEFICIT_SERIES = { key: 'deficit', label: 'Defizit (7-Tage-Mittel)', color: CHART_COLORS.deficit };
+let showDeficit = true;
 let energyByDate = {};
 let energyError = null;
 // Ob es fuer diese Person je Verbrauchswerte gab. Wer keine Uhr hat, soll keine
@@ -1787,11 +1796,47 @@ async function loadHistory() {
         fetchJson(`/api/food/daily?from=${from}&to=${to}`),
         fetchJson(`/api/food/daily-average?from=${from}&to=${to}`),
         wantsWeight && weightDays < neededWeightDays ? loadWeightSeries(neededWeightDays) : Promise.resolve(),
-        showExpenditure ? loadEnergy(from, to) : Promise.resolve(),
+        showExpenditure || showDeficit ? loadEnergy(from, to) : Promise.resolve(),
     ]);
     dailyTotals = totals || [];
     dailyAverages = averages || [];
     renderHistory(from, to);
+}
+
+/** "500", "0", "−250" - ganze kcal mit echtem Minus. */
+function signedKcal(value) {
+    const rounded = Math.round(value);
+    return `${rounded < 0 ? '−' : ''}${num(Math.abs(rounded))}`;
+}
+
+/**
+ * Die Skala des Defizits rechts: eigene Grenzen, die die Null immer einschliessen, und
+ * von ihrem Raster nur die Nulllinie, gestrichelt in der Defizit-Farbe. Darueber
+ * Defizit, darunter Ueberschuss. Steht rechts schon die kg-Achse, kommt sie daneben.
+ */
+function deficitScale(labels, color) {
+    const values = labels.map(d => energyByDate[d]?.deficitAvg7).filter(v => v != null);
+    const lo = Math.min(0, ...values);
+    const hi = Math.max(0, ...values);
+    const step = hi - lo > 1500 ? 500 : 250;
+    const min = Math.floor(lo / step) * step;
+    const max = Math.max(Math.ceil(hi / step) * step, min + 2 * step);
+    const axisFont = { size: 11 };
+    return {
+        position: 'right',
+        display: showDeficit,
+        min,
+        max,
+        grid: {
+            drawOnChartArea: true,
+            drawTicks: false,
+            color: ctx => (ctx.tick?.value === 0 ? color.deficit : 'transparent'),
+        },
+        border: { display: false, dash: [4, 4] },
+        title: { display: true, text: 'Defizit', color: color.deficit, font: axisFont },
+        ticks: { color: color.deficit, font: axisFont, padding: 8, stepSize: step,
+            callback: value => signedKcal(value) },
+    };
 }
 
 /** Steht an dieser Stelle ein Wert, dessen Nachbarn beide fehlen? */
@@ -1827,7 +1872,10 @@ function renderHistory(from, to) {
         ? color.kcalOver : base);
 
     const datasets = [];
+    // Wohin die Defizit-Flaeche von der Verbrauchskurve aus reicht: zur kcal-Kurve.
+    let avgIndex = -1;
     if (showKcal.avg7) {
+        avgIndex = datasets.length;
         datasets.push({
             type: 'line',
             label: 'kcal ⌀ 7 Tage',
@@ -1897,6 +1945,37 @@ function renderHistory(from, to) {
             tension: 0.3,
             yAxisID: 'y',
             order: 7,
+            // Die Flaeche bis zur kcal-Kurve gehoert zu "Defizit ⌀" und braucht beide
+            // Kurven. Chart.js faerbt darueber (Defizit) und darunter (Ueberschuss)
+            // verschieden und wechselt die Farbe am Schnittpunkt.
+            fill: showDeficit && avgIndex >= 0
+                ? { target: avgIndex, above: color.deficitFill, below: color.surplusFill }
+                : false,
+        });
+    }
+    if (showDeficit) {
+        const deficit = labels.map(d => energyByDate[d]?.deficitAvg7 ?? null);
+        const deficitComplete = labels.map(d => energyByDate[d]?.avg7Complete ?? true);
+        datasets.push({
+            type: 'line',
+            label: 'Defizit ⌀ 7 Tage',
+            data: deficit,
+            borderColor: color.deficit,
+            backgroundColor: color.deficit,
+            borderWidth: 2.5,
+            segment: {
+                borderDash: ctx => (deficitComplete[ctx.p1DataIndex] === false ? [1, 6] : undefined),
+                borderCapStyle: ctx => (deficitComplete[ctx.p1DataIndex] === false ? 'round' : 'butt'),
+            },
+            spanGaps: false,
+            pointRadius: ctx => (isolatedPoint(deficit, ctx.dataIndex) ? 3 : 0),
+            pointBackgroundColor: color.deficit,
+            pointHoverRadius: 4,
+            tension: 0.3,
+            // Eigene Skala mit Nulllinie: die kcal-Achse beginnt bei null, das Defizit
+            // laege dort flach am Boden.
+            yAxisID: 'yDeficit',
+            order: 6,
         });
     }
     datasets.push({
@@ -1962,6 +2041,7 @@ function renderHistory(from, to) {
                     title: { display: true, text: 'kg', color: color.tick, font: axisFont },
                     ticks: { color: color.tick, font: axisFont, padding: 8 },
                 },
+                yDeficit: deficitScale(labels, color),
                 // maxRotation: 0 haelt die Datumsbeschriftung waagerecht, damit
                 // das Einblenden des Gewichts nicht den ganzen Chart-Boden umbaut.
                 x: {
@@ -1981,6 +2061,8 @@ function renderHistory(from, to) {
             },
             plugins: {
                 legend: { display: false },
+                // Die Defizit-Flaeche hinter allen Linien, nicht nur hinter dem Verbrauch.
+                filler: { drawTime: 'beforeDatasetsDraw', propagate: false },
                 tooltip: {
                     backgroundColor: color.tooltipBg,
                     titleColor: color.tooltipText,
@@ -1998,7 +2080,9 @@ function renderHistory(from, to) {
                         // kaeme sonst mit drei Nachkommastellen.
                         label: ctx => `${ctx.dataset.label}: ${ctx.dataset.yAxisID === 'yWeight'
                             ? `${num(ctx.parsed.y, 1)} kg`
-                            : num(ctx.parsed.y)}`,
+                            : ctx.dataset.yAxisID === 'yDeficit'
+                                ? `${signedKcal(ctx.parsed.y)} kcal`
+                                : num(ctx.parsed.y)}`,
                         // Die Ziellinie ist halbtransparent und verschwaende als
                         // Farbkaestchen auf dem Tooltip - dort steht sie in Grau.
                         labelColor: ctx => {
@@ -2027,7 +2111,7 @@ function renderHistory(from, to) {
         labels.some(d => d in weightByDate[series.key]));
     const energyMsg = document.getElementById('history-energy-msg');
     const spentInRange = labels.some(d => energyByDate[d]?.expenditureAvg7 != null);
-    if (!showExpenditure || !energySeen()) {
+    if (!(showExpenditure || showDeficit) || !energySeen()) {
         energyMsg.textContent = '';
     } else if (energyError) {
         energyMsg.textContent = `Verbrauch nicht verfügbar: ${energyError} (Weight Tracker unter ${WEIGHT_API})`;
@@ -2105,6 +2189,16 @@ function initHistoryControls() {
             await loadHistory();
         });
         toggles.appendChild(buildToggle(checkbox, EXPENDITURE_SERIES));
+    }
+    {
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = showDeficit;
+        checkbox.addEventListener('change', async () => {
+            showDeficit = checkbox.checked;
+            await loadHistory();
+        });
+        toggles.appendChild(buildToggle(checkbox, DEFICIT_SERIES));
     }
     WEIGHT_SERIES.forEach(series => {
         const checkbox = document.createElement('input');

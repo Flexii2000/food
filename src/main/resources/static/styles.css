@@ -66,6 +66,10 @@
     --chart-weight-measured: #0b93d1;
     /* Kalibrierter Verbrauch: kuehles Indigo, wie im Weight Tracker. */
     --chart-expenditure: #4338ca;
+    /* Defizit (Linie und Flaeche) und Ueberschuss - wie im Weight Tracker und in den Apps. */
+    --chart-deficit: #0d9488;
+    --chart-deficit-fill: rgba(13, 148, 136, 0.16);
+    --chart-surplus-fill: rgba(211, 49, 49, 0.16);
     --chart-grid: rgba(29, 28, 26, 0.07);
     --chart-tick: #86817a;
     --tooltip-bg: #1d1c1a;
@@ -122,6 +126,9 @@
         --chart-weight-avg: #81c784;
         --chart-weight-measured: #4fc3f7;
         --chart-expenditure: #6e7bff;
+        --chart-deficit: #2dd4bf;
+        --chart-deficit-fill: rgba(45, 212, 191, 0.2);
+        --chart-surplus-fill: rgba(239, 83, 80, 0.2);
         --chart-grid: rgba(240, 238, 233, 0.07);
         --chart-tick: #8f8b83;
         --tooltip-bg: #f0eee9;

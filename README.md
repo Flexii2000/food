@@ -66,6 +66,13 @@ Abend), hat Verbrauch, aber kein Defizit. Eine Fehlermeldung erscheint nur, wenn
 es für die Person schon einmal Verbrauchswerte gab — wer keine Uhr hat, sieht
 keine rote Zeile.
 
+Im **Verlauf** sind „Verbrauch ⌀“ und „Defizit ⌀“ vorgewählt: der Verbrauch im
+7-Tage-Mittel auf der kcal-Achse, das Defizit im 7-Tage-Mittel (nur getrackte
+Tage, `deficitAvg7`) auf einer eigenen Skala rechts mit gestrichelter Nulllinie,
+und dazu ist die Fläche zwischen „Verbrauch ⌀“ und „kcal ⌀“ eingefärbt — Petrol,
+wo der Verbrauch darüber liegt, Rot bei einem Überschuss. Farben und Regeln wie
+in den Apps (Weight Tracker, `docs/HEALTHY-CONTRACT.md` §5).
+
 ## Detailwerte je Person
 
 Für alle gibt es kcal und die drei Makros. Wer mehr will, bekommt die ganze
