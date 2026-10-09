@@ -125,6 +125,9 @@ const CHART_COLORS = {
     // lernen muessen, welche Linie was ist.
     weightAvg7: '--chart-weight-avg',
     weightMeasured: '--chart-weight-measured',
+    // Der kalibrierte Verbrauch aus dem Weight Tracker, kuehles Indigo wie dort:
+    // die Luecke zur gelben kcal-Kurve ist das Defizit.
+    expenditure: '--chart-expenditure',
     grid: '--chart-grid',
     tick: '--chart-tick',
     tooltipBg: '--tooltip-bg',
@@ -175,6 +178,17 @@ const showKcal = { avg7: true, day: false };
 const showWeight = { avg7: false, measured: false };
 // Je Serie eine Zuordnung Datum -> Wert.
 let weightByDate = { avg7: {}, measured: {} };
+// Der Verbrauch kommt aus dem Weight Tracker (/api/energy): Ruhe- und Aktivenergie
+// aus Health, dort am Gewicht kalibriert und mit der Aufnahme von hier verrechnet.
+// Je Datum der ganze Tag (Verbrauch, Defizit, 7-Tage-Mittel).
+const EXPENDITURE_SERIES = { key: 'expenditure', label: 'Verbrauch (7-Tage-Mittel)', color: CHART_COLORS.expenditure };
+// Vorgewaehlt: die Luecke zwischen Verbrauch und Aufnahme ist das Defizit (Felix, 09.10.).
+let showExpenditure = true;
+let energyByDate = {};
+let energyError = null;
+// Ob es fuer diese Person je Verbrauchswerte gab. Wer keine Uhr hat, soll keine
+// Fehlermeldung sehen, nur weil keine Werte da sind - gemerkt im Browser.
+const ENERGY_SEEN_KEY = 'food.hasEnergy';
 let weightError = null;
 // Wie weit die geladene Gewichtsreihe zurueckreicht: 90 oder 180 Tage, 0 = nichts.
 let weightDays = 0;
@@ -1693,6 +1707,74 @@ async function loadWeightSeries(days) {
     }
 }
 
+function energySeen() {
+    try {
+        return localStorage.getItem(ENERGY_SEEN_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Holt die Energiebilanz fuer einen Zeitraum aus dem Weight Tracker und legt die Tage
+ * in `energyByDate` ab. Wirft nie: faellt der Weight Tracker aus, fehlen nur Verbrauch
+ * und Defizit, der Tag steht trotzdem.
+ */
+async function loadEnergy(from, to) {
+    try {
+        const days = await fetchJson(`${WEIGHT_API}/api/energy?from=${from}&to=${to}`, { credentials: 'include' });
+        (days || []).forEach(d => { energyByDate[d.date] = d; });
+        if ((days || []).some(d => d.expenditureKcal != null)) {
+            try {
+                localStorage.setItem(ENERGY_SEEN_KEY, '1');
+            } catch {
+                // Ohne Speicher erscheint nur die Fehlermeldung nicht - kein Schaden.
+            }
+        }
+        energyError = null;
+    } catch (err) {
+        energyError = err.message;
+    }
+}
+
+/** Ganze kcal mit Tausenderpunkt. */
+function kcalText(value) {
+    return `${num(Math.abs(value))} kcal`;
+}
+
+/**
+ * Verbrauch und Defizit des gewaehlten Tages unter dem kcal-Tacho - dieselben zwei
+ * Zeilen wie in den Apps. "≈" heisst Prognose: heute ist die Ruheenergie auf den
+ * ganzen Tag hochgerechnet. Fuer kuenftige Tage nichts, fuer Tage ohne Werte der Uhr
+ * auch nicht; ein ungetrackter Tag hat Verbrauch, aber kein Defizit.
+ */
+function renderEnergy() {
+    const row = document.getElementById('energy-row');
+    const msg = document.getElementById('energy-msg');
+    const energy = energyByDate[currentDate];
+    const usable = currentDate <= todayIso() && energy && energy.expenditureKcal != null;
+    row.hidden = !usable;
+    msg.textContent = energyError && energySeen()
+        ? `Verbrauch nicht verfügbar: ${energyError} (Weight Tracker unter ${WEIGHT_API})`
+        : '';
+    if (!usable) return;
+    const approx = energy.projected ? '≈ ' : '';
+    let line = `Verbrauch ${approx}${kcalText(energy.expenditureKcal)}`;
+    if (energy.watchKcal != null && energy.factor !== 1) {
+        const percent = Math.round((energy.factor - 1) * 100);
+        line += ` · Uhr ${num(energy.watchKcal)} · ${percent < 0 ? '−' : percent > 0 ? '+' : ''}${Math.abs(percent)} %`;
+    }
+    document.getElementById('energy-line').textContent = line;
+    const balance = document.getElementById('energy-balance');
+    if (energy.deficitKcal == null) {
+        balance.textContent = '';
+        balance.hidden = true;
+    } else {
+        balance.hidden = false;
+        balance.textContent = `${energy.deficitKcal < 0 ? 'Überschuss' : 'Defizit'} ${approx}${kcalText(energy.deficitKcal)}`;
+    }
+}
+
 async function loadHistory() {
     // Fenster endet immer heute, unabhaengig vom oben gewaehlten Tag: der
     // Verlauf ist ein Ueberblick, kein zweiter Blick auf denselben Tag.
@@ -1704,6 +1786,7 @@ async function loadHistory() {
         fetchJson(`/api/food/daily?from=${from}&to=${to}`),
         fetchJson(`/api/food/daily-average?from=${from}&to=${to}`),
         wantsWeight && weightDays < neededWeightDays ? loadWeightSeries(neededWeightDays) : Promise.resolve(),
+        showExpenditure ? loadEnergy(from, to) : Promise.resolve(),
     ]);
     dailyTotals = totals || [];
     dailyAverages = averages || [];
@@ -1790,6 +1873,29 @@ function renderHistory(from, to) {
             tension: 0.25,
             yAxisID: 'y',
             order: 10,
+        });
+    }
+    if (showExpenditure) {
+        const spent = labels.map(d => energyByDate[d]?.expenditureAvg7 ?? null);
+        const spentComplete = labels.map(d => energyByDate[d]?.avg7Complete ?? true);
+        datasets.push({
+            type: 'line',
+            label: 'Verbrauch ⌀ 7 Tage',
+            data: spent,
+            borderColor: color.expenditure,
+            backgroundColor: color.expenditure,
+            borderWidth: 2.5,
+            segment: {
+                borderDash: ctx => (spentComplete[ctx.p1DataIndex] === false ? [1, 6] : undefined),
+                borderCapStyle: ctx => (spentComplete[ctx.p1DataIndex] === false ? 'round' : 'butt'),
+            },
+            spanGaps: false,
+            pointRadius: ctx => (isolatedPoint(spent, ctx.dataIndex) ? 3 : 0),
+            pointBackgroundColor: color.expenditure,
+            pointHoverRadius: 4,
+            tension: 0.3,
+            yAxisID: 'y',
+            order: 7,
         });
     }
     datasets.push({
@@ -1918,6 +2024,17 @@ function renderHistory(from, to) {
     const shown = WEIGHT_SERIES.filter(series => showWeight[series.key]);
     const weightPointsInRange = shown.some(series =>
         labels.some(d => d in weightByDate[series.key]));
+    const energyMsg = document.getElementById('history-energy-msg');
+    const spentInRange = labels.some(d => energyByDate[d]?.expenditureAvg7 != null);
+    if (!showExpenditure || !energySeen()) {
+        energyMsg.textContent = '';
+    } else if (energyError) {
+        energyMsg.textContent = `Verbrauch nicht verfügbar: ${energyError} (Weight Tracker unter ${WEIGHT_API})`;
+    } else if (!spentInRange) {
+        energyMsg.textContent = 'Für diesen Zeitraum liegen keine Verbrauchsdaten vor.';
+    } else {
+        energyMsg.textContent = '';
+    }
     const msg = document.getElementById('history-msg');
     if (weightError) {
         msg.textContent = `Gewicht nicht verfügbar: ${weightError} (Weight Tracker unter ${WEIGHT_API})`;
@@ -1978,6 +2095,16 @@ function initHistoryControls() {
         });
         toggles.appendChild(buildToggle(checkbox, series));
     });
+    {
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = showExpenditure;
+        checkbox.addEventListener('change', async () => {
+            showExpenditure = checkbox.checked;
+            await loadHistory();
+        });
+        toggles.appendChild(buildToggle(checkbox, EXPENDITURE_SERIES));
+    }
     WEIGHT_SERIES.forEach(series => {
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -2013,11 +2140,14 @@ async function loadAll() {
     const [dayData, dishData] = await Promise.all([
         fetchJson(`/api/food/day?date=${currentDate}`),
         fetchJson('/api/food/dishes'),
+        // Kuenftige Tage haben keinen Verbrauch - dafuer gar nicht erst fragen.
+        currentDate <= todayIso() ? loadEnergy(currentDate, currentDate) : Promise.resolve(),
     ]);
     day = dayData;
     dishes = dishData || [];
     document.getElementById('day-date').value = currentDate;
     renderGauges();
+    renderEnergy();
     renderEntries();
     renderDishList();
     fillTargetsForm();
