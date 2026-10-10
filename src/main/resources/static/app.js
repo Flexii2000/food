@@ -1746,45 +1746,6 @@ async function loadEnergy(from, to) {
     }
 }
 
-/** Ganze kcal mit Tausenderpunkt. */
-function kcalText(value) {
-    return `${num(Math.abs(value))} kcal`;
-}
-
-/**
- * Verbrauch und Defizit des gewaehlten Tages unter dem kcal-Tacho - dieselben zwei
- * Zeilen wie in den Apps. "≈" heisst Prognose: heute ist die Ruheenergie auf den
- * ganzen Tag hochgerechnet. Fuer kuenftige Tage nichts, fuer Tage ohne Werte der Uhr
- * auch nicht; ein ungetrackter Tag hat Verbrauch, aber kein Defizit.
- */
-function renderEnergy() {
-    const row = document.getElementById('energy-row');
-    const msg = document.getElementById('energy-msg');
-    const energy = energyByDate[currentDate];
-    const usable = currentDate <= todayIso() && energy && energy.expenditureKcal != null;
-    row.hidden = !usable;
-    msg.textContent = energyError && energySeen()
-        ? `Verbrauch nicht verfügbar: ${energyError} (Weight Tracker unter ${WEIGHT_API})`
-        : '';
-    if (!usable) return;
-    const approx = energy.projected ? '≈ ' : '';
-    let line = `Verbrauch ${approx}${kcalText(energy.expenditureKcal)}`;
-    if (energy.watchKcal != null && energy.factor !== 1) {
-        const percent = Math.round((energy.factor - 1) * 100);
-        line += ` · Uhr ${num(energy.watchKcal)} · ${percent < 0 ? '−' : percent > 0 ? '+' : ''}${Math.abs(percent)} %`;
-    }
-    document.getElementById('energy-line').textContent = line;
-    const balance = document.getElementById('energy-balance');
-    if (energy.deficitKcal == null) {
-        balance.textContent = '';
-        balance.hidden = true;
-    } else {
-        balance.hidden = false;
-        // Erst runden, dann das Wort waehlen - sonst stuende bei -0,3 "Überschuss 0 kcal".
-        balance.textContent = `${Math.round(energy.deficitKcal) < 0 ? 'Überschuss' : 'Defizit'} ${approx}${kcalText(energy.deficitKcal)}`;
-    }
-}
-
 async function loadHistory() {
     // Fenster endet immer heute, unabhaengig vom oben gewaehlten Tag: der
     // Verlauf ist ein Ueberblick, kein zweiter Blick auf denselben Tag.
@@ -2232,10 +2193,6 @@ function buildToggle(checkbox, series) {
 // --- Laden und Formulare ----------------------------------------------------
 
 async function loadAll() {
-    // Der Verbrauch kommt vom Weight Tracker, der seinerseits hier nach der Aufnahme fragt -
-    // der Tag soll darauf nicht warten: erst zeichnen, die zwei Zeilen ziehen nach.
-    // Kuenftige Tage haben keinen Verbrauch - dafuer gar nicht erst fragen.
-    const energy = currentDate <= todayIso() ? loadEnergy(currentDate, currentDate) : Promise.resolve();
     const [dayData, dishData] = await Promise.all([
         fetchJson(`/api/food/day?date=${currentDate}`),
         fetchJson('/api/food/dishes'),
@@ -2244,8 +2201,6 @@ async function loadAll() {
     dishes = dishData || [];
     document.getElementById('day-date').value = currentDate;
     renderGauges();
-    renderEnergy();
-    energy.then(renderEnergy);
     renderEntries();
     renderDishList();
     fillTargetsForm();

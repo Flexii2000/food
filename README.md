@@ -53,25 +53,22 @@ warnt, warnt an jedem normalen Tag und wird dadurch bedeutungslos.
 
 ### Verbrauch und Defizit (seit 2026-10)
 
-Unter dem kcal-Tacho stehen zwei Zeilen aus der Energiebilanz des
-[Weight Trackers](https://github.com/Flexii2000/weight-app) (`GET /api/energy`,
-dort per CORS für diese Seite freigegeben): `Verbrauch 2.610 kcal · Uhr 2.840 ·
-−8 %` und `Defizit 460 kcal` bzw. `Überschuss …`. Der Verbrauch ist Ruhe- plus
-Aktivenergie aus Apple Health bzw. Health Connect, **am Gewicht kalibriert** —
-gerechnet wird drüben, hier wird nur gezeigt. Heute steht ein „≈“ davor: die
-Ruheenergie ist auf den ganzen Tag hochgerechnet, die Aufnahme ist die bisherige.
-Für künftige Tage und Tage ohne Werte der Uhr fehlen die Zeilen; ein Tag, der
-nicht als getrackt gilt (unter 80 % des Ziels und nicht Frühstück, Mittag und
-Abend), hat Verbrauch, aber kein Defizit. Eine Fehlermeldung erscheint nur, wenn
-es für die Person schon einmal Verbrauchswerte gab — wer keine Uhr hat, sieht
-keine rote Zeile.
+Die Energiebilanz kommt aus dem
+[Weight Tracker](https://github.com/Flexii2000/weight-app) (`GET /api/energy`, dort per CORS
+für diese Seite freigegeben): Ruhe- plus Aktivenergie aus Apple Health bzw. Health Connect,
+**am Gewicht kalibriert** — gerechnet wird drüben, hier wird nur gezeigt. Die Tageskarte
+bleibt dabei, wie sie ist: Verzehrtes gegen die festen Ziele, ohne Zeilen zu Verbrauch und
+Defizit (Felix, 2026-10-10: die Werte im Essen-Tab sollen sich nicht ändern; die Bilanz des
+Tages steht im Dashboard der Apps).
 
 Im **Verlauf** sind „Verbrauch ⌀“ und „Defizit ⌀“ vorgewählt: der Verbrauch im
 7-Tage-Mittel auf der kcal-Achse, das Defizit im 7-Tage-Mittel (nur getrackte
 Tage, `deficitAvg7`) auf einer eigenen Skala rechts mit gestrichelter Nulllinie,
 und dazu ist die Fläche zwischen „Verbrauch ⌀“ und „kcal ⌀“ eingefärbt — Petrol,
 wo der Verbrauch darüber liegt, Rot bei einem Überschuss. Farben und Regeln wie
-in den Apps (Weight Tracker, `docs/HEALTHY-CONTRACT.md` §5).
+in den Apps (Weight Tracker, `docs/HEALTHY-CONTRACT.md` §5). Eine Fehlermeldung
+darunter erscheint nur, wenn es für die Person schon einmal Verbrauchswerte gab —
+wer keine Uhr hat, sieht keine rote Zeile.
 
 ## Detailwerte je Person
 

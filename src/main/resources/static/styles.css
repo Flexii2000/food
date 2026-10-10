@@ -528,36 +528,6 @@ main {
     white-space: nowrap;
 }
 
-/* Verbrauch und Defizit unter dem kcal-Tacho: leiser als der Tacho, aber mit
-   eigener Trennlinie - es ist die Bilanz des Tages, nicht noch ein Makro. */
-.energy-row {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    margin-top: 18px;
-    padding-top: 16px;
-    border-top: 1px solid var(--line);
-    text-align: center;
-    text-wrap: balance;
-    font-variant-numeric: tabular-nums;
-}
-
-.energy-row[hidden] { display: none; }
-
-.energy-line {
-    margin: 0;
-    font-size: 0.875rem;
-    color: var(--text-2);
-}
-
-.energy-balance {
-    margin: 0;
-    font-size: 1.0625rem;
-    font-weight: 650;
-    letter-spacing: -0.01em;
-}
-
 /* Die Detailwerte des Tages (nur wer sie erfasst): vier Zahlen ohne Ziel und
    ohne Tacho, gesetzt wie eine Naehrwerttabelle - Name links, Wert rechts -
    und bewusst leiser als alles darueber. */
