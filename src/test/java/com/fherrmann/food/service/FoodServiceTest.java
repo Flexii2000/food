@@ -256,6 +256,38 @@ class FoodServiceTest {
         assertThat(after.consumed().kcal()).isZero();
     }
 
+    /** Die App vergibt die Kennung (seit 12.10.): ohne Netz schon berichtigen, nachsenden ohne Doppel. */
+    @Test
+    void anEntryKeepsTheIdTheAppGaveItAndIsNotAddedTwice() {
+        String id = "3f2a8c1e-5b7d-4e9a-8c6f-1d2e3f4a5b6c";
+        DaySummary day = service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, Meal.LUNCH, id));
+        assertThat(day.entries()).hasSize(1);
+        assertThat(day.entries().get(0).id()).isEqualTo(id);
+
+        // Die Antwort ging verloren, die App schickt noch einmal - auch mit anderem Tag.
+        DaySummary again = service.addEntry(ME,
+                new NewEntryRequest(TODAY.minusDays(1), null, skyr(), 300.0, Meal.LUNCH, id));
+        assertThat(again.date()).isEqualTo(TODAY);
+        assertThat(again.entries()).hasSize(1);
+        assertThat(service.day(ME, TODAY.minusDays(1)).entries()).isEmpty();
+
+        DaySummary corrected = service.updateEntry(ME, id, new UpdateEntryRequest(150.0, null, null));
+        assertThat(corrected.entries().get(0).grams()).isEqualTo(150.0);
+        assertThat(service.deleteEntry(ME, id).entries()).isEmpty();
+    }
+
+    @Test
+    void anIdThatIsNoUuidIsRefused() {
+        assertThatThrownBy(() -> service.addEntry(ME,
+                new NewEntryRequest(TODAY, null, skyr(), 300.0, null, "Eintrag-1")))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Die Kennung ist keine UUID.");
+        assertThat(service.day(ME, TODAY).entries()).isEmpty();
+        // Ohne Kennung wie bisher: der Dienst vergibt eine.
+        DaySummary day = service.addEntry(ME, new NewEntryRequest(TODAY, null, skyr(), 300.0, null, " "));
+        assertThat(day.entries().get(0).id()).hasSize(36);
+    }
+
     @Test
     void dailyTotalsCoverOnlyDaysWithEntriesInsideTheRange() {
         service.addEntry(ME, new NewEntryRequest(TODAY.minusDays(2), null, skyr(), 300.0, null));

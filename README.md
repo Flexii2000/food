@@ -731,7 +731,7 @@ vier Zahlen noch zusammenpassen.
 | POST    | `/api/food/dishes`        | Gericht anlegen                                         |
 | PUT     | `/api/food/dishes/{id}`   | Gericht korrigieren                                     |
 | DELETE  | `/api/food/dishes/{id}`   | Gericht vergessen (Einträge bleiben)                    |
-| POST    | `/api/food/entries`       | Menge eintragen (mit `meal`)                            |
+| POST    | `/api/food/entries`       | Menge eintragen (mit `meal`); optional `id` — die Kennung der App (kleingeschriebene UUID, seit 12.10.): dieselbe noch einmal legt nichts doppelt an, sondern liefert den Tag des vorhandenen Eintrags (Nachsenden ohne Netz); keine UUID → 400 |
 | DELETE  | `/api/food/entries/{id}`  | Eintrag löschen                                         |
 | PUT | `/api/food/entries/{id}` | `{grams, meal?, date?}` — Menge, Mahlzeit oder Tag berichtigen; Name und Nährwerte je 100 g bleiben, wie sie beim Eintragen waren. Antwort: der Tag, auf dem der Eintrag danach liegt |
 | GET     | `/api/food/targets`       | Tagesziele                                              |

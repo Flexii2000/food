@@ -18,7 +18,15 @@ import java.time.LocalDate;
  * @param grams  amount eaten in grams
  * @param meal   zu welcher Mahlzeit; ohne Angabe {@link Meal#SNACK}, weil der
  *               Eintrag sonst in keinem Abschnitt der Tagesliste auftauchen wuerde
+ * @param id     die Kennung, die die App dem Eintrag gibt (kleingeschriebene UUID, seit
+ *               12.10.) - so laesst er sich ohne Netz schon berichtigen oder loeschen, und
+ *               ein nachgesendetes Anlegen legt nichts doppelt an; ohne Angabe vergibt der
+ *               Dienst eine
  */
 public record NewEntryRequest(
-        LocalDate date, String dishId, DishRequest dish, Double grams, Meal meal) {
+        LocalDate date, String dishId, DishRequest dish, Double grams, Meal meal, String id) {
+
+    public NewEntryRequest(LocalDate date, String dishId, DishRequest dish, Double grams, Meal meal) {
+        this(date, dishId, dish, grams, meal, null);
+    }
 }

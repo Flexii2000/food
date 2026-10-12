@@ -41,6 +41,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
 import java.util.function.BiFunction;
 import java.util.Optional;
 import java.util.UUID;
@@ -64,6 +65,8 @@ public class FoodService {
 
     /** Guards against a typo turning into a nonsense day total. Nothing edible comes close. */
     private static final double MAX_GRAMS = 20_000;
+    /** Die Kennung, die eine App einem neuen Eintrag mitgibt - wie bei To-Do und Einkauf. */
+    private static final Pattern CLIENT_ID = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
     private static final double MAX_KCAL_PER_100G = 1_000;
     private static final double MAX_MACRO_PER_100G = 100;
     private static final int MAX_NAME_LENGTH = 80;
@@ -335,10 +338,20 @@ public class FoodService {
         if (request == null) {
             throw badRequest("request body is required");
         }
+        String clientId = clientId(request.id());
         double grams = requirePositive(request.grams(), "grams", MAX_GRAMS);
         LocalDate date = request.date() == null ? today() : request.date();
 
         FoodData data = repository.load(user);
+        if (clientId != null) {
+            // Schon da: ein Nachsenden, dessen Antwort verloren ging - nichts doppelt anlegen.
+            FoodEntry known = data.entries().stream()
+                    .filter(e -> clientId.equals(e.id()))
+                    .findFirst().orElse(null);
+            if (known != null) {
+                return day(user, known.date());
+            }
+        }
         List<Dish> dishes = new ArrayList<>(data.dishes());
 
         Dish dish;
@@ -372,7 +385,7 @@ public class FoodService {
 
         List<FoodEntry> entries = new ArrayList<>(data.entries());
         entries.add(new FoodEntry(
-                UUID.randomUUID().toString(),
+                clientId != null ? clientId : UUID.randomUUID().toString(),
                 date,
                 dish.id(),
                 dish.name(),
@@ -679,6 +692,18 @@ public class FoodService {
                 .toList();
         repository.save(user, data.with(data.dishes(), entries));
         return day(user, date);
+    }
+
+    /** Die Kennung der App, wenn sie eine mitschickt - sonst {@code null}. */
+    private static String clientId(String id) {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+        String clean = id.trim();
+        if (!CLIENT_ID.matcher(clean).matches()) {
+            throw badRequest("Die Kennung ist keine UUID.");
+        }
+        return clean;
     }
 
     /** Removes one entry. Returns the refreshed day it belonged to. */
