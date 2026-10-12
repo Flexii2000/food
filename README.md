@@ -64,7 +64,7 @@ Tages steht im Dashboard der Apps).
 Im **Verlauf** sind „Verbrauch ⌀“ und „Defizit ⌀“ vorgewählt: der Verbrauch im
 7-Tage-Mittel auf der kcal-Achse, das Defizit im 7-Tage-Mittel (nur getrackte
 Tage, `deficitAvg7`) auf einer eigenen Skala rechts mit gestrichelter Nulllinie,
-und dazu ist die Fläche zwischen „Verbrauch ⌀“ und „kcal ⌀“ eingefärbt — Petrol,
+und dazu ist die Fläche zwischen „Verbrauch ⌀“ und „kcal ⌀“ eingefärbt — Orange,
 wo der Verbrauch darüber liegt, Rot bei einem Überschuss. Farben und Regeln wie
 in den Apps (Weight Tracker, `docs/HEALTHY-CONTRACT.md` §5). Eine Fehlermeldung
 darunter erscheint nur, wenn es für die Person schon einmal Verbrauchswerte gab —
