@@ -998,11 +998,11 @@ für `food.fherrmann.com`, sonst scheitert certbot.
 fehlgeschlagenen Health-Check automatisch zurück):
 
 ```bash
-ssh -t HeimServerRemote '~/scripts/update-food.sh'
+ssh HeimServerLocal '~/services/food/deploy/update-food.sh'
 ```
 
-Beide Skripte liegen im Repo unter `deploy/` und werden von dort nach
-`~/scripts/` kopiert. `/opt/food/data/` fasst keines davon an.
+Läuft ohne Passwort, also auch für Agenten: installiert wird über `/usr/local/sbin/update-service.sh` (Regel `/etc/sudoers.d/23-agent-deploy`, eingerichtet mit `~/scripts/setup-agent-deploy.sh`). `~/scripts/update-food.sh` ist eine Kopie davon
+(aufgefrischt von `setup-feature-requests.sh`, nie während eines Updates). `/opt/food/data/` fasst keines davon an.
 
 **Persönliche Zugänge** (Token für Kalorienzähler und Weight Tracker,
 Schnellerfassung, Verzeichnis der Android-App, Firebase, nginx ohne Gate) —

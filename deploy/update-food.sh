@@ -6,29 +6,29 @@ set -euo pipefail
 #     ~/scripts/update-food.sh
 #
 # Baut auf dem Server aus ~/services/food und installiert das Ergebnis nach
-# /opt/food. Der Build laeuft bewusst als flexii, nur die Installation braucht
-# Root - deshalb NICHT das ganze Skript mit sudo starten.
+# /opt/food. Der Build laeuft bewusst als flexii, installiert wird ueber das
+# Root-Skript update-service.sh - ohne Passwort, also auch fuer Agenten. NICHT mit
+# sudo starten.
 #
 # /opt/food/data/ wird BEWUSST nicht angefasst: food.json ist die Live-Quelle,
 # die die App selbst fortschreibt (Gerichte, Eintraege, Tagesziele).
 
 BUILD_DIR="$HOME/services/food"
-APP_DIR="/opt/food"
-TARGET="$APP_DIR/app.jar"
 JAR="$BUILD_DIR/build/libs/Food-0.0.1-SNAPSHOT.jar"
 JAVA="/opt/java/jdk-25.0.1+8/bin/java"
-PORT=48180
+STAGING="$HOME/staging/food"
+ROOT_SCRIPT="/usr/local/sbin/update-service.sh"
 
 [[ $EUID -ne 0 ]] || { echo "Bitte OHNE sudo starten - das Skript ruft sudo selbst auf." >&2; exit 1; }
 
-echo "[1/6] git pull ..."
+echo "[1/5] git pull ..."
 git -C "$BUILD_DIR" pull --ff-only
 
-echo "[2/6] Jar bauen ..."
+echo "[2/5] Jar bauen ..."
 (cd "$BUILD_DIR" && JAVA_HOME="$(dirname "$(dirname "$JAVA")")" ./gradlew bootJar --quiet)
 [[ -f "$JAR" ]] || { echo "    FEHLER: $JAR fehlt." >&2; exit 1; }
 
-echo "[3/6] Agent-Dateien auffrischen ..."
+echo "[3/5] Agent-Dateien auffrischen ..."
 # Kontext und Rechte der Schnellerfassung liegen ausserhalb des Repos, wandern
 # aber mit jedem Deploy nach - sonst arbeitet der Agent nach einer veralteten
 # CLAUDE.md weiter, ohne dass das irgendwo auffiele.
@@ -55,29 +55,12 @@ if [ -d "$STORY_AGENT_DIR" ] && [ -d "$BUILD_DIR/deploy/story-agent" ]; then
     echo "    Story-Agent aktualisiert."
 fi
 
-echo "[4/6] Laufendes Jar sichern ..."
-BACKUP="$TARGET.bak-$(date +%Y%m%d-%H%M%S)"
-sudo cp -p "$TARGET" "$BACKUP"
-echo "    Backup: $BACKUP"
+echo "[4/5] Jar bereitlegen ..."
+mkdir -p "$STAGING"
+cp "$JAR" "$STAGING/app.jar"
 
-echo "[5/6] Installieren und neu starten ..."
-sudo install -o food -g food -m 644 "$JAR" "$TARGET"
-sudo systemctl restart food
-
-echo "[6/6] Health-Check ..."
-for i in $(seq 1 30); do
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:$PORT/" || true)"
-    # Ohne Cookie ist 403 die richtige Antwort; jeder Status heisst "App bedient".
-    if [[ "$code" != "000" ]]; then
-        echo "    OK (HTTP $code)"
-        echo "food erfolgreich aktualisiert."
-        exit 0
-    fi
-    sleep 1
-done
-
-echo "    FEHLER: App antwortet nicht. Rollback auf $BACKUP ..." >&2
-sudo install -o food -g food -m 644 "$BACKUP" "$TARGET"
-sudo systemctl restart food
-echo "    Zurueckgerollt. Logs: journalctl -u food -n 50" >&2
-exit 1
+echo "[5/5] Installieren ..."
+# Ohne Passwort ueber /usr/local/sbin/update-service.sh und die Regel
+# /etc/sudoers.d/23-agent-deploy (~/scripts/setup-agent-deploy.sh, SERVER-CONTEXT.md):
+# sichern, installieren, neu starten, pruefen, notfalls zurueckrollen.
+sudo "$ROOT_SCRIPT" food
