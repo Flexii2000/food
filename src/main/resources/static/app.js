@@ -131,6 +131,8 @@ const CHART_COLORS = {
     // Das Defizit im 7-Tage-Mittel auf eigener Skala; die Flaeche zwischen Verbrauch
     // und Aufnahme nimmt dieselbe Farbe blass, einen Ueberschuss in Rot.
     deficit: '--chart-deficit',
+    // Der Tageswert des Defizits, blasser und duenner - wie kcal (Tag) zum Mittel.
+    deficitDay: '--chart-deficit-day',
     deficitFill: '--chart-deficit-fill',
     surplusFill: '--chart-surplus-fill',
     grid: '--chart-grid',
@@ -193,6 +195,10 @@ let showExpenditure = true;
 // Verbrauch und Aufnahme - im Verlauf hier vorgewaehlt (Felix, 09.10.).
 const DEFICIT_SERIES = { key: 'deficit', label: 'Defizit (7-Tage-Mittel)', color: CHART_COLORS.deficit };
 let showDeficit = true;
+// Der Tageswert des Defizits (Felix, 23.10.): nur angeboten, und nur abgeschlossene Tage -
+// heute ist eine Prognose.
+const DEFICIT_DAY_SERIES = { key: 'deficitDay', label: 'Defizit (Tag)', color: CHART_COLORS.deficitDay };
+let showDeficitDay = false;
 let energyByDate = {};
 let energyError = null;
 // Ob es fuer diese Person je Verbrauchswerte gab. Wer keine Uhr hat, soll keine
@@ -1757,11 +1763,19 @@ async function loadHistory() {
         fetchJson(`/api/food/daily?from=${from}&to=${to}`),
         fetchJson(`/api/food/daily-average?from=${from}&to=${to}`),
         wantsWeight && weightDays < neededWeightDays ? loadWeightSeries(neededWeightDays) : Promise.resolve(),
-        showExpenditure || showDeficit ? loadEnergy(from, to) : Promise.resolve(),
+        showExpenditure || showDeficit || showDeficitDay ? loadEnergy(from, to) : Promise.resolve(),
     ]);
     dailyTotals = totals || [];
     dailyAverages = averages || [];
     renderHistory(from, to);
+}
+
+/** Je Datum der Tageswert des Defizits; heute (Prognose) und Tage ohne Wert sind null. */
+function dailyDeficits(labels) {
+    return labels.map(d => {
+        const day = energyByDate[d];
+        return day && !day.projected ? day.deficitKcal ?? null : null;
+    });
 }
 
 /** "500", "0", "−250" - ganze kcal mit echtem Minus. */
@@ -1774,9 +1788,14 @@ function signedKcal(value) {
  * Die Skala des Defizits rechts: eigene Grenzen, die die Null immer einschliessen, und
  * von ihrem Raster nur die Nulllinie, gestrichelt in der Defizit-Farbe. Darueber
  * Defizit, darunter Ueberschuss. Steht rechts schon die kg-Achse, kommt sie daneben.
+ * Die Tageswerte schwanken weiter als das Mittel; die Skala schliesst sie ein, solange
+ * "Defizit (Tag)" an ist.
  */
 function deficitScale(labels, color) {
     const values = labels.map(d => energyByDate[d]?.deficitAvg7).filter(v => v != null);
+    if (showDeficitDay) {
+        values.push(...dailyDeficits(labels).filter(v => v != null));
+    }
     const lo = Math.min(0, ...values);
     const hi = Math.max(0, ...values);
     const step = hi - lo > 1500 ? 500 : 250;
@@ -1785,7 +1804,7 @@ function deficitScale(labels, color) {
     const axisFont = { size: 11 };
     return {
         position: 'right',
-        display: showDeficit,
+        display: showDeficit || showDeficitDay,
         min,
         max,
         grid: {
@@ -1939,6 +1958,26 @@ function renderHistory(from, to) {
             order: 6,
         });
     }
+    if (showDeficitDay) {
+        const deficitDay = dailyDeficits(labels);
+        datasets.push({
+            type: 'line',
+            label: 'Defizit',
+            data: deficitDay,
+            borderColor: color.deficitDay,
+            backgroundColor: color.deficitDay,
+            borderWidth: 1.5,
+            // Tage ohne Wert sind unbekannt, nicht null - wie bei kcal (Tag).
+            spanGaps: false,
+            pointRadius: ctx => (isolatedPoint(deficitDay, ctx.dataIndex) ? 3 : 0),
+            pointBackgroundColor: color.deficitDay,
+            pointHoverRadius: 4,
+            tension: 0.25,
+            yAxisID: 'yDeficit',
+            // Hinter dem Mittel.
+            order: 7,
+        });
+    }
     datasets.push({
         type: 'line',
         label: 'Tagesziel',
@@ -2072,7 +2111,7 @@ function renderHistory(from, to) {
         labels.some(d => d in weightByDate[series.key]));
     const energyMsg = document.getElementById('history-energy-msg');
     const spentInRange = labels.some(d => energyByDate[d]?.expenditureAvg7 != null);
-    if (!(showExpenditure || showDeficit) || !energySeen()) {
+    if (!(showExpenditure || showDeficit || showDeficitDay) || !energySeen()) {
         energyMsg.textContent = '';
     } else if (energyError) {
         energyMsg.textContent = `Verbrauch nicht verfügbar: ${energyError} (Weight Tracker unter ${WEIGHT_API})`;
@@ -2160,6 +2199,16 @@ function initHistoryControls() {
             await loadHistory();
         });
         toggles.appendChild(buildToggle(checkbox, DEFICIT_SERIES));
+    }
+    {
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = showDeficitDay;
+        checkbox.addEventListener('change', async () => {
+            showDeficitDay = checkbox.checked;
+            await loadHistory();
+        });
+        toggles.appendChild(buildToggle(checkbox, DEFICIT_DAY_SERIES));
     }
     WEIGHT_SERIES.forEach(series => {
         const checkbox = document.createElement('input');

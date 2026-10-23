@@ -68,7 +68,9 @@ und dazu ist die Fläche zwischen „Verbrauch ⌀“ und „kcal ⌀“ eingef�
 wo der Verbrauch darüber liegt, Rot bei einem Überschuss. Farben und Regeln wie
 in den Apps (Weight Tracker, `docs/HEALTHY-CONTRACT.md` §5). Eine Fehlermeldung
 darunter erscheint nur, wenn es für die Person schon einmal Verbrauchswerte gab —
-wer keine Uhr hat, sieht keine rote Zeile.
+wer keine Uhr hat, sieht keine rote Zeile. Dahinter wird **„Defizit (Tag)“** angeboten
+(seit 2026-10-23, nicht vorgewählt): der Tageswert `deficitKcal` jedes abgeschlossenen
+Tages, blasser und dünner auf derselben Skala — heute nie, Tage ohne Wert sind Lücken.
 
 ## Detailwerte je Person
 
