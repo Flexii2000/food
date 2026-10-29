@@ -69,7 +69,7 @@ public class FoodService {
     private static final Pattern CLIENT_ID = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
     private static final double MAX_KCAL_PER_100G = 1_000;
     private static final double MAX_MACRO_PER_100G = 100;
-    private static final int MAX_NAME_LENGTH = 80;
+    private static final int MAX_NAME_LENGTH = 120;
 
     /** Die Begruendungen, wenn der vegane Modus etwas ablehnt - die Clients zeigen sie so an. */
     static final String VEGAN_ONLY_ENTRIES = "Im veganen Modus lassen sich nur vegane Gerichte eintragen.";

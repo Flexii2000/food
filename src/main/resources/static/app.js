@@ -1008,7 +1008,7 @@ function buildDishRow(dish) {
     // das CSS sie aus (die erste Zeile dient als Kopfzeile), vorgelesen wird sie
     // weiterhin.
     row.innerHTML = `
-        <label><span class="lbl">Name</span> <input type="text" value="${escapeHtml(dish.name)}" maxlength="80" required></label>
+        <label><span class="lbl">Name</span> <input type="text" value="${escapeHtml(dish.name)}" maxlength="120" required></label>
         <label><span class="lbl">kcal</span> <input type="number" step="0.1" min="0" max="1000" value="${dish.per100g.kcal}" required></label>
         <label><span class="lbl">E</span> <input type="number" step="0.1" min="0" max="100" value="${dish.per100g.proteinG}" required></label>
         <label><span class="lbl">KH</span> <input type="number" step="0.1" min="0" max="100" value="${dish.per100g.carbsG}" required></label>
