@@ -86,6 +86,8 @@ public class SecurityConfig {
                                 .hasAuthority(InternalAccessFilter.PUSH)
                         .requestMatchers(InternalAccessFilter.RECIPE_DISHES_PATH)
                                 .hasAuthority(InternalAccessFilter.RECIPE_DISHES)
+                        .requestMatchers(InternalAccessFilter.RECIPE_CONTEXT_PATH)
+                                .hasAuthority(InternalAccessFilter.RECIPE_CONTEXT)
                         .requestMatchers(InternalAccessFilter.PREFIX + "**").denyAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(privateCookieAuthFilter, UsernamePasswordAuthenticationFilter.class)

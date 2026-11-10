@@ -9,6 +9,7 @@ import com.fherrmann.food.dto.FrequentDish;
 import com.fherrmann.food.dto.NewEntryRequest;
 import com.fherrmann.food.dto.QuickCaptureRequest;
 import com.fherrmann.food.dto.QuickCapturePreview;
+import com.fherrmann.food.dto.RecipeContext;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.dto.TargetsView;
@@ -381,6 +382,70 @@ public class FoodService {
                         .thenComparing(d -> d.name().toLowerCase(java.util.Locale.ROOT)))
                 .limit(limit)
                 .toList();
+    }
+
+    /** So weit reicht der Blick des Rezept-Chats zurueck - zwei Wochen zeigen, wie die Person isst. */
+    static final int RECIPE_CONTEXT_DAYS = 14;
+    static final int RECIPE_CONTEXT_FREQUENT_DAYS = 90;
+    static final int RECIPE_CONTEXT_FREQUENT = 15;
+    /** Mehr Eintraege an einem Tag sind ein Irrtum - der Auftrag des Chats bleibt klein. */
+    static final int RECIPE_CONTEXT_ENTRIES = 30;
+    /** Dieselbe Regel wie TrackedDay im Weight Tracker und "Track food" in coHabit. */
+    static final double TRACKED_KCAL_SHARE = 0.8;
+    private static final EnumSet<Meal> MAIN_MEALS = EnumSet.of(Meal.BREAKFAST, Meal.LUNCH, Meal.DINNER);
+
+    /**
+     * Was der Rezept-Chat ueber diese eine Person wissen darf (Healthy-Vertrag §11.3):
+     * Ziele, heute, die letzten 14 Tage, was sie oft isst. Nur Ernaehrung, nur sie.
+     */
+    public RecipeContext recipeContext(String user) {
+        FoodData data = repository.load(user);
+        LocalDate today = today();
+        TargetsView targets = targetsView(user, data);
+
+        List<FoodEntry> todays = entriesOn(data, today);
+        Nutrients eaten = sum(todays).rounded();
+        Nutrients remaining = data.targets().minus(sum(todays)).rounded();
+        List<RecipeContext.Eaten> lines = todays.stream()
+                .limit(RECIPE_CONTEXT_ENTRIES)
+                .map(e -> {
+                    Nutrients total = e.total().rounded();
+                    return new RecipeContext.Eaten(e.meal(), e.name(), round1(e.grams()), total.kcal(), total.proteinG());
+                })
+                .toList();
+
+        List<RecipeContext.Day> days = dailyTotals(user, today.minusDays(RECIPE_CONTEXT_DAYS), today.minusDays(1))
+                .stream()
+                .map(day -> {
+                    Nutrients consumed = day.consumed();
+                    boolean tracked = (targets.kcal() > 0 && consumed.kcal() >= TRACKED_KCAL_SHARE * targets.kcal())
+                            || day.meals().containsAll(MAIN_MEALS);
+                    return new RecipeContext.Day(day.date(), consumed.kcal(), consumed.proteinG(),
+                            consumed.carbsG(), consumed.fatG(), tracked);
+                })
+                .toList();
+        List<RecipeContext.Day> week = days.stream()
+                .filter(RecipeContext.Day::tracked)
+                .filter(day -> !day.date().isBefore(today.minusDays(7)))
+                .toList();
+        RecipeContext.Average average = week.isEmpty() ? null : new RecipeContext.Average(week.size(),
+                Math.round(week.stream().mapToDouble(RecipeContext.Day::kcal).average().orElse(0)),
+                Math.round(week.stream().mapToDouble(RecipeContext.Day::proteinG).average().orElse(0)));
+
+        List<RecipeContext.Favorite> frequent = frequentDishes(user, RECIPE_CONTEXT_FREQUENT_DAYS, RECIPE_CONTEXT_FREQUENT)
+                .stream()
+                .map(d -> new RecipeContext.Favorite(d.name(), d.count(), d.avgGrams(), d.kcalPer100g(), d.proteinPer100g()))
+                .toList();
+
+        return new RecipeContext(today,
+                new RecipeContext.Goals(targets.kcal(), targets.proteinG(), targets.proteinMinG(),
+                        targets.carbsG(), targets.fatG()),
+                new RecipeContext.Today(macros(eaten), macros(remaining), lines),
+                days, average, frequent, data.veganModeOn());
+    }
+
+    private static RecipeContext.Macros macros(Nutrients n) {
+        return new RecipeContext.Macros(n.kcal(), n.proteinG(), n.carbsG(), n.fatG());
     }
 
     private static double round1(double value) {

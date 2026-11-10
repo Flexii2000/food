@@ -31,24 +31,28 @@ import java.util.List;
  *       Browsern, und ein Browser soll hier nie etwas ausloesen koennen.</li>
  *   <li><b>Je Endpunkt ein eigener Schluessel.</b> {@code /push} nimmt nur den
  *       Bearer-Token der Eigentuemerin (den hat der Weight Tracker ohnehin, er liest
- *       dieselbe Token-Liste). {@code /recipe-dishes} nimmt nur den Dienst-Token der
- *       Einkaufsliste - der ist keine Person und oeffnet sonst nichts; so muss in der
- *       Einkaufsliste kein persoenlicher Token liegen.</li>
+ *       dieselbe Token-Liste). {@code /recipe-dishes} und {@code /recipe-context} nehmen
+ *       nur den Dienst-Token der Einkaufsliste - der ist keine Person und oeffnet sonst
+ *       nichts; so muss in der Einkaufsliste kein persoenlicher Token liegen.</li>
  * </ul>
  *
  * <p>Wer durchkommt, traegt genau das eine Recht fuer seinen Endpunkt
- * ({@link #PUSH} bzw. {@link #RECIPE_DISHES}); {@link SecurityConfig} verlangt es dort.
+ * ({@link #PUSH}, {@link #RECIPE_DISHES} bzw. {@link #RECIPE_CONTEXT}); {@link SecurityConfig}
+ * verlangt es dort.
  */
 public class InternalAccessFilter extends OncePerRequestFilter {
 
     public static final String PREFIX = "/api/internal/";
     public static final String PUSH_PATH = "/api/internal/push";
     public static final String RECIPE_DISHES_PATH = "/api/internal/recipe-dishes";
+    public static final String RECIPE_CONTEXT_PATH = "/api/internal/recipe-context";
 
     /** Das Recht, eine Mitteilung an die Geraete einer Person zu schicken. */
     public static final String PUSH = "INTERNAL_PUSH";
     /** Das Recht, ein Rezept als Gericht in Tagebuecher zu legen. */
     public static final String RECIPE_DISHES = "INTERNAL_RECIPE_DISHES";
+    /** Das Recht, Ziele und Essen einer Person fuer den Rezept-Chat zu lesen. */
+    public static final String RECIPE_CONTEXT = "INTERNAL_RECIPE_CONTEXT";
 
     /** Als wer der Dienst-Token der Einkaufsliste angemeldet ist - bewusst kein gueltiger Personenname. */
     public static final String RECIPE_SERVICE = "internal:recipes";
@@ -89,13 +93,13 @@ public class InternalAccessFilter extends OncePerRequestFilter {
             if (bearer != null && users.nameFor(bearer).filter(users::isOwner).isPresent()) {
                 authenticate(users.owner(), PUSH);
             }
-        } else if (path.equals(RECIPE_DISHES_PATH)) {
+        } else if (path.equals(RECIPE_DISHES_PATH) || path.equals(RECIPE_CONTEXT_PATH)) {
             if (recipeToken.length == 0) {
                 notFound(response);
                 return;
             }
             if (bearer != null && MessageDigest.isEqual(bearer.getBytes(StandardCharsets.UTF_8), recipeToken)) {
-                authenticate(RECIPE_SERVICE, RECIPE_DISHES);
+                authenticate(RECIPE_SERVICE, path.equals(RECIPE_DISHES_PATH) ? RECIPE_DISHES : RECIPE_CONTEXT);
             }
         }
         chain.doFilter(request, response);

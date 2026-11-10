@@ -111,6 +111,49 @@ class InternalEndpointsIT {
         assertThat(dishes.get(0).path("per100g").path("kcal").asDouble()).isEqualTo(160.0);
     }
 
+    /**
+     * Der Zusammenhang fuer den Rezept-Chat traegt genau die eine Person, nach der gefragt
+     * wird - was eine andere gegessen hat, steht nie darin.
+     */
+    @Test
+    void theRecipeContextHoldsOnlyThePersonAskedFor() throws Exception {
+        assertThat(call("POST", "/api/food/entries", FELIX, entry("Gericht C")).statusCode() / 100).isEqualTo(2);
+        assertThat(call("POST", "/api/food/entries", TORBEN, entry("Gericht D")).statusCode() / 100).isEqualTo(2);
+
+        HttpResponse<String> torben = call("POST", "/api/internal/recipe-context", RECIPES, "{\"person\":\"torben\"}");
+        assertThat(torben.statusCode()).isEqualTo(200);
+        assertThat(torben.body()).contains("Gericht D").doesNotContain("Gericht C").doesNotContain("felix");
+        JsonNode context = mapper.readTree(torben.body());
+        assertThat(context.path("targets").path("kcal").asDouble()).isPositive();
+        assertThat(context.path("targets").has("proteinMinG")).isTrue();
+        assertThat(context.path("today").path("eaten").path("kcal").asDouble()).isEqualTo(300.0);
+        assertThat(context.path("today").path("entries").get(0).path("meal").asString()).isEqualTo("LUNCH");
+        assertThat(context.path("frequent").get(0).path("name").asString()).isEqualTo("Gericht D");
+
+        HttpResponse<String> felix = call("POST", "/api/internal/recipe-context", RECIPES, "{\"person\":\"felix\"}");
+        assertThat(felix.body()).contains("Gericht C").doesNotContain("Gericht D");
+    }
+
+    @Test
+    void theRecipeContextFollowsTheRulesOfTheInternalDoor() throws Exception {
+        String body = "{\"person\":\"felix\"}";
+        assertThat(call("POST", "/api/internal/recipe-context", RECIPES, body, "X-Real-IP", "203.0.113.7")
+                .statusCode()).isEqualTo(404);
+        // Ein persoenlicher Token oder der Privat-Cookie oeffnet ihn nicht - nur der Dienst-Token.
+        assertThat(call("POST", "/api/internal/recipe-context", FELIX, body).statusCode()).isEqualTo(403);
+        assertThat(call("POST", "/api/internal/recipe-context", null, body, "Cookie", "fh_private=testtoken")
+                .statusCode()).isEqualTo(403);
+        HttpResponse<String> unknown = call("POST", "/api/internal/recipe-context", RECIPES, "{\"person\":\"joana\"}");
+        assertThat(unknown.statusCode()).isEqualTo(404);
+        assertThat(unknown.body()).contains("unknown person");
+        assertThat(call("POST", "/api/internal/recipe-context", RECIPES, "{}").statusCode()).isEqualTo(400);
+    }
+
+    private static String entry(String name) {
+        return "{\"dish\":{\"name\":\"" + name + "\",\"kcal\":120,\"proteinG\":10,\"carbsG\":10,\"fatG\":4},"
+                + "\"grams\":250,\"meal\":\"LUNCH\"}";
+    }
+
     /** Werte ausserhalb der Grenzen eines Gerichts: je Person "rejected" mit dem Grund, kein Fehlerstatus. */
     @Test
     void aDishOutsideTheLimitsIsRejectedPerPerson() throws Exception {

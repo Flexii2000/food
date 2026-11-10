@@ -1,6 +1,8 @@
 package com.fherrmann.food.controller;
 
 import com.fherrmann.food.dto.InternalPushRequest;
+import com.fherrmann.food.dto.RecipeContext;
+import com.fherrmann.food.dto.RecipeContextRequest;
 import com.fherrmann.food.dto.RecipeDishResult;
 import com.fherrmann.food.dto.RecipeDishesRequest;
 import com.fherrmann.food.push.PushNotifier;
@@ -33,6 +35,8 @@ import java.util.regex.Pattern;
  *       Stupser, Serien-Warnung): nur der Kalorienzaehler kennt die Geraete.</li>
  *   <li>{@code /recipe-dishes} - die Einkaufsliste legt ein gekochtes Rezept als Gericht
  *       in die Tagebuecher der Personen, die mitessen.</li>
+ *   <li>{@code /recipe-context} - die Einkaufsliste holt fuer ihren Rezept-Chat Ziele und
+ *       Essen der <b>einen</b> Person, die gerade fragt.</li>
  * </ul>
  */
 @RestController
@@ -145,6 +149,24 @@ public class InternalController {
             }
         }
         return results;
+    }
+
+    /**
+     * Ziele, heute und die letzten zwei Wochen einer Person - fuer den Rezept-Chat, damit
+     * er "Wie passt das zu meinen Zielen?" beantworten kann. Immer genau eine Person: die
+     * Einkaufsliste fragt fuer die, die schreibt, und gibt die Antwort nur an deren Chat.
+     * Wer hier keine Healthy-Person ist, bekommt 404 - der Chat laeuft dann ohne.
+     */
+    @PostMapping("/recipe-context")
+    public RecipeContext recipeContext(@RequestBody(required = false) RecipeContextRequest request) {
+        String person = request == null || request.person() == null ? "" : request.person().trim();
+        if (person.isEmpty()) {
+            throw badRequest("person is required");
+        }
+        if (!users.names().contains(person)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown person");
+        }
+        return service.recipeContext(person);
     }
 
     private static ResponseStatusException badRequest(String message) {
