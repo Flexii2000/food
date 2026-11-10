@@ -43,9 +43,15 @@ fi
 # --permission-mode default heisst im headless-Betrieb: was nicht erlaubt ist,
 # wird abgelehnt statt nachgefragt. --output-format json legt einen Umschlag um
 # die Antwort; die App kommt mit beidem klar.
+# --append-system-prompt-file gibt der Sitzung den Auftrag ausdruecklich mit. Darauf, dass
+# Claude Code die CLAUDE.md des Arbeitsverzeichnisses von selbst laedt, ist hier kein
+# Verlass: steht "Read" auf der deny-Liste (.claude/settings.json), laedt die CLI sie
+# nicht (beobachtet am 10.11.2026 mit 2.1.318 - die Sitzung kannte ihren Auftrag nicht
+# und antwortete, wie es ihr gefiel). Die deny-Liste bleibt, wie sie ist.
 exec claude -p \
     --model "$MODEL" \
     --tools "" \
     --strict-mcp-config \
     --permission-mode default \
-    --output-format json
+    --output-format json \
+    --append-system-prompt-file "$AGENT_DIR/CLAUDE.md"
