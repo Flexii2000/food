@@ -1228,7 +1228,19 @@ ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh torben'
 ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --detailed --micronutrients torben'
 # mit Push an Android, Dienstkonto vorher nach ~ kopiert:
 ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --fcm-key ~/fcm-healthy.json torben'
+# mit Chat und Morgen-Briefing in Healthy für die genannten Personen:
+ssh -t HeimServerRemote '~/services/food/deploy/setup-health-users.sh --chat joana'
 ```
+
+`--chat` (seit 2026-11-10) trägt die Personen in `HEALTH_CHAT_PEOPLE` in
+`/etc/health-viz.env` ein — der Chat läuft im Weight Tracker, aber wer
+dazukommt, entscheidet sich hier, wo die Person angelegt wird. Wie bei den
+Detailwerten wird nur hinzugefügt, nie weggenommen. Leer heißt dort „nur die
+Eigentümerin“; deshalb kommt sie beim ersten Eintrag ausdrücklich mit hinein
+(`felix,joana`), sonst nähme ihr die erste weitere Person den Chat weg. Ohne
+`--chat` bleibt die Zeile, wie sie ist. Das Skript installiert außerdem bei
+jedem Lauf die nginx-Datei neu — seit 2026-11-10 mit der Sperre für
+`/api/internal/`.
 
 **Feature Requests** (Story-Agent unter `~/services/story-agent`, sudo-Regel
 `/etc/sudoers.d/21-story-agent`, `FOOD_STORY_AGENT_COMMAND` nur bei gelungener

@@ -25,6 +25,9 @@ set -euo pipefail
 #     --micronutrients       die genannten Personen erfassen auch
 #                            Mikronaehrstoffe (7 Vitamine, 7 Mineralstoffe,
 #                            mit Tageszielen)
+#     --chat                 die genannten Personen bekommen den Chat und das
+#                            Morgen-Briefing in Healthy (HEALTH_CHAT_PEOPLE im
+#                            Weight Tracker; laeuft auf Felix' Claude-Login)
 #
 # Idempotent: vorhandene Token bleiben, wie sie sind; nur wer noch keinen hat,
 # bekommt einen. Ohne Namen richtet es nur Verzeichnis, nginx und ggf. Firebase
@@ -56,6 +59,7 @@ FCM_KEY=""
 QUICK_CAPTURE=1
 DETAILED=0
 MICRONUTRIENTS=0
+CHAT=0
 PEOPLE=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -63,6 +67,7 @@ while [[ $# -gt 0 ]]; do
         --no-quick-capture) QUICK_CAPTURE=0; shift ;;
         --detailed) DETAILED=1; shift ;;
         --micronutrients) MICRONUTRIENTS=1; shift ;;
+        --chat) CHAT=1; shift ;;
         -*) fail "Unbekannte Option $1" ;;
         *) PEOPLE+=("$1"); shift ;;
     esac
@@ -144,7 +149,7 @@ if sudo test -f "$HABITS_ENV" && sudo grep -q '^HEALTH_TOKENS=' "$HABITS_ENV"; t
     echo "    ebenso in $HABITS_ENV (coHabit)."
 fi
 
-step "2/6 Schnellerfassung, Detailwerte und Mikronaehrstoffe"
+step "2/6 Schnellerfassung, Detailwerte, Mikronaehrstoffe und Chat"
 ALLOWED="$(get_env "$FOOD_ENV" FOOD_QUICK_CAPTURE)"
 ALLOWED="${ALLOWED:-$OWNER}"
 if [[ "$ALLOWED" != "*" && $QUICK_CAPTURE -eq 1 ]]; then
@@ -178,6 +183,22 @@ fi
 if [[ -n "$MICRO_PEOPLE" ]]; then
     set_env "$FOOD_ENV" FOOD_MICRONUTRIENTS "$MICRO_PEOPLE"
     echo "    Mikronaehrstoffe: $MICRO_PEOPLE"
+fi
+
+# Chat und Morgen-Briefing (Weight Tracker): ebenfalls nur hinzufuegen, nie
+# wegnehmen. Leer heisst dort "nur die Eigentuemerin" - deshalb kommt sie beim
+# ersten Eintrag ausdruecklich mit hinein, sonst naehme ihr die erste weitere
+# Person den Chat weg. Ohne --chat bleibt die Zeile, wie sie ist.
+if [[ $CHAT -eq 1 && ${#PEOPLE[@]} -gt 0 ]]; then
+    CHAT_PEOPLE="$(get_env "$WEIGHT_ENV" HEALTH_CHAT_PEOPLE)"
+    if [[ "$CHAT_PEOPLE" != "*" ]]; then
+        CHAT_PEOPLE="${CHAT_PEOPLE:-$OWNER}"
+        for person in "${PEOPLE[@]}"; do
+            [[ ",$CHAT_PEOPLE," == *",$person,"* ]] || CHAT_PEOPLE+=",$person"
+        done
+        set_env "$WEIGHT_ENV" HEALTH_CHAT_PEOPLE "$CHAT_PEOPLE"
+    fi
+    echo "    Chat und Briefing: $CHAT_PEOPLE"
 fi
 
 step "3/6 Verzeichnis fuer die Android-App"
