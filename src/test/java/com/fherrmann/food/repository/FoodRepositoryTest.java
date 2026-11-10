@@ -80,4 +80,41 @@ class FoodRepositoryTest {
         assertThat(repository.load("torben").targets().kcal()).isEqualTo(2800);
         assertThat(java.nio.file.Files.readString(dataFile)).isEqualTo(owners);
     }
+
+    /** Der Eiweiß-Erhalt steht nur in der Datei, wenn er gesetzt ist - und kommt so wieder heraus. */
+    @Test
+    void theProteinFloorRoundTripsAndIsAbsentWhenUnset() throws Exception {
+        FoodRepository repository = repository();
+        repository.save(ME, FoodData.empty());
+        assertThat(java.nio.file.Files.readString(dataFile)).doesNotContain("proteinMinG");
+        assertThat(repository.load(ME).proteinMinG()).isNull();
+
+        repository.save(ME, FoodData.empty().withTargets(new Nutrients(2300, 195, 236, 70),
+                FoodData.DEFAULT_MEAL_SHARES, null, 140.0));
+        assertThat(java.nio.file.Files.readString(dataFile)).contains("\"proteinMinG\" : 140.0");
+        assertThat(repository.load(ME).proteinMinG()).isEqualTo(140.0);
+        assertThat(repository.load(ME).targets().proteinG()).isEqualTo(195.0);
+    }
+
+    /**
+     * Ein Feld, das dieser Stand nicht kennt, hindert das Laden nicht. Das ist die
+     * Lage eines aelteren Jars nach einem Rollback: es findet dann eine Datei mit
+     * {@code proteinMinG} vor und muss sie trotzdem lesen koennen.
+     */
+    @Test
+    void aFileWithAFieldFromANewerVersionStillLoads() throws Exception {
+        java.nio.file.Files.writeString(dataFile, """
+                {
+                  "targets" : { "kcal" : 2300.0, "proteinG" : 195.0, "carbsG" : 236.0, "fatG" : 70.0 },
+                  "dishes" : [ ],
+                  "entries" : [ ],
+                  "ausEinerSpaeterenFassung" : 140.0
+                }
+                """);
+
+        FoodData data = repository().load(ME);
+
+        assertThat(data.targets().proteinG()).isEqualTo(195.0);
+        assertThat(data.dishes()).isEmpty();
+    }
 }
