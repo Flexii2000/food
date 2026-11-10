@@ -29,6 +29,10 @@ import java.util.List;
  * <p>{@code /setup} only ever issues a personal token's cookie. The private-mode cookie
  * stays issued centrally on fherrmann.com - a second place able to mint that one would
  * open far more than this app.
+ *
+ * <p>{@code /api/internal/**} is for other services on the same machine and has its own
+ * door: {@link InternalAccessFilter} decides who gets in there, and nothing a person's
+ * token or cookie did counts.
  */
 @Configuration
 @EnableWebSecurity
@@ -67,12 +71,26 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             PrivateCookieAuthFilter privateCookieAuthFilter,
-            CorsConfigurationSource corsConfigurationSource) throws Exception {
+            CorsConfigurationSource corsConfigurationSource,
+            HealthUsers users,
+            @Value("${food.recipe-token:}") String recipeToken) throws Exception {
+        // Bewusst keine Bean: Spring Boot haengte den Filter sonst ein zweites Mal vor
+        // jede Anfrage, ausserhalb dieser Kette.
+        InternalAccessFilter internalAccessFilter = new InternalAccessFilter(users, recipeToken);
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/setup").permitAll()
+                        // Nur fuer Dienste auf demselben Server, je Endpunkt mit dem einen
+                        // Recht, das der InternalAccessFilter dafuer vergibt.
+                        .requestMatchers(InternalAccessFilter.PUSH_PATH)
+                                .hasAuthority(InternalAccessFilter.PUSH)
+                        .requestMatchers(InternalAccessFilter.RECIPE_DISHES_PATH)
+                                .hasAuthority(InternalAccessFilter.RECIPE_DISHES)
+                        .requestMatchers(InternalAccessFilter.PREFIX + "**").denyAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(privateCookieAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                // Nach dem Personen-Filter: auf den internen Pfaden ersetzt er dessen Ergebnis.
+                .addFilterAfter(internalAccessFilter, PrivateCookieAuthFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(eh -> eh.authenticationEntryPoint((request, response, ex) -> {

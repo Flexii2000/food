@@ -706,6 +706,7 @@ dem Dienstkonto. Geschickt werden **reine Datennachrichten** mit Priorität
 ```
 {kind: "quick-capture", jobId, status: "done"|"failed", title, body}
 {kind: "app-update", versionCode, versionName, title, body}
+{kind: "chat-answer"|"friend-nudge"|"streak-warning", …data, title, body}   (über /api/internal/push)
 ```
 
 Die Dienstkonto-Datei kommt aus der Firebase-Konsole (Projekteinstellungen →
@@ -813,9 +814,12 @@ vier Zahlen noch zusammenpassen.
 | GET     | `/api/app/android`        | `{versionCode, versionName, sizeBytes, sha256}` der veröffentlichten Android-App, 404 ohne |
 | GET     | `/api/app/android/apk`    | die APK selbst                                           |
 | GET     | `/setup?token=`           | Browser mit einem persönlichen Token einrichten (setzt `health_token`) |
+| POST    | `/api/internal/push`      | **nur vom Server selbst:** Mitteilung an die Geräte einer Person (siehe „Interne Endpunkte“) |
+| POST    | `/api/internal/recipe-dishes` | **nur vom Server selbst:** Rezept als Gericht in die Tagebücher legen (siehe „Interne Endpunkte“) |
 
-Alle Endpunkte arbeiten auf dem Tagebuch der Person zum Token. Dazu kommen die
-Feature Requests unter `/feature-requests/api/…` (siehe dort).
+Alle Endpunkte außer den internen arbeiten auf dem Tagebuch der Person zum
+Token. Dazu kommen die Feature Requests unter `/feature-requests/api/…` (siehe
+dort).
 
 POST-Body für einen Eintrag, entweder mit bekanntem Gericht:
 
@@ -913,6 +917,90 @@ deshalb ist sie schaltbar (`FOOD_QUICK_CAPTURE=felix,torben`, `*` = alle, leer
 = nur die Eigentümerin). `/api/food/features` sagt der Oberfläche, ob sie den
 Knopf zeigt.
 
+### Interne Endpunkte (`/api/internal/**`, seit 2026-11-10)
+
+Zwei Endpunkte sind nur für andere Dienste auf demselben Server da
+(Healthy-Vertrag §11.3). Sie rufen den Kalorienzähler direkt unter
+`http://127.0.0.1:48180`, nicht über nginx:
+
+| Pfad | Wer ruft | Schlüssel |
+|---|---|---|
+| `POST /api/internal/push` | der Weight Tracker — Chat-Antwort, Stupser, Serien-Warnung | der **Bearer-Token der Eigentümerin** aus `HEALTH_TOKENS` (den hat er ohnehin) |
+| `POST /api/internal/recipe-dishes` | die Einkaufsliste — ein gekochtes Rezept als Gericht | der **Dienst-Token** `FOOD_RECIPE_TOKEN` |
+
+Eine eigene Schranke (`InternalAccessFilter`) statt einer Erweiterung des
+Personen-Filters, weil hier andere Regeln gelten:
+
+- **Nur von innen.** Eine Anfrage mit `X-Real-IP` kam über nginx, also von
+  außen — sie bekommt **404** mit leerer Antwort, als gäbe es den Pfad nicht.
+  nginx sperrt `/api/internal/` zusätzlich selbst
+  (`deploy/nginx-food.fherrmann.com.conf`); die Prüfung in der App hält, falls
+  diese Zeile dort einmal fehlt.
+- **Kein Cookie zählt.** Der Privat-Cookie liegt in jedem von Felix' Browsern;
+  ein Browser soll hier nie etwas auslösen können. Auch ein ungültiger Bearer
+  fällt nicht auf den Cookie daneben zurück.
+- **Je Endpunkt ein Schlüssel, je Schlüssel ein Recht.** Der Token der
+  Eigentümerin öffnet `/push`, aber nicht `/recipe-dishes`; der Dienst-Token
+  umgekehrt — und er ist **keine Person**: kein Tagebuch, kein anderer
+  Endpunkt. So muss in der Einkaufsliste, die ohne Privat-Gate im Netz steht,
+  kein persönlicher Token liegen (der öffnete Kalorienzähler, Weight Tracker
+  und coHabit), sondern nur einer, mit dem sich Gerichte anlegen lassen.
+- **Ohne `FOOD_RECIPE_TOKEN`** gibt es `/recipe-dishes` nicht (404) — so sieht
+  der Dienst aus, bevor das Setup der Einkaufsliste gelaufen ist.
+- Falscher oder fehlender Schlüssel: 403. Was es unter `/api/internal/` nicht
+  gibt: 403 von innen, 404 von außen.
+
+**`POST /api/internal/push`**
+
+```json
+{ "person": "joana", "kind": "friend-nudge", "title": "Felix", "body": "stupst dich an", "data": {} }
+```
+
+Antwort `{"ios":1,"android":0}` — wie viele Geräte der Person die Mitteilung
+angenommen bekommen haben (von Apple bzw. Google, nicht „angezeigt“). `0/0` ist
+kein Fehler: kein angemeldetes Gerät oder kein Schlüssel. Unbekannte Person
+404; `kind` (klein, mit Bindestrichen) und `title` sind Pflicht, `body` und
+`data` nicht. Die Arten und was die Apps daraus machen: Healthy-Vertrag §11.5
+(`chat-answer`, `friend-nudge`, `streak-warning`). iPhones bekommen Titel und
+Text als Mitteilung, `kind` und `data` stehen neben `aps` in der Nutzlast;
+Android bekommt `{kind, …data, title, body}` als Datennachricht und zeigt nur
+Arten an, die die installierte App kennt.
+
+**`POST /api/internal/recipe-dishes`**
+
+```json
+{ "persons": ["felix", "joana"],
+  "dish": { "name": "Rezept: Pasta mit Feta", "kcal": 152.4, "proteinG": 5.7,
+            "carbsG": 18.6, "fatG": 5.7, "portionG": 420.0 } }
+```
+
+Werte je 100 g, wie bei jedem Gericht. Antwort: je Person ein Ergebnis, in der
+Reihenfolge der Anfrage —
+
+```json
+[ { "person": "felix", "status": "created", "message": null },
+  { "person": "joana", "status": "not-linked", "message": null } ]
+```
+
+| `status` | Bedeutung |
+|---|---|
+| `created` | neues Gericht in der Liste der Person |
+| `updated` | es gab eins mit diesem Namen (ohne Groß/Klein), Werte oder Portion waren anders |
+| `unchanged` | Werte und Portion stimmten schon (bis auf die zweite Nachkommastelle) — nichts geschrieben |
+| `not-linked` | keine Healthy-Person dieses Namens; kein Fehler, die Einkaufsliste nennt einfach alle ihre Personen |
+| `rejected` | passt nicht in die Grenzen eines Gerichts (Name > 120 Zeichen, > 1000 kcal je 100 g …); `message` nennt den Grund |
+
+Scheitert es bei einer Person, bleibt es bei den anderen stehen. Der Endpunkt
+fasst nur an, was dem Rezept gehört — Name, die vier Grundwerte, die Portion.
+**Was die Person selbst am Gericht gepflegt hat, bleibt:** die `id` (und damit
+`lastUsedOn`), das Kennzeichen vegan, Detailwerte und Mikronährstoffe. Ein
+neues Gericht bekommt **kein** Kennzeichen vegan, auch im veganen Modus nicht:
+der Dienst weiß nicht, was im Rezept steckt; es steht dann in der Liste und
+lässt sich eintragen, sobald die Person es einordnet. Einträge von früher
+behalten ihre Werte von damals, wie immer. Der Vorsatz „Rezept: “ im Namen
+(wie „Kochwerk: “) kommt vom Aufrufer; er sorgt dafür, dass ein von Hand
+gepflegtes Gericht gleichen Namens unberührt bleibt.
+
 ### CORS
 
 Drei Endpunkte werden von anderen Subdomains gelesen: `/api/food/daily` und `/api/food/daily-average` von
@@ -963,10 +1051,25 @@ oder `curl -H 'Authorization: Bearer 0123…'`.
   dass sie nur ihr eigenes Tagebuch sieht, `/setup`, `features` je Person.
 - **`QuickCaptureJobsTest`** — Aufträge gehören der Person, die sie startet;
   ohne Freischaltung 403, bevor etwas läuft.
-- **`DeviceTokensTest`**, **`FcmClientTest`** (gegen einen lokalen Server, der
-  Google spielt: signiertes JWT, Datennachricht, tote Kennungen),
+- **`DeviceTokensTest`** (je Person, je Plattform, je APNs-Umgebung; die
+  bisherige Datei ist die Sandbox), **`FcmClientTest`** (gegen einen lokalen
+  Server, der Google spielt: signiertes JWT, Datennachricht, tote Kennungen),
+  **`ApnsClientSendTest`** (gegen zwei lokale Server, die Sandbox und
+  Produktion spielen: Rechner je Umgebung, Nutzlast als gültiges JSON mit
+  Anführungszeichen und Umlauten, Apples Antworten), **`PushNotifierTest`**
+  (nur die Geräte der Person, der eine Versuch am anderen Rechner bei
+  `BadDeviceToken`, die bisherigen Mitteilungen unverändert),
   **`AndroidReleaseTest`** (Prüfsumme, halbe Veröffentlichung, Ankündigung
   genau einmal).
+- **`ProteinFloorTest`** — Vorgabe, Speichern, Zurücksetzen und Mitsinken des
+  Eiweiß-Erhalts, und dass kein anderer Schreibweg ihn verliert.
+- **`InternalAccessTest`**, **`InternalRecipeTokenUnsetTest`** (echter Filter:
+  je Endpunkt nur sein Schlüssel, nie ein Cookie, mit `X-Real-IP` 404, ohne
+  eingerichteten Dienst-Token 404), **`RecipeDishesTest`** (anlegen, auf den
+  neuen Stand, nichts tun; was der Person gehört, bleibt) und
+  **`InternalEndpointsIT`** — wie `ErrorStatusIT` gegen einen echten Server:
+  der Dienst-Token ist keine Person, und erst auf dem Umweg über `/error`
+  zeigt sich, ob ein 400 des Endpunkts als 400 ankommt.
 - **Feature Requests** (`featurerequest/`): `FeatureRequestServiceTest` (Prüfungen,
   wer was sieht, Stand aus dem Brett), `FeatureRequestAccessTest` (echter Filter:
   eigene, alle, fremde 404, ohne Token 403 auch auf Seite und Dateien),
@@ -1001,6 +1104,10 @@ In `src/main/resources/application.properties`:
 | `food.detailed-people`      | leer = niemand (env: `FOOD_DETAILED_NUTRIENTS`)     | Wer die ganze Nährwerttabelle erfasst |
 | `food.micronutrient-people` | leer = niemand (env: `FOOD_MICRONUTRIENTS`)         | Wer Mikronährstoffe erfasst |
 | `food.fcm.service-account-file` | leer (env: `FCM_SERVICE_ACCOUNT_FILE`)          | Firebase-Dienstkonto für Push an Android |
+| `food.push.host`            | `https://api.sandbox.push.apple.com` (env: `APNS_HOST`) | APNs-Rechner der Sandbox — auch für Kennungen ohne Umgebung |
+| `food.push.production-host` | `https://api.push.apple.com` (env: `APNS_PRODUCTION_HOST`) | APNs-Rechner für TestFlight-Kennungen |
+| `food.push.devices-production-file` | `data/devices-production.json` (env: `FOOD_PRODUCTION_DEVICES_FILE`) | iOS-Kennungen der Produktion, neben `devices.json` |
+| `food.recipe-token`         | leer (env: `FOOD_RECIPE_TOKEN`)                     | Dienst-Token der Einkaufsliste für `/api/internal/recipe-dishes`; leer = Endpunkt aus (404) |
 | `food.android.dir`          | leer (env: `FOOD_ANDROID_DIR`)                      | Verzeichnis mit `healthy.apk` + `latest.json` |
 | `food.story-agent.command`  | leer (env: `FOOD_STORY_AGENT_COMMAND`)              | Wrapper des Story-Agenten; leer = Feature Requests ohne Claude-Entwurf |
 | `food.story-agent.timeout-seconds` | `120`                                        | danach wird die Entwurfs-Session beendet |

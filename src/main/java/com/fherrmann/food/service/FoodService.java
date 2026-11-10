@@ -780,6 +780,82 @@ public class FoodService {
     }
 
     /**
+     * Legt ein Rezept der Einkaufsliste als Gericht in die Liste dieser Person oder bringt
+     * es auf den neuen Stand (Healthy-Vertrag §11.3).
+     *
+     * <p>Anders als {@link #createDish} gehoert hier nur ein Teil des Gerichts dem
+     * Aufrufer: Name, die vier Grundwerte je 100 g und die Portion. Alles, was die
+     * Person selbst daran gepflegt hat, bleibt - die {@code id} (und damit {@code
+     * lastUsedOn}), das Kennzeichen vegan, Detailwerte und Mikronaehrstoffe. Ein neues
+     * Gericht bekommt kein Kennzeichen vegan, auch im veganen Modus nicht: der Dienst
+     * weiss nicht, was im Rezept steckt, und "unbekannt" ist dort die ehrliche Auskunft
+     * (es laesst sich dann erst eintragen, wenn die Person es einordnet).
+     *
+     * <p>Gesucht wird ueber den Namen ohne Gross/Klein. Stimmen Grundwerte und Portion
+     * schon, wird nichts geschrieben.
+     *
+     * @return {@code created}, {@code updated} oder {@code unchanged}
+     * @throws ResponseStatusException 400, wenn Name oder Werte nicht in die Grenzen
+     *                                 eines Gerichts passen
+     */
+    public synchronized String putRecipeDish(String user, DishRequest request) {
+        if (request == null) {
+            throw badRequest("dish is required");
+        }
+        String name = request.name() == null ? "" : request.name().trim();
+        if (name.isEmpty()) {
+            throw badRequest("dish name is required");
+        }
+        if (name.length() > MAX_NAME_LENGTH) {
+            throw badRequest("dish name must be at most " + MAX_NAME_LENGTH + " characters");
+        }
+        double kcal = requireNonNegative(request.kcal(), "kcal", MAX_KCAL_PER_100G);
+        double proteinG = requireNonNegative(request.proteinG(), "proteinG", MAX_MACRO_PER_100G);
+        double carbsG = requireNonNegative(request.carbsG(), "carbsG", MAX_MACRO_PER_100G);
+        double fatG = requireNonNegative(request.fatG(), "fatG", MAX_MACRO_PER_100G);
+        Double portionG = request.portionG() == null
+                ? null
+                : requirePositive(request.portionG(), "portionG", MAX_GRAMS);
+
+        FoodData data = repository.load(user);
+        List<Dish> dishes = new ArrayList<>(data.dishes());
+        Dish existing = dishes.stream()
+                .filter(d -> d.name().equalsIgnoreCase(name))
+                .findFirst()
+                .orElse(null);
+        if (existing == null) {
+            dishes.add(new Dish(UUID.randomUUID().toString(), name,
+                    new Nutrients(kcal, proteinG, carbsG, fatG), portionG, null, null));
+            repository.save(user, data.with(dishes, data.entries()));
+            return "created";
+        }
+        Nutrients old = existing.per100g() == null ? Nutrients.ZERO : existing.per100g();
+        if (sameValue(old.kcal(), kcal) && sameValue(old.proteinG(), proteinG)
+                && sameValue(old.carbsG(), carbsG) && sameValue(old.fatG(), fatG)
+                && samePortion(existing.portionG(), portionG)) {
+            return "unchanged";
+        }
+        Nutrients per100g = new Nutrients(kcal, proteinG, carbsG, fatG,
+                old.saturatedFatG(), old.sugarG(), old.fiberG(), old.saltG(), old.micros());
+        replaceDish(dishes, existing.id(),
+                new Dish(existing.id(), name, per100g, portionG, existing.lastUsedOn(), existing.vegan()));
+        repository.save(user, data.with(dishes, data.entries()));
+        return "updated";
+    }
+
+    /** Gleich bis auf die zweite Nachkommastelle - feiner zeigt keine Oberflaeche einen Naehrwert. */
+    private static boolean sameValue(double a, double b) {
+        return Math.round(a * 100.0) == Math.round(b * 100.0);
+    }
+
+    private static boolean samePortion(Double a, Double b) {
+        if (a == null || b == null) {
+            return a == null && b == null;
+        }
+        return sameValue(a, b);
+    }
+
+    /**
      * Replaces the daily goals. Mikro-Ziele nur fuer Personen, die sie erfassen, und nur,
      * wenn welche mitkommen: ein Client, der das Feld nicht kennt, soll die gespeicherten
      * nicht loeschen. Dasselbe gilt fuer den Eiweiß-Erhalt ({@link #proteinMin}).
