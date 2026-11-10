@@ -622,17 +622,19 @@ APNs, Android-Handys über Firebase Cloud Messaging.
 sie nach etwa dreißig Sekunden ein. Nur der Server läuft weiter, und nur er
 weiß, wann die Auswertung fertig ist.
 
-**Anmeldung:** `POST /api/food/devices` mit `{"token": "…"}` (iPhone) bzw.
+**Anmeldung:** `POST /api/food/devices` mit `{"token": "…"}` (iPhone, seit
+2026-11-10 dazu `"environment": "sandbox"|"production"`) bzw.
 `{"token": "…", "platform": "android"}`. Die Apps rufen das bei jedem Start
 auf, weil iOS und Firebase die Kennung gelegentlich austauschen. Gespeichert
-wird je Person in `devices.json` (APNs) und `devices-android.json` (Firebase) —
+wird je Person in `devices.json` (APNs Sandbox), `devices-production.json`
+(APNs Produktion) und `devices-android.json` (Firebase) —
 bei der Eigentümerin unter `data/`, bei allen anderen unter
 `data/users/<name>/`, bewusst neben `food.json` und nicht darin: das Tagebuch
 ist der Bestand, den man aufhebt, Gerätekennungen sind flüchtig. Meldet sich
 eine Kennung für eine andere Person an, verschwindet sie bei der ersten — ein
 umgewidmetes Handy bekäme sonst weiter fremde Benachrichtigungen. Lehnt der
-Dienst eine ab (APNs: 410 oder `BadDeviceToken`; Firebase: `UNREGISTERED`),
-fliegt sie raus; erst dann weiß man sicher, dass sie tot ist.
+Dienst eine ab (APNs: 410, oder `BadDeviceToken` an beiden Rechnern; Firebase:
+`UNREGISTERED`), fliegt sie raus; erst dann weiß man sicher, dass sie tot ist.
 
 **Ohne Bibliothek.** APNs ist ein HTTP/2-POST mit einem signierten Token im
 Kopf, und beides kann das JDK. Eine Abhängigkeit für dreißig Zeilen wäre mehr
@@ -650,9 +652,32 @@ Zufallswerten schwankt.
 ### Sandbox oder Produktion
 
 Entscheidet **nicht** der Server, sondern womit die App signiert wurde. Eine
-Entwicklungssignatur liefert Kennungen, die nur die Sandbox kennt; an den
-Produktionshost geschickt kommt `BadDeviceToken` und sonst nichts.
-`APNS_HOST` steht deshalb standardmäßig auf `api.sandbox.push.apple.com`.
+Entwicklungssignatur (Xcode, `install-device.sh`) liefert Kennungen, die nur
+die Sandbox kennt, ein TestFlight-Build welche für die Produktion; am falschen
+Rechner kommt `BadDeviceToken` und sonst nichts.
+
+Seit 2026-11-10 gibt es beides nebeneinander — Felix' Entwicklungs-Installation
+und TestFlight-Builds für weitere Personen (Healthy-Vertrag §11.2):
+
+- **Die App sagt, wohin sie gehört.** `environment` in der Anmeldung:
+  `sandbox` oder `production`; fehlt das Feld (ältere App), ist es die Sandbox,
+  wie bisher. Android beachtet es nicht.
+- **Zwei Dateien statt eines neuen Formats.** Die Sandbox-Kennungen bleiben in
+  `devices.json`, die der Produktion liegen daneben in
+  `devices-production.json`, beide als schlichte Liste. So ist jede alte
+  Anmeldung von selbst eine Sandbox-Kennung, und ein Rollback auf ein älteres
+  Jar liest `devices.json` weiter wie immer. Eine Kennung steht in genau einer
+  der beiden: die letzte Anmeldung gilt.
+- **Jede Mitteilung geht an den Rechner zur Kennung** (`APNS_HOST` für die
+  Sandbox, `APNS_PRODUCTION_HOST` für die Produktion), mit demselben Schlüssel
+  und derselben Bundle-ID.
+- **Ein Fehlversuch kostet keine Kennung mehr.** Antwortet Apple mit
+  `BadDeviceToken`, versucht der Dienst es genau einmal am anderen Rechner.
+  Nimmt der sie an, wandert die Kennung dorthin (und die nächste Mitteilung
+  geht gleich richtig); lehnt auch er sie ab, ist sie tot. Bleibt der zweite
+  Versuch ohne Auskunft (Netz, Überlast), bleibt sie, wo sie ist. Vorher
+  löschte das erste `BadDeviceToken` die Kennung still — die erste
+  Produktions-Kennung wäre nach ihrer ersten Mitteilung weg gewesen.
 
 ### Konfiguration
 
@@ -664,7 +689,8 @@ APNS_KEY_FILE=/etc/apns-cockpit.p8    # .p8 aus dem Developer-Portal, chmod 640 
 APNS_KEY_ID=…                          # zehn Zeichen, steht neben dem Schlüssel im Portal
 APNS_TEAM_ID=…
 APNS_TOPIC=com.fherrmann.cockpit       # die Bundle-ID der App
-APNS_HOST=https://api.sandbox.push.apple.com
+APNS_HOST=https://api.sandbox.push.apple.com          # Sandbox; auch für alles ohne Umgebung
+# APNS_PRODUCTION_HOST=https://api.push.apple.com     # Vorgabe, muss nicht gesetzt werden
 ```
 
 Die `.p8` gehört **nicht** ins Repo und lässt sich im Portal nur ein einziges
@@ -783,7 +809,7 @@ vier Zahlen noch zusammenpassen.
 | PUT     | `/api/food/vegan-mode`    | `{enabled}` — veganen Modus schalten, Antwort: die neuen `features` (siehe „Veganer Modus") |
 | POST    | `/api/food/quick-capture` | Freitext und/oder Foto → **Vorschlag** (schreibt nichts); 403, wenn für diese Person nicht freigeschaltet |
 | GET     | `/api/food/quick-capture/{id}` | Stand eines Auftrags; der einer anderen Person ist 404 |
-| POST    | `/api/food/devices`       | Push-Kennung anmelden, `{token, platform?}`             |
+| POST    | `/api/food/devices`       | Push-Kennung anmelden, `{token, platform?, environment?}` (siehe „Sandbox oder Produktion“) |
 | GET     | `/api/app/android`        | `{versionCode, versionName, sizeBytes, sha256}` der veröffentlichten Android-App, 404 ohne |
 | GET     | `/api/app/android/apk`    | die APK selbst                                           |
 | GET     | `/setup?token=`           | Browser mit einem persönlichen Token einrichten (setzt `health_token`) |

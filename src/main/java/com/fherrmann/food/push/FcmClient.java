@@ -89,14 +89,29 @@ public class FcmClient {
         return !serviceAccountFile.isEmpty();
     }
 
+    /** Was aus einem Zustellversuch geworden ist. */
+    public enum Result {
+        /** Firebase hat die Nachricht angenommen. */
+        DELIVERED,
+        /** Nicht zugestellt, aber die Kennung ist deshalb nicht tot (Netz, Token, kein Dienstkonto). */
+        KEPT,
+        /** Firebase kennt die Kennung nicht mehr - sie soll weg. */
+        GONE
+    }
+
     /**
      * @param data Schluessel und Werte der Datennachricht - bei FCM ausschliesslich Strings
      * @return {@code true}, wenn die Kennung weiter benutzbar ist; {@code false}, wenn
      *         Firebase sie abgelehnt hat und sie weg soll
      */
     public boolean send(String deviceToken, Map<String, String> data) {
+        return deliver(deviceToken, data) != Result.GONE;
+    }
+
+    /** Wie {@link #send}, sagt aber auch, ob die Nachricht wirklich angenommen wurde. */
+    public Result deliver(String deviceToken, Map<String, String> data) {
         if (!isConfigured()) {
-            return true;
+            return Result.KEPT;
         }
         try {
             ServiceAccount sa = account();
@@ -115,19 +130,19 @@ public class FcmClient {
                     .build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
-                return true;
+                return Result.DELIVERED;
             }
             if (response.statusCode() == 401) {
                 // Das Token galt nicht (mehr) - beim naechsten Mal ein frisches holen.
                 accessToken = null;
             }
             log.warn("FCM antwortete {}: {}", response.statusCode(), response.body());
-            return !isGone(response.statusCode(), response.body());
+            return isGone(response.statusCode(), response.body()) ? Result.GONE : Result.KEPT;
         } catch (Exception e) {
             // Eine fehlgeschlagene Benachrichtigung darf nichts anderes gefaehrden -
             // der Eintrag bzw. die Auswertung steht laengst.
             log.warn("FCM-Nachricht konnte nicht zugestellt werden", e);
-            return true;
+            return Result.KEPT;
         }
     }
 

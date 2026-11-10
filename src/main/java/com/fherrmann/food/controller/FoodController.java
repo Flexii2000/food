@@ -16,6 +16,7 @@ import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.dto.VeganModeRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.push.DeviceTokens;
+import com.fherrmann.food.push.DeviceTokens.Environment;
 import com.fherrmann.food.push.DeviceTokens.Platform;
 import com.fherrmann.food.service.DetailedNutrition;
 import com.fherrmann.food.service.FoodService;
@@ -203,6 +204,9 @@ public class FoodController {
      * <p>Die Apps rufen das bei jedem Start auf: iOS und Firebase vergeben die
      * Kennung gelegentlich neu, und eine veraltete faellt sonst erst auf, wenn
      * eine Benachrichtigung ins Leere geht.
+     *
+     * <p>Die iPhone-App nennt dazu ihre APNs-Umgebung ({@code sandbox} oder
+     * {@code production}); ohne Angabe ist es die Sandbox, wie bisher.
      */
     @PostMapping("/devices")
     public ResponseEntity<Void> registerDevice(@RequestBody DeviceRegistration request, Principal principal) {
@@ -210,12 +214,14 @@ public class FoodController {
             return ResponseEntity.badRequest().build();
         }
         Platform platform;
+        Environment environment;
         try {
             platform = Platform.parse(request.platform());
+            environment = Environment.parse(request.environment());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
         }
-        devices.add(principal.getName(), platform, request.token().trim());
+        devices.add(principal.getName(), platform, environment, request.token().trim());
         return ResponseEntity.noContent().build();
     }
 

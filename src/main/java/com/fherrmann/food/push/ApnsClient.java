@@ -1,9 +1,11 @@
 package com.fherrmann.food.push;
 
+import com.fherrmann.food.push.DeviceTokens.Environment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -19,6 +21,8 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Schickt Benachrichtigungen an Apples Push-Dienst.
@@ -31,8 +35,10 @@ import java.util.Base64;
  * nicht der Server, sondern womit die App signiert wurde. Eine
  * Entwicklungssignatur liefert Kennungen, die <em>nur</em> die Sandbox kennt -
  * schickt man sie an den Produktionshost, kommt {@code BadDeviceToken} zurueck
- * und sonst nichts. Deshalb ist der Host einstellbar und steht standardmaessig
- * auf der Sandbox.
+ * und sonst nichts. Seit 2026-11-10 gibt es beides nebeneinander (Felix'
+ * Entwicklungs-Installation und TestFlight-Builds): die App meldet ihre Umgebung
+ * mit der Kennung an, und jeder Aufruf nennt, an welchen Rechner er geht. Derselbe
+ * Schluessel gilt fuer beide.
  */
 @Component
 public class ApnsClient {
@@ -46,11 +52,25 @@ public class ApnsClient {
      */
     private static final Duration TOKEN_LIFETIME = Duration.ofMinutes(45);
 
+    /** Was aus einem Zustellversuch geworden ist - danach richtet sich, was mit der Kennung passiert. */
+    public enum Result {
+        /** Apple hat die Nachricht angenommen. */
+        DELIVERED,
+        /** Nicht zugestellt, aber die Kennung sagt nichts dazu (Netz, Ueberlast, kein Schluessel). */
+        KEPT,
+        /** {@code BadDeviceToken}: meist die falsche Umgebung - der andere Rechner kennt sie vielleicht. */
+        BAD_TOKEN,
+        /** 410: das Geraet hat die App nicht mehr. */
+        GONE
+    }
+
     private final String keyFile;
     private final String keyId;
     private final String teamId;
     private final String topic;
-    private final String host;
+    private final String sandboxHost;
+    private final String productionHost;
+    private final ObjectMapper objectMapper;
 
     private final HttpClient http = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_2)
@@ -65,12 +85,16 @@ public class ApnsClient {
             @Value("${food.push.key-id:}") String keyId,
             @Value("${food.push.team-id:}") String teamId,
             @Value("${food.push.topic:com.fherrmann.cockpit}") String topic,
-            @Value("${food.push.host:https://api.sandbox.push.apple.com}") String host) {
+            @Value("${food.push.host:https://api.sandbox.push.apple.com}") String sandboxHost,
+            @Value("${food.push.production-host:https://api.push.apple.com}") String productionHost,
+            ObjectMapper objectMapper) {
         this.keyFile = keyFile;
         this.keyId = keyId;
         this.teamId = teamId;
         this.topic = topic;
-        this.host = host;
+        this.sandboxHost = sandboxHost;
+        this.productionHost = productionHost;
+        this.objectMapper = objectMapper;
     }
 
     /** Ohne Schluessel gibt es keine Benachrichtigungen - und das ist in Ordnung. */
@@ -79,17 +103,20 @@ public class ApnsClient {
     }
 
     /**
-     * @return {@code true}, wenn die Kennung weiter benutzbar ist;
-     *         {@code false}, wenn Apple sie abgelehnt hat und sie weg soll.
+     * Schickt eine Mitteilung an den APNs-Rechner dieser Umgebung.
+     *
+     * @param kind die Art der Mitteilung - steht neben {@code aps} in der Nutzlast, die
+     *             App liest daran ab, wohin ein Tipp fuehrt
+     * @param data weitere Schluessel der Nutzlast, oder {@code null}
      */
-    public boolean send(String deviceToken, String title, String body) {
+    public Result send(Environment environment, String deviceToken, String title, String body,
+                       String kind, Map<String, String> data) {
         if (!isConfigured()) {
-            return true;
+            return Result.KEPT;
         }
-        String payload = """
-                {"aps":{"alert":{"title":"%s","body":"%s"},"sound":"default"}}"""
-                .formatted(escape(title), escape(body));
+        String host = environment == Environment.PRODUCTION ? productionHost : sandboxHost;
         try {
+            String payload = payload(title, body, kind, data);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(host + "/3/device/" + deviceToken))
                     .header("authorization", "bearer " + authenticationToken())
@@ -103,20 +130,49 @@ public class ApnsClient {
             HttpResponse<String> response =
                     http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
-                return true;
+                return Result.DELIVERED;
             }
+            log.warn("APNs ({}) antwortete {}: {}", environment, response.statusCode(), response.body());
             // 410 heisst: das Geraet hat die App nicht mehr. 400 mit
             // BadDeviceToken heisst meist: falsche Umgebung oder alte Kennung.
-            boolean gone = response.statusCode() == 410
-                    || response.body().contains("BadDeviceToken");
-            log.warn("APNs antwortete {}: {}", response.statusCode(), response.body());
-            return !gone;
+            if (response.statusCode() == 410) {
+                return Result.GONE;
+            }
+            return response.body().contains("BadDeviceToken") ? Result.BAD_TOKEN : Result.KEPT;
         } catch (Exception e) {
             // Eine fehlgeschlagene Benachrichtigung darf den Eintrag nicht
             // gefaehrden - der steht laengst.
             log.warn("Benachrichtigung konnte nicht zugestellt werden", e);
-            return true;
+            return Result.KEPT;
         }
+    }
+
+    /**
+     * Die Nutzlast: {@code aps} mit Titel und Text, daneben {@code kind} und die
+     * uebrigen Schluessel. Ueber den {@link ObjectMapper} gebaut, damit Anfuehrungszeichen,
+     * Umlaute und alles andere in einem Namen oder Fehlertext gueltiges JSON bleiben.
+     */
+    String payload(String title, String body, String kind, Map<String, String> data) {
+        Map<String, Object> alert = new LinkedHashMap<>();
+        alert.put("title", singleLine(title));
+        alert.put("body", singleLine(body));
+        Map<String, Object> aps = new LinkedHashMap<>();
+        aps.put("alert", alert);
+        aps.put("sound", "default");
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("aps", aps);
+        if (kind != null && !kind.isBlank()) {
+            payload.put("kind", kind);
+        }
+        if (data != null) {
+            // "aps" und "kind" gehoeren dem Dienst - eine Angabe von aussen ueberschreibt sie nicht.
+            data.forEach((key, value) -> {
+                if (value != null) {
+                    payload.putIfAbsent(key, value);
+                }
+            });
+        }
+        return objectMapper.writeValueAsString(payload);
     }
 
     // MARK: - Signiertes Token
@@ -190,8 +246,8 @@ public class ApnsClient {
         System.arraycopy(source, from, target, targetOffset + 32 - count, count);
     }
 
-    private static String escape(String text) {
-        return text.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", " ").replace("\r", " ");
+    /** Eine Mitteilung ist einzeilig gedacht - Zeilenumbrueche (etwa aus einem Fehlertext) werden Leerzeichen. */
+    private static String singleLine(String text) {
+        return text == null ? "" : text.replace("\n", " ").replace("\r", " ");
     }
 }

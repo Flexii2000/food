@@ -5,6 +5,7 @@ import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.push.DeviceTokens;
+import com.fherrmann.food.push.DeviceTokens.Environment;
 import com.fherrmann.food.push.DeviceTokens.Platform;
 import com.fherrmann.food.service.FoodService;
 import com.fherrmann.food.service.QuickCaptureAccess;
@@ -157,18 +158,40 @@ class FoodAccessTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"fcm-abc\",\"platform\":\"android\"}"))
                 .andExpect(status().isNoContent());
-        verify(devices).add("torben", Platform.ANDROID, "fcm-abc");
+        verify(devices).add("torben", Platform.ANDROID, Environment.SANDBOX, "fcm-abc");
 
         // Ohne Plattform: die iPhone-App, wie immer.
         mockMvc.perform(post("/api/food/devices").cookie(new Cookie("fh_private", "private-token"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"apns-hex\"}"))
                 .andExpect(status().isNoContent());
-        verify(devices).add("felix", Platform.IOS, "apns-hex");
+        // ... und ohne Umgebung: die Sandbox, wie immer.
+        verify(devices).add("felix", Platform.IOS, Environment.SANDBOX, "apns-hex");
 
         mockMvc.perform(post("/api/food/devices").header("Authorization", "Bearer " + TORBEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"x\",\"platform\":\"windows-phone\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /** Ein TestFlight-Build meldet seine Kennung fuer die Produktion an (Vertrag §11.2). */
+    @Test
+    void iosDevicesNameTheirApnsEnvironment() throws Exception {
+        mockMvc.perform(post("/api/food/devices").header("Authorization", "Bearer " + TORBEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"apns-tf\",\"environment\":\"production\"}"))
+                .andExpect(status().isNoContent());
+        verify(devices).add("torben", Platform.IOS, Environment.PRODUCTION, "apns-tf");
+
+        mockMvc.perform(post("/api/food/devices").cookie(new Cookie("fh_private", "private-token"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"apns-dev\",\"environment\":\"sandbox\"}"))
+                .andExpect(status().isNoContent());
+        verify(devices).add("felix", Platform.IOS, Environment.SANDBOX, "apns-dev");
+
+        mockMvc.perform(post("/api/food/devices").header("Authorization", "Bearer " + TORBEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"x\",\"environment\":\"staging\"}"))
                 .andExpect(status().isBadRequest());
     }
 
