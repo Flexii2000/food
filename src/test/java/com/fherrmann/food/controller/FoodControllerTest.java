@@ -33,6 +33,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -183,6 +184,64 @@ class FoodControllerTest {
         mockMvc.perform(get("/api/food/targets").header("Origin", "https://weight.fherrmann.com"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "https://weight.fherrmann.com"));
+    }
+
+    /** Der Eiweiß-Erhalt reist mit den Zielen - hinein wie hinaus (Vertrag §11.1). */
+    @Test
+    @WithMockUser
+    void theProteinFloorTravelsWithTheTargets() throws Exception {
+        when(service.updateTargets(anyString(), any())).thenReturn(
+                com.fherrmann.food.dto.TargetsView.of(new Nutrients(2300, 195, 236, 70), 140.0));
+        mockMvc.perform(put("/api/food/targets").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kcal\":2300,\"proteinG\":195,\"carbsG\":236,\"fatG\":70,\"proteinMinG\":140}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.proteinG").value(195.0))
+                .andExpect(jsonPath("$.proteinMinG").value(140.0))
+                .andExpect(jsonPath("$.proteinMinDefault").value(false));
+        org.mockito.Mockito.verify(service).updateTargets(anyString(), eq(
+                new com.fherrmann.food.dto.TargetsRequest(2300.0, 195.0, 236.0, 70.0, null, null, 140.0)));
+
+        // Ein Client, der das Feld nicht kennt: es kommt als "keine Angabe" an, nicht als 0.
+        mockMvc.perform(put("/api/food/targets").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kcal\":2300,\"proteinG\":195,\"carbsG\":236,\"fatG\":70}"))
+                .andExpect(status().isOk());
+        org.mockito.Mockito.verify(service).updateTargets(anyString(), eq(
+                new com.fherrmann.food.dto.TargetsRequest(2300.0, 195.0, 236.0, 70.0, null, null, null)));
+    }
+
+    /** Was der Weight Tracker fuer den Chat liest (Vertrag §11.4): vom Server aus, also ohne CORS. */
+    @Test
+    @WithMockUser
+    void entriesAndFrequentDishesAreReadServerSideOnly() throws Exception {
+        when(service.entryLines(anyString(), eq(LocalDate.of(2026, 11, 1)), eq(LocalDate.of(2026, 11, 10))))
+                .thenReturn(List.of(new com.fherrmann.food.dto.EntryLine(LocalDate.of(2026, 11, 9), Meal.LUNCH,
+                        "Gericht A", 300.0, 240.0, 24.0, 18.0, 3.9)));
+        when(service.frequentDishes(anyString(), eq(90), eq(30))).thenReturn(List.of(
+                new com.fherrmann.food.dto.FrequentDish("Gericht A", 3, LocalDate.of(2026, 11, 10), 250.0,
+                        80.0, 8.0, 6.0, 1.3)));
+        when(service.frequentDishes(anyString(), eq(14), eq(5))).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/food/entries").param("from", "2026-11-01").param("to", "2026-11-10")
+                        .header("Origin", "https://weight.fherrmann.com"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"))
+                .andExpect(jsonPath("$[0].date").value("2026-11-09"))
+                .andExpect(jsonPath("$[0].meal").value("LUNCH"))
+                .andExpect(jsonPath("$[0].name").value("Gericht A"))
+                .andExpect(jsonPath("$[0].kcal").value(240.0));
+        // Ohne Angaben: 90 Tage, 30 Gerichte.
+        mockMvc.perform(get("/api/food/frequent-dishes").header("Origin", "https://weight.fherrmann.com"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"))
+                .andExpect(jsonPath("$[0].name").value("Gericht A"))
+                .andExpect(jsonPath("$[0].count").value(3))
+                .andExpect(jsonPath("$[0].lastUsedOn").value("2026-11-10"))
+                .andExpect(jsonPath("$[0].kcalPer100g").value(80.0));
+        mockMvc.perform(get("/api/food/frequent-dishes").param("days", "14").param("limit", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        // Ohne Spanne gibt es keine Eintraege - die Spanne ist Pflicht.
+        mockMvc.perform(get("/api/food/entries")).andExpect(status().isBadRequest());
     }
 
     @Test

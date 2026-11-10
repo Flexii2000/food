@@ -805,6 +805,8 @@ vier Zahlen noch zusammenpassen.
 | PUT     | `/api/food/targets`       | Tagesziele ändern (mit `micros` die Mikro-Ziele, mit `proteinMinG` der Eiweiß-Erhalt, siehe oben) |
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne mit `meals` — liest die Weight-App |
 | GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
+| GET     | `/api/food/entries?from=&to=` | Jeder Eintrag der Spanne (höchstens 31 Tage) als eine Zeile — liest der Weight Tracker für den Chat (siehe „Lesen für den Chat“) |
+| GET     | `/api/food/frequent-dishes?days=&limit=` | Die am häufigsten eingetragenen Gerichte der letzten Tage — ebenfalls für den Chat |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
 | GET     | `/api/food/features`      | `{quickCapture, me, detailedNutrients, micronutrients, veganMode}` — was dieser Person angeboten wird, und wer sie ist |
 | PUT     | `/api/food/vegan-mode`    | `{enabled}` — veganen Modus schalten, Antwort: die neuen `features` (siehe „Veganer Modus") |
@@ -875,6 +877,44 @@ Tracker braucht das für seine Energiebilanz: ein Tag zählt dort als **getrackt
 wenn er mindestens 80 % des kcal-Ziels erreicht oder Frühstück, Mittag und Abend
 je einen Eintrag haben — dieselbe Regel wie „Track food“ in coHabit. Einträge
 ohne Mahlzeit (Altbestand) machen keine Mahlzeit voll.
+
+### Lesen für den Chat (seit 2026-11-10)
+
+Der Chat in Healthy läuft im Weight Tracker; der gibt der Claude-Sitzung einen
+Auszug der Daten der fragenden Person mit. Aus dem Kalorienzähler holt er
+dafür — vom Server aus, mit dem Token der Person, deshalb **ohne CORS** — zwei
+Dinge, die `/daily` nicht hergibt (Healthy-Vertrag §11.4):
+
+**`GET /api/food/entries?from=&to=`** — jeder Eintrag der Spanne als eine
+Zeile, nach Tag und darin in der Reihenfolge des Eintragens:
+
+```json
+[ { "date": "2026-11-09", "meal": "LUNCH", "name": "Skyr mit Beeren", "grams": 300.0,
+    "kcal": 240.0, "proteinG": 24.0, "carbsG": 18.0, "fatG": 3.9 } ]
+```
+
+`kcal` und die Makros sind der **Beitrag des Eintrags** (nicht je 100 g), auf
+eine Nachkommastelle. `meal` ist `null` bei Einträgen aus der Zeit vor den
+Mahlzeiten. Höchstens **31 Tage** je Anfrage, beide Ränder eingeschlossen,
+sonst 400 — für längere Spannen sind die Tagessummen unter `/daily` da.
+
+**`GET /api/food/frequent-dishes?days=90&limit=30`** — was die Person in den
+letzten `days` Tagen (heute eingeschlossen, 1–730) am häufigsten eingetragen
+hat, höchstens `limit` (1–100):
+
+```json
+[ { "name": "Skyr mit Beeren", "count": 12, "lastUsedOn": "2026-11-10", "avgGrams": 290.0,
+    "kcalPer100g": 80.0, "proteinPer100g": 8.0, "carbsPer100g": 6.0, "fatPer100g": 1.3 } ]
+```
+
+Die häufigsten zuerst, bei Gleichstand das zuletzt gegessene. Gezählt wird
+über den **Namen des Eintrags** ohne Groß/Klein, nicht über die Gerichteliste:
+Einträge tragen ihre eigene Kopie, und ein aus der Liste gelöschtes Gericht
+wurde trotzdem gegessen. Name und Werte je 100 g kommen vom jüngsten Eintrag,
+`avgGrams` ist die mittlere Menge je Eintrag auf ganze Gramm. Die
+Gerichteliste selbst (`/dishes`) weiß nur, *wann* etwas zuletzt gegessen
+wurde — für „was könnte ich heute noch essen“ zählt, was regelmäßig auf dem
+Teller liegt und in welcher Menge.
 
 ## Zugriffsschutz
 

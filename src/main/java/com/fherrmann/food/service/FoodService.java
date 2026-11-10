@@ -4,6 +4,8 @@ import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.dto.DayAverage;
 import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DishRequest;
+import com.fherrmann.food.dto.EntryLine;
+import com.fherrmann.food.dto.FrequentDish;
 import com.fherrmann.food.dto.NewEntryRequest;
 import com.fherrmann.food.dto.QuickCaptureRequest;
 import com.fherrmann.food.dto.QuickCapturePreview;
@@ -305,6 +307,84 @@ public class FoodService {
             result.add(new DayAverage(day, Math.round(sum / days), days, complete));
         }
         return result;
+    }
+
+    /** Mehr als einen Monat am Stueck liest hier niemand - die Tagessummen gibt es unter {@code /daily}. */
+    static final int MAX_ENTRY_RANGE_DAYS = 31;
+    static final int MAX_FREQUENT_DAYS = 730;
+    static final int MAX_FREQUENT_LIMIT = 100;
+
+    /**
+     * Jeder Eintrag der Spanne als eine Zeile, nach Tag und darin in der Reihenfolge des
+     * Eintragens (Healthy-Vertrag §11.4). Der Weight Tracker gibt dem Chat damit mit, was
+     * in den letzten Tagen gegessen wurde.
+     */
+    public List<EntryLine> entryLines(String user, LocalDate from, LocalDate to) {
+        if (from == null || to == null || to.isBefore(from)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "from and to are required, and to must not precede from");
+        }
+        if (from.plusDays(MAX_ENTRY_RANGE_DAYS - 1L).isBefore(to)) {
+            throw badRequest("from and to may span at most " + MAX_ENTRY_RANGE_DAYS + " days");
+        }
+        return repository.load(user).entries().stream()
+                .filter(e -> e.date() != null && !e.date().isBefore(from) && !e.date().isAfter(to))
+                .sorted(Comparator.comparing(FoodEntry::date)
+                        .thenComparing(FoodEntry::createdAt, Comparator.nullsFirst(Comparator.naturalOrder())))
+                .map(e -> {
+                    Nutrients total = e.total().rounded();
+                    return new EntryLine(e.date(), e.meal(), e.name(), round1(e.grams()),
+                            total.kcal(), total.proteinG(), total.carbsG(), total.fatG());
+                })
+                .toList();
+    }
+
+    /**
+     * Was die Person in den letzten {@code days} Tagen (heute eingeschlossen) am
+     * haeufigsten eingetragen hat - die haeufigsten zuerst, bei Gleichstand das zuletzt
+     * gegessene (Healthy-Vertrag §11.4).
+     *
+     * <p>Gezaehlt wird ueber den Namen des Eintrags ohne Gross/Klein, nicht ueber das
+     * Gericht der Liste: Eintraege tragen ihre eigene Kopie, und ein aus der Liste
+     * geloeschtes Gericht wurde trotzdem gegessen. Name und Werte je 100 g kommen vom
+     * juengsten Eintrag - so, wie es zuletzt auf dem Teller lag.
+     */
+    public List<FrequentDish> frequentDishes(String user, int days, int limit) {
+        if (days < 1 || days > MAX_FREQUENT_DAYS) {
+            throw badRequest("days must be between 1 and " + MAX_FREQUENT_DAYS);
+        }
+        if (limit < 1 || limit > MAX_FREQUENT_LIMIT) {
+            throw badRequest("limit must be between 1 and " + MAX_FREQUENT_LIMIT);
+        }
+        LocalDate today = today();
+        LocalDate from = today.minusDays(days - 1L);
+        Map<String, List<FoodEntry>> byName = new LinkedHashMap<>();
+        for (FoodEntry entry : repository.load(user).entries()) {
+            if (entry.date() == null || entry.date().isBefore(from) || entry.date().isAfter(today)
+                    || entry.name() == null || entry.name().isBlank()) {
+                continue;
+            }
+            byName.computeIfAbsent(entry.name().trim().toLowerCase(java.util.Locale.ROOT), k -> new ArrayList<>())
+                    .add(entry);
+        }
+        Comparator<FoodEntry> recency = Comparator.comparing(FoodEntry::date)
+                .thenComparing(FoodEntry::createdAt, Comparator.nullsFirst(Comparator.naturalOrder()));
+        return byName.values().stream()
+                .map(entries -> {
+                    FoodEntry latest = entries.stream().max(recency).orElseThrow();
+                    Nutrients per100g = (latest.per100g() == null ? Nutrients.ZERO : latest.per100g()).rounded();
+                    double avgGrams = entries.stream().mapToDouble(FoodEntry::grams).average().orElse(0);
+                    return new FrequentDish(latest.name().trim(), entries.size(), latest.date(),
+                            Math.round(avgGrams), per100g.kcal(), per100g.proteinG(), per100g.carbsG(), per100g.fatG());
+                })
+                .sorted(Comparator.comparingInt(FrequentDish::count).reversed()
+                        .thenComparing(FrequentDish::lastUsedOn, Comparator.reverseOrder())
+                        .thenComparing(d -> d.name().toLowerCase(java.util.Locale.ROOT)))
+                .limit(limit)
+                .toList();
+    }
+
+    private static double round1(double value) {
+        return Math.round(value * 10.0) / 10.0;
     }
 
     /** Snapshot for the statusboard card. */

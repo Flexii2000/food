@@ -5,6 +5,8 @@ import com.fherrmann.food.dto.DayAverage;
 import com.fherrmann.food.dto.DayTotal;
 import com.fherrmann.food.dto.DeviceRegistration;
 import com.fherrmann.food.dto.DishRequest;
+import com.fherrmann.food.dto.EntryLine;
+import com.fherrmann.food.dto.FrequentDish;
 import com.fherrmann.food.dto.Features;
 import com.fherrmann.food.dto.NewEntryRequest;
 import com.fherrmann.food.dto.QuickCaptureRequest;
@@ -196,6 +198,27 @@ public class FoodController {
             @RequestParam(name = "to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             Principal principal) {
         return service.dailyAverages(principal.getName(), from, to);
+    }
+
+    /**
+     * Jeder Eintrag einer Spanne von hoechstens 31 Tagen als eine Zeile (Healthy-Vertrag
+     * §11.4) - liest der Weight Tracker fuer den Chat, vom Server aus und deshalb ohne CORS.
+     */
+    @GetMapping("/entries")
+    public List<EntryLine> entries(
+            @RequestParam(name = "from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(name = "to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            Principal principal) {
+        return service.entryLines(principal.getName(), from, to);
+    }
+
+    /** Was die Person zuletzt am haeufigsten gegessen hat (Healthy-Vertrag §11.4), ebenfalls ohne CORS. */
+    @GetMapping("/frequent-dishes")
+    public List<FrequentDish> frequentDishes(
+            @RequestParam(name = "days", defaultValue = "90") int days,
+            @RequestParam(name = "limit", defaultValue = "30") int limit,
+            Principal principal) {
+        return service.frequentDishes(principal.getName(), days, limit);
     }
 
     /**
