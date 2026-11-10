@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
@@ -112,19 +113,30 @@ public class InternalAccessFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Der Pfad, um den es geht. Beim ERROR-Dispatch ist die Anfrage auf {@code /error}
-     * umgeleitet; der urspruengliche Pfad steht dann im Attribut.
+     * Der Pfad, um den es geht - dekodiert, wie ihn auch Spring MVC und die Regeln in
+     * {@link SecurityConfig} sehen. Mit dem rohen {@code getRequestURI()} liesse sich diese
+     * Schranke mit einem kodierten Buchstaben ({@code /api/%69nternal/…}) umgehen; die
+     * Rechte dahinter hielten zwar trotzdem, aber das 404 fuer Anfragen von aussen nicht.
+     *
+     * <p>Beim ERROR-Dispatch ist die Anfrage auf {@code /error} umgeleitet; der
+     * urspruengliche Pfad steht dann im Attribut, und zwar roh.
      */
     private static String originalPath(HttpServletRequest request) {
-        Object forwarded = request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI);
-        String uri = forwarded instanceof String original ? original : request.getRequestURI();
-        String context = request.getContextPath();
-        if (uri == null) {
-            return "";
+        if (request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI) instanceof String original) {
+            String context = request.getContextPath();
+            String path = context != null && !context.isEmpty() && original.startsWith(context)
+                    ? original.substring(context.length())
+                    : original;
+            try {
+                return URLDecoder.decode(path, StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException e) {
+                return path;
+            }
         }
-        return context != null && !context.isEmpty() && uri.startsWith(context)
-                ? uri.substring(context.length())
-                : uri;
+        String servletPath = request.getServletPath() == null ? "" : request.getServletPath();
+        String pathInfo = request.getPathInfo() == null ? "" : request.getPathInfo();
+        String path = servletPath + pathInfo;
+        return path.isEmpty() && request.getRequestURI() != null ? request.getRequestURI() : path;
     }
 
     private static String bearer(HttpServletRequest request) {

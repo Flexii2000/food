@@ -181,4 +181,23 @@ class InternalEndpointsIT {
         // Der Dienst-Token ist keine Person: das Tagebuch oeffnet er nicht.
         assertThat(call("GET", "/api/food/day", RECIPES, null).statusCode()).isEqualTo(403);
     }
+
+    /**
+     * Ein kodierter Buchstabe im Pfad ist derselbe Pfad - mit denselben Regeln. Der rohe
+     * Pfad saehe anders aus und liefe an der Schranke vorbei, wenn sie ihn nicht dekodierte.
+     */
+    @Test
+    void anEncodedSpellingOfThePathFollowsTheSameRules() throws Exception {
+        String push = "{\"person\":\"torben\",\"kind\":\"friend-nudge\",\"title\":\"Person A\"}";
+        assertThat(call("POST", "/api/%69nternal/push", FELIX, push, "X-Real-IP", "203.0.113.7").statusCode())
+                .isEqualTo(404);
+        assertThat(call("POST", "/api/%69nternal/push", TORBEN, push).statusCode()).isEqualTo(403);
+        assertThat(call("POST", "/api/%69nternal/push", null, push, "Cookie", "fh_private=testtoken").statusCode())
+                .isEqualTo(403);
+        assertThat(call("POST", "/api/%69nternal/recipe-dishes", FELIX, "{\"persons\":[\"felix\"]," + DISH + "}")
+                .statusCode()).isEqualTo(403);
+        assertThat(call("POST", "/api/%69nternal/push", FELIX, push).statusCode()).isEqualTo(200);
+        // Auch ein Fehler auf diesem Weg behaelt seinen Status.
+        assertThat(call("POST", "/api/%69nternal/push", FELIX, "{}").statusCode()).isEqualTo(400);
+    }
 }
