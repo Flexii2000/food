@@ -14,7 +14,7 @@ import java.util.Map;
  * against them, and the entries it adds up from.
  *
  * @param date      the day being shown
- * @param targets   daily goals
+ * @param targets   daily goals, mit dem Eiweiß-Erhalt (siehe {@link TargetsView})
  * @param consumed  sum of all entries on that day
  * @param remaining {@code targets - consumed}; negative once a goal is exceeded, which
  *                  the UI shows rather than clamping - being over is the thing worth seeing
@@ -32,7 +32,7 @@ import java.util.Map;
  */
 public record DaySummary(
         LocalDate date,
-        Nutrients targets,
+        TargetsView targets,
         Nutrients consumed,
         Nutrients remaining,
         List<FoodEntry> entries,
@@ -40,8 +40,9 @@ public record DaySummary(
         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> detailGaps,
         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> microGaps) {
 
+    /** Ohne Luecken und mit der Vorgabe fuer den Eiweiß-Erhalt. */
     public DaySummary(LocalDate date, Nutrients targets, Nutrients consumed, Nutrients remaining,
                       List<FoodEntry> entries, Map<Meal, Double> mealTargets) {
-        this(date, targets, consumed, remaining, entries, mealTargets, List.of(), List.of());
+        this(date, TargetsView.of(targets, null), consumed, remaining, entries, mealTargets, List.of(), List.of());
     }
 }

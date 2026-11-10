@@ -600,7 +600,8 @@ main {
 .tone-near .gauge-value { stroke: url(#gauge-neutral); }
 .tone-good .gauge-value { stroke: url(#gauge-good); }
 .tone-warn .gauge-value { stroke: url(#gauge-warn); }
-.tone-bad .gauge-value { stroke: url(#gauge-bad); }
+.tone-bad .gauge-value,
+.tone-low .gauge-value { stroke: url(#gauge-bad); }
 
 /* Kerbe neben dem Bogen, nicht quer hindurch - siehe gaugeTick() in app.js.
    Kraeftig genug, um als Marke gelesen zu werden: zu duenn und zu blass sieht

@@ -27,6 +27,12 @@ import java.util.Map;
  *                   fehlt in der Datei, {@code true} an, {@code false} aus, aber schon
  *                   einmal an gewesen. Den Unterschied braucht das erste Einschalten -
  *                   nur dann werden die vorhandenen Gerichte als vegan markiert
+ * @param proteinMinG der Eiweiß-Erhalt in Gramm - die Menge, ab der die Oberflaechen von
+ *                   Rot auf Gelb wechseln (gruen ab {@code targets.proteinG}). {@code null}
+ *                   heisst "nie gesetzt" und fehlt in der Datei; dann gilt die Vorgabe aus
+ *                   dem Eiweißziel ({@link #defaultProteinMin}). Getrennt von {@code targets},
+ *                   weil {@link Nutrients} auch Gerichte und Summen beschreibt, zu denen ein
+ *                   Erhalt nichts sagt
  */
 public record FoodData(
         Nutrients targets,
@@ -34,7 +40,8 @@ public record FoodData(
         List<Dish> dishes,
         List<FoodEntry> entries,
         @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Double> microTargets,
-        @JsonInclude(JsonInclude.Include.NON_NULL) Boolean veganMode) {
+        @JsonInclude(JsonInclude.Include.NON_NULL) Boolean veganMode,
+        @JsonInclude(JsonInclude.Include.NON_NULL) Double proteinMinG) {
 
     /**
      * Daily goals used when {@code food.json} does not exist yet: 2300 kcal with 200 g
@@ -66,15 +73,14 @@ public record FoodData(
         microTargets = microTargets == null ? null : Micronutrient.ordered(microTargets);
     }
 
-    /** Ohne veganen Modus - so sieht jedes Tagebuch aus, das ihn nie eingeschaltet hat. */
-    public FoodData(Nutrients targets, Map<Meal, Double> mealShares, List<Dish> dishes, List<FoodEntry> entries,
-                    Map<String, Double> microTargets) {
-        this(targets, mealShares, dishes, entries, microTargets, null);
-    }
-
-    /** Ohne gespeicherte Mikro-Ziele - so sieht jedes Tagebuch aus, das sie nie hatte. */
+    /**
+     * Ein frisches Tagebuch ohne Mikro-Ziele, veganen Modus und Eiweiß-Erhalt - so sieht
+     * jedes aus, das nichts davon je gesetzt hat. Bewusst der einzige kurze Konstruktor:
+     * wer einen bestehenden Stand aendert, nimmt {@link #with}, {@link #withTargets} oder
+     * {@link #withVeganMode}, damit kein Feld unterwegs verloren geht.
+     */
     public FoodData(Nutrients targets, Map<Meal, Double> mealShares, List<Dish> dishes, List<FoodEntry> entries) {
-        this(targets, mealShares, dishes, entries, null, null);
+        this(targets, mealShares, dishes, entries, null, null, null);
     }
 
     public static FoodData empty() {
@@ -87,7 +93,26 @@ public record FoodData(
      * veganen Modus verliert.
      */
     public FoodData with(List<Dish> dishes, List<FoodEntry> entries) {
-        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode);
+        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode, proteinMinG);
+    }
+
+    /** Derselbe Stand mit neuen Zielen; Gerichte, Eintraege und veganer Modus bleiben. */
+    public FoodData withTargets(Nutrients targets, Map<Meal, Double> mealShares,
+                                Map<String, Double> microTargets, Double proteinMinG) {
+        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode, proteinMinG);
+    }
+
+    /** Derselbe Stand mit geschaltetem veganen Modus und den dabei markierten Gerichten. */
+    public FoodData withVeganMode(List<Dish> dishes, Boolean veganMode) {
+        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode, proteinMinG);
+    }
+
+    /**
+     * Die Vorgabe fuer den Eiweiß-Erhalt, solange keiner gesetzt ist: 1,6 g/kg gegen ein
+     * Ziel von 2,2 g/kg, also 73 % des Eiweißziels, auf ganze Gramm.
+     */
+    public static double defaultProteinMin(double proteinTargetG) {
+        return Math.round(proteinTargetG * 1.6 / 2.2);
     }
 
     /** Ob der vegane Modus gerade an ist. */

@@ -176,7 +176,8 @@ class FoodControllerTest {
     @Test
     @WithMockUser
     void targetsAreReadableFromTheWeightTrackersOrigin() throws Exception {
-        when(service.targets(anyString())).thenReturn(new Nutrients(2300, 200, 235.5, 62));
+        when(service.targets(anyString())).thenReturn(
+                com.fherrmann.food.dto.TargetsView.of(new Nutrients(2300, 200, 235.5, 62), null));
         // Die Weight-App zeichnet die kcal-Ziellinie in ihre Charts und braucht
         // dafuer denselben Wert, gegen den hier gerechnet wird.
         mockMvc.perform(get("/api/food/targets").header("Origin", "https://weight.fherrmann.com"))

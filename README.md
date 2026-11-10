@@ -33,8 +33,10 @@ Diagramms. Ab 1100 px Breite stehen Tagesübersicht und Mahlzeiten
 nebeneinander, Verlauf und Einstellungen darunter.
 
 Die Einfärbung folgt der Richtung, in die das jeweilige Ziel gemeint ist. Eiweiß
-ist ein **Mindestwert**: ab dem Ziel grün, darüber bleibt es grün — mehr ist
-mehr. kcal, Fett und Kohlenhydrate sind **Obergrenzen** und färben erst beim
+ist ein **Mindestwert** mit zwei Grenzen (seit 2026-11-10, siehe
+[Eiweiß: Erhalt und Ziel](#eiweiß-erhalt-und-ziel)): unter dem Erhalt rot, ab
+dem Erhalt gelb, ab dem Ziel grün — darüber bleibt es grün, mehr ist mehr.
+kcal, Fett und Kohlenhydrate sind **Obergrenzen** und färben erst beim
 Überschreiten, dann aber knapp:
 
 | | gelb ab | rot ab |
@@ -48,8 +50,39 @@ die Makros über ihren Brennwert umgerechnet (Kohlenhydrate 4 kcal/g → 25 g,
 Fett 9 kcal/g → gut 11 g). Drei frei gewählte Zahlen nebeneinander wären
 willkürlich.
 
-Unterhalb des Ziels passiert bewusst **nichts**: ein Tacho, der schon bei 85 %
-warnt, warnt an jedem normalen Tag und wird dadurch bedeutungslos.
+Unterhalb einer Obergrenze passiert bewusst **nichts**: ein Tacho, der schon bei
+85 % warnt, warnt an jedem normalen Tag und wird dadurch bedeutungslos.
+
+### Eiweiß: Erhalt und Ziel
+
+Felix (10.11.2026): **rot** unter dem Erhalt, **gelb** ab dem Erhalt, **grün**
+ab dem Ziel. Das Ziel ist die Menge, über der mehr Eiweiß keinen weiteren
+Muskelnutzen bringt (2,2 g/kg), der Erhalt die Menge, die im Defizit mit
+Training die Muskeln hält (1,6 g/kg). Beide liegen als **feste Gramm je
+Person** im Tagebuch — das Ziel wie immer in `targets.proteinG`, der Erhalt
+daneben als `proteinMinG`. Die Regel für alle Oberflächen steht im
+Healthy-Vertrag (`../weight-app/docs/HEALTHY-CONTRACT.md` §11.1).
+
+- **Vorgabe:** Ohne gespeicherten Erhalt gilt `round(proteinG · 1,6 / 2,2)`,
+  also 73 % des Ziels auf ganze Gramm. Die Vorgabe steht **nicht** in der Datei
+  und folgt deshalb dem Eiweißziel, bis jemand einen Erhalt setzt.
+- **Antwort:** `GET /api/food/targets` und `targets` im Tag sind das bisherige
+  JSON mit zwei Feldern mehr — `proteinMinG` (der gespeicherte Wert oder die
+  Vorgabe) und `proteinMinDefault` (ob es die Vorgabe ist). Wer `targets` wie
+  bisher liest, übersieht sie einfach.
+- **Speichern:** `PUT /api/food/targets` nimmt `proteinMinG`. Fehlt das Feld,
+  bleibt der gespeicherte Erhalt stehen — so löscht ein Client, der es nicht
+  kennt, nichts. Senkt so ein Client das Eiweißziel unter den Erhalt, sinkt der
+  **still mit** (ein Erhalt über dem Ziel hätte keine Farbe mehr). `0` heißt
+  „zurück auf die Vorgabe“. Sonst gilt `0 < Erhalt ≤ Eiweißziel`, alles andere
+  ist ein 400.
+- **Weboberfläche:** Unter „Tagesziele“ steht „Eiweiß Erhalt (g)“ neben dem
+  Eiweißziel. Mitgeschickt wird der Wert nur, wenn das Feld angefasst wurde —
+  sonst würde aus der Vorgabe beim ersten Speichern eine feste Zahl. Ein
+  geleertes Feld setzt zurück. Unter dem Erhalt ist der **Bogen** rot, die Zahl
+  bleibt in Textfarbe (`tone-low` statt `tone-bad`): rote Zahlen sind für „zu
+  viel“ reserviert, und Eiweiß stünde sonst vom Frühstück an jeden Tag in
+  Alarmfarbe da.
 
 ### Verbrauch und Defizit (seit 2026-10)
 
@@ -702,6 +735,11 @@ Alle Daten liegen in **`data/food.json`** — Tagesziele, Gerichte und Einträge
 Die Datei muss nicht existieren: fehlt sie, startet die App mit den Default-Zielen
 und leerer Liste. Sie liegt deshalb auch nicht im Repo.
 
+Daneben stehen, nur wenn je gesetzt: `mealShares` (Aufteilung auf die
+Mahlzeiten), `microTargets`, `veganMode` und seit 2026-11-10 `proteinMinG` (der
+[Eiweiß-Erhalt](#eiweiß-erhalt-und-ziel)). Eine Datei ohne diese Felder lädt
+wie immer.
+
 **Eine Datei je Person.** `data/food.json` gehört der Eigentümerin
 (`health.owner`, Felix) und bleibt, wo sie immer lag. Jede weitere Person
 (siehe [Zugriffsschutz](#zugriffsschutz)) hat ihr eigenes Tagebuch unter
@@ -736,8 +774,8 @@ vier Zahlen noch zusammenpassen.
 | POST    | `/api/food/entries`       | Menge eintragen (mit `meal`); optional `id` — die Kennung der App (kleingeschriebene UUID, seit 12.10.): dieselbe noch einmal legt nichts doppelt an, sondern liefert den Tag des vorhandenen Eintrags (Nachsenden ohne Netz); keine UUID → 400 |
 | DELETE  | `/api/food/entries/{id}`  | Eintrag löschen                                         |
 | PUT | `/api/food/entries/{id}` | `{grams, meal?, date?}` — Menge, Mahlzeit oder Tag berichtigen; Name und Nährwerte je 100 g bleiben, wie sie beim Eintragen waren. Antwort: der Tag, auf dem der Eintrag danach liegt |
-| GET     | `/api/food/targets`       | Tagesziele                                              |
-| PUT     | `/api/food/targets`       | Tagesziele ändern (mit `micros` die Mikro-Ziele, siehe oben) |
+| GET     | `/api/food/targets`       | Tagesziele, mit `proteinMinG` und `proteinMinDefault` (siehe „Eiweiß: Erhalt und Ziel“) |
+| PUT     | `/api/food/targets`       | Tagesziele ändern (mit `micros` die Mikro-Ziele, mit `proteinMinG` der Eiweiß-Erhalt, siehe oben) |
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne mit `meals` — liest die Weight-App |
 | GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |

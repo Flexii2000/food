@@ -9,6 +9,7 @@ import com.fherrmann.food.dto.QuickCaptureRequest;
 import com.fherrmann.food.dto.QuickCapturePreview;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
+import com.fherrmann.food.dto.TargetsView;
 import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.FoodData;
@@ -916,7 +917,7 @@ class FoodServiceTest {
     /** Was gespeichert ist, gilt - ein fehlender Schluessel heisst "kein Ziel", nicht "Vorgabe". */
     @Test
     void savedMicroTargetsReplaceTheDefaults() {
-        Nutrients saved = micro.updateTargets("torben", new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null,
+        TargetsView saved = micro.updateTargets("torben", new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null,
                 Map.of("vitaminDUg", 25.0, "ironMg", 10.0)));
 
         assertThat(saved.micros()).containsExactly(Map.entry("vitaminDUg", 25.0), Map.entry("ironMg", 10.0));
@@ -927,7 +928,7 @@ class FoodServiceTest {
     /** Eine leere Liste ist "bewusst ohne Ziel" - und bleibt es, statt zur Vorgabe zurueckzufallen. */
     @Test
     void anEmptyListMeansDeliberatelyNoMicroTargets() throws Exception {
-        Nutrients saved = micro.updateTargets("torben",
+        TargetsView saved = micro.updateTargets("torben",
                 new TargetsRequest(2800.0, 180.0, 300.0, 90.0, null, Map.of()));
 
         assertThat(saved.micros()).isNull();

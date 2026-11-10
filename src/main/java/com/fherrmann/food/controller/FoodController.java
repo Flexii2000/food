@@ -11,10 +11,10 @@ import com.fherrmann.food.dto.QuickCaptureRequest;
 import com.fherrmann.food.dto.QuickCaptureJob;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
+import com.fherrmann.food.dto.TargetsView;
 import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.dto.VeganModeRequest;
 import com.fherrmann.food.model.Dish;
-import com.fherrmann.food.model.Nutrients;
 import com.fherrmann.food.push.DeviceTokens;
 import com.fherrmann.food.push.DeviceTokens.Platform;
 import com.fherrmann.food.service.DetailedNutrition;
@@ -163,12 +163,12 @@ public class FoodController {
     }
 
     @GetMapping("/targets")
-    public Nutrients targets(Principal principal) {
+    public TargetsView targets(Principal principal) {
         return service.targets(principal.getName());
     }
 
     @PutMapping("/targets")
-    public Nutrients updateTargets(@RequestBody TargetsRequest request, Principal principal) {
+    public TargetsView updateTargets(@RequestBody TargetsRequest request, Principal principal) {
         return service.updateTargets(principal.getName(), request);
     }
 

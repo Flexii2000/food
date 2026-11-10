@@ -26,7 +26,8 @@ const MACROS = [
     // Mindestwert (drueber ist das Ziel erreicht), Fett und Kohlenhydrate sind
     // Obergrenzen (drueber ist zu viel). Ohne diese Unterscheidung wuerde eine
     // gemeinsame Einfaerbung genau die Haelfte der Faelle falsch herum bewerten.
-    { key: 'proteinG', label: 'Eiweiß', unit: 'g', direction: 'floor' },
+    // `floor` nennt das Feld in den Zielen, unter dem der Wert rot ist (der Erhalt).
+    { key: 'proteinG', label: 'Eiweiß', unit: 'g', direction: 'floor', floor: 'proteinMinG' },
     { key: 'fatG', label: 'Fett', unit: 'g', direction: 'ceiling' },
     { key: 'carbsG', label: 'Kohlenhydrate', unit: 'g', direction: 'ceiling' },
 ];
@@ -159,6 +160,8 @@ const WEIGHT_SERIES = [
 let currentDate = todayIso();
 let dishes = [];
 let day = null;
+// Der Eiweiß-Erhalt, wie fillTargetsForm ihn zuletzt ins Feld geschrieben hat.
+let shownProteinMin = '';
 
 // Zu welcher Mahlzeit das offene Eingabefenster gehoert.
 let addMeal = MEALS[0].key;
@@ -292,11 +295,15 @@ async function fetchJson(url, options) {
  * bis zur Toleranz gelb, darueber rot. Vorher passiert nichts - ein Tacho, der
  * schon bei 85 % warnt, warnt an jedem normalen Tag und wird dadurch bedeutungslos.
  *
- * <p>Bei einem Mindestwert (Eiweiß) gibt es keine Warnung: mehr ist dort mehr.
+ * <p>Bei einem Mindestwert (Eiweiß) zaehlen zwei Grenzen (Felix, 10.11.): unter dem
+ * Erhalt rot, ab dem Erhalt gelb, ab dem Ziel gruen. Rot heisst hier `low` und nicht
+ * `bad`: der Bogen ist rot, die Zahl bleibt ruhig - sonst stuende sie vom Fruehstueck
+ * an jeden Tag in Alarmfarbe da, und die ist fuer "zu viel" reserviert.
  */
-function toneFor(consumed, target, direction, tolerance) {
+function toneFor(consumed, target, direction, tolerance, floor) {
     if (direction === 'floor') {
         if (consumed >= target) return 'good';
+        if (floor > 0) return consumed >= floor ? 'warn' : 'low';
         return target > 0 && consumed / target >= 0.8 ? 'near' : 'neutral';
     }
     const over = consumed - target;
@@ -367,7 +374,8 @@ function renderGauges() {
             <div class="macro">
                 ${gauge({
                     ratio,
-                    tone: toneFor(consumed, target, macro.direction, TOLERANCE[macro.key]),
+                    tone: toneFor(consumed, target, macro.direction, TOLERANCE[macro.key],
+                        macro.floor ? day.targets[macro.floor] || 0 : 0),
                     main: num(consumed),
                     sub: `von ${num(target)} ${macro.unit}`,
                     mainSize: 22,
@@ -2381,9 +2389,15 @@ function fillTargetsForm() {
     const fields = {
         'tg-kcal': day.targets.kcal,
         'tg-protein': day.targets.proteinG,
+        'tg-protein-min': day.targets.proteinMinG ?? '',
         'tg-carbs': day.targets.carbsG,
         'tg-fat': day.targets.fatG,
     };
+    // Was im Erhalt-Feld steht, solange niemand tippt - daran erkennt das
+    // Speichern, ob der Wert angefasst wurde (siehe proteinMinChange).
+    if (document.activeElement !== document.getElementById('tg-protein-min')) {
+        shownProteinMin = String(fields['tg-protein-min']);
+    }
     // Die Mikro-Ziele so, wie der Dienst sie liefert - die DGE-Vorgabe, solange
     // nie welche gespeichert wurden. Ein leeres Feld heisst "kein Ziel".
     const microTargets = day.targets.micros || {};
@@ -2404,6 +2418,20 @@ function fillTargetsForm() {
 function microTargetValues() {
     const values = microValues(key => document.getElementById(`tg-micro-${key}`).value);
     return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== 0));
+}
+
+/**
+ * Was das Speichern zum Eiweiß-Erhalt mitschickt. Nur ein angefasstes Feld zaehlt:
+ * unveraendert fehlt `proteinMinG`, und der Dienst laesst stehen, was gilt - die
+ * Vorgabe bleibt so Vorgabe und folgt weiter dem Eiweißziel, statt beim ersten
+ * Speichern zu einer festen Zahl zu werden. Ein geleertes Feld (oder 0) heisst
+ * "zurueck auf die Vorgabe".
+ */
+function proteinMinChange() {
+    const raw = document.getElementById('tg-protein-min').value.trim();
+    if (raw === shownProteinMin) return {};
+    const value = parseFloat(raw);
+    return { proteinMinG: Number.isNaN(value) ? 0 : value };
 }
 
 /**
@@ -2449,6 +2477,7 @@ function initTargetsForm() {
                     proteinG: parseFloat(document.getElementById('tg-protein').value),
                     carbsG: parseFloat(document.getElementById('tg-carbs').value),
                     fatG: parseFloat(document.getElementById('tg-fat').value),
+                    ...proteinMinChange(),
                     // Prozent rein, Bruchteil raus - gespeichert wird der Anteil.
                     mealShares: Object.fromEntries(SHARE_FIELDS.map(f =>
                         [f.key, (parseFloat(document.getElementById(f.id).value) || 0) / 100])),

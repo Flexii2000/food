@@ -9,6 +9,7 @@ import com.fherrmann.food.dto.QuickCaptureRequest;
 import com.fherrmann.food.dto.QuickCapturePreview;
 import com.fherrmann.food.dto.StatusInfo;
 import com.fherrmann.food.dto.TargetsRequest;
+import com.fherrmann.food.dto.TargetsView;
 import com.fherrmann.food.dto.UpdateEntryRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.FoodData;
@@ -141,7 +142,7 @@ public class FoodService {
         Nutrients consumed = sum(entries);
         return new DaySummary(
                 day,
-                targetsOf(user, data).rounded(),
+                targetsView(user, data),
                 consumed.rounded(),
                 data.targets().minus(consumed).rounded(),
                 entries,
@@ -194,8 +195,13 @@ public class FoodService {
         return dishes;
     }
 
-    public Nutrients targets(String user) {
-        return targetsOf(user, repository.load(user)).rounded();
+    public TargetsView targets(String user) {
+        return targetsView(user, repository.load(user));
+    }
+
+    /** Die Ziele samt Eiweiß-Erhalt - der gespeicherte, sonst die Vorgabe aus dem Eiweißziel. */
+    private TargetsView targetsView(String user, FoodData data) {
+        return TargetsView.of(targetsOf(user, data).rounded(), data.proteinMinG());
     }
 
     /** Ob der vegane Modus dieser Person an ist - fuer die Features. */
@@ -776,9 +782,9 @@ public class FoodService {
     /**
      * Replaces the daily goals. Mikro-Ziele nur fuer Personen, die sie erfassen, und nur,
      * wenn welche mitkommen: ein Client, der das Feld nicht kennt, soll die gespeicherten
-     * nicht loeschen.
+     * nicht loeschen. Dasselbe gilt fuer den Eiweiß-Erhalt ({@link #proteinMin}).
      */
-    public synchronized Nutrients updateTargets(String user, TargetsRequest request) {
+    public synchronized TargetsView updateTargets(String user, TargetsRequest request) {
         if (request == null) {
             throw badRequest("request body is required");
         }
@@ -794,10 +800,39 @@ public class FoodService {
         Map<String, Double> microTargets = micronutrients.isEnabled(user) && request.micros() != null
                 ? validMicroTargets(request.micros())
                 : data.microTargets();
-        FoodData updated = new FoodData(targets, shares, data.dishes(), data.entries(), microTargets,
-                data.veganMode());
+        FoodData updated = data.withTargets(targets, shares, microTargets,
+                proteinMin(request.proteinMinG(), data.proteinMinG(), targets.proteinG()));
         repository.save(user, updated);
-        return targetsOf(user, updated).rounded();
+        return targetsView(user, updated);
+    }
+
+    /**
+     * Der Eiweiß-Erhalt, der nach dieser Aenderung gespeichert ist.
+     *
+     * <p>Ohne Angabe bleibt der gespeicherte - so loescht ein Client, der das Feld nicht
+     * kennt, nichts. Senkt so ein Client das Eiweißziel unter den Erhalt, sinkt der still
+     * mit: ein Erhalt ueber dem Ziel haette keine Farbe mehr, die zu ihm passt. {@code 0}
+     * heisst "zurueck auf die Vorgabe", und die steht nicht in der Datei.
+     *
+     * @return der zu speichernde Wert, {@code null} fuer die Vorgabe
+     */
+    static Double proteinMin(Double requested, Double stored, double proteinTargetG) {
+        if (requested == null) {
+            if (stored == null || stored <= proteinTargetG) {
+                return stored;
+            }
+            return proteinTargetG > 0 ? Double.valueOf(proteinTargetG) : null;
+        }
+        if (!Double.isFinite(requested) || requested < 0) {
+            throw badRequest("proteinMinG must be a number of at least 0");
+        }
+        if (requested == 0) {
+            return null;
+        }
+        if (requested > proteinTargetG) {
+            throw badRequest("Der Eiweiß-Erhalt darf höchstens so hoch sein wie das Eiweißziel.");
+        }
+        return requested;
     }
 
     /**
@@ -821,8 +856,7 @@ public class FoodService {
         List<Dish> dishes = data.veganMode() == null
                 ? data.dishes().stream().map(d -> d.vegan() == null ? d.withVegan(true) : d).toList()
                 : data.dishes();
-        repository.save(user, new FoodData(data.targets(), data.mealShares(), dishes, data.entries(),
-                data.microTargets(), enabled));
+        repository.save(user, data.withVeganMode(dishes, enabled));
     }
 
     // --- helpers ------------------------------------------------------------

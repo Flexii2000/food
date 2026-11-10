@@ -149,11 +149,13 @@ class VeganModeApiTest {
 
     @Test
     void felixGetsExactlyTheResponsesOfBefore() throws Exception {
+        // "proteinMinG"/"proteinMinDefault" in den Zielen kamen am 10.11. fuer alle dazu
+        // (Eiweiß-Erhalt, Vertrag §11.1) - keine Sonderausgabe einer Person.
         assertThat(call("felix", json(put("/api/food/targets"),
                 "{\"kcal\":2300,\"proteinG\":200,\"carbsG\":235.5,\"fatG\":62,"
                         + "\"mealShares\":{\"BREAKFAST\":0.25,\"LUNCH\":0.35,\"DINNER\":0.3,\"SNACK\":0.1},"
                         + "\"micros\":{\"vitaminCMg\":110}}")))
-                .isEqualTo("200 {\"kcal\":2300.0,\"proteinG\":200.0,\"carbsG\":235.5,\"fatG\":62.0}");
+                .isEqualTo("200 {\"kcal\":2300.0,\"proteinG\":200.0,\"carbsG\":235.5,\"fatG\":62.0,\"proteinMinG\":145.0,\"proteinMinDefault\":true}");
         assertThat(call("felix", json(post("/api/food/dishes"),
                 "{\"name\":\"Haferflocken\",\"kcal\":372,\"proteinG\":13.5,\"carbsG\":58.7,\"fatG\":7,"
                         + "\"portionG\":60,\"micros\":{\"ironMg\":4.2,\"magnesiumMg\":130}}")))
@@ -164,7 +166,7 @@ class VeganModeApiTest {
                         + "\"kcal\":80,\"proteinG\":8,\"carbsG\":6,\"fatG\":1.3,\"portionG\":300,"
                         + "\"micros\":{\"calciumMg\":120,\"vitaminB12Ug\":0.4}}}")))
                 .isEqualTo("201 {\"date\":\"2026-09-27\",\"targets\":{\"kcal\":2300.0,\"proteinG\":200.0,"
-                        + "\"carbsG\":235.5,\"fatG\":62.0},\"consumed\":{\"kcal\":240.0,\"proteinG\":24.0,"
+                        + "\"carbsG\":235.5,\"fatG\":62.0,\"proteinMinG\":145.0,\"proteinMinDefault\":true},\"consumed\":{\"kcal\":240.0,\"proteinG\":24.0,"
                         + "\"carbsG\":18.0,\"fatG\":3.9},\"remaining\":{\"kcal\":2060.0,\"proteinG\":176.0,"
                         + "\"carbsG\":217.5,\"fatG\":58.1},\"entries\":[{\"id\":\"<id>\",\"date\":\"2026-09-27\","
                         + "\"dishId\":\"<id>\",\"name\":\"Skyr mit Beeren\",\"grams\":300.0,\"per100g\":{\"kcal\":80.0,"
@@ -175,7 +177,7 @@ class VeganModeApiTest {
         assertThat(call("felix", json(post("/api/food/entries"),
                 "{\"date\":\"2026-09-27\",\"grams\":60,\"meal\":\"BREAKFAST\",\"dishId\":\"" + oats + "\"}")))
                 .isEqualTo("201 {\"date\":\"2026-09-27\",\"targets\":{\"kcal\":2300.0,\"proteinG\":200.0,"
-                        + "\"carbsG\":235.5,\"fatG\":62.0},\"consumed\":{\"kcal\":463.2,\"proteinG\":32.1,"
+                        + "\"carbsG\":235.5,\"fatG\":62.0,\"proteinMinG\":145.0,\"proteinMinDefault\":true},\"consumed\":{\"kcal\":463.2,\"proteinG\":32.1,"
                         + "\"carbsG\":53.2,\"fatG\":8.1},\"remaining\":{\"kcal\":1836.8,\"proteinG\":167.9,"
                         + "\"carbsG\":182.3,\"fatG\":53.9},\"entries\":[{\"id\":\"<id>\",\"date\":\"2026-09-27\","
                         + "\"dishId\":\"<id>\",\"name\":\"Skyr mit Beeren\",\"grams\":300.0,\"per100g\":{\"kcal\":80.0,"
@@ -193,7 +195,7 @@ class VeganModeApiTest {
                         + "\"lastUsedOn\":\"2026-09-27\"}");
         assertThat(call("felix", get("/api/food/day").param("date", "2026-09-27")))
                 .isEqualTo("200 {\"date\":\"2026-09-27\",\"targets\":{\"kcal\":2300.0,\"proteinG\":200.0,"
-                        + "\"carbsG\":235.5,\"fatG\":62.0},\"consumed\":{\"kcal\":463.2,\"proteinG\":32.1,"
+                        + "\"carbsG\":235.5,\"fatG\":62.0,\"proteinMinG\":145.0,\"proteinMinDefault\":true},\"consumed\":{\"kcal\":463.2,\"proteinG\":32.1,"
                         + "\"carbsG\":53.2,\"fatG\":8.1},\"remaining\":{\"kcal\":1836.8,\"proteinG\":167.9,"
                         + "\"carbsG\":182.3,\"fatG\":53.9},\"entries\":[{\"id\":\"<id>\",\"date\":\"2026-09-27\","
                         + "\"dishId\":\"<id>\",\"name\":\"Skyr mit Beeren\",\"grams\":300.0,\"per100g\":{\"kcal\":80.0,"
@@ -210,7 +212,7 @@ class VeganModeApiTest {
                         + "\"per100g\":{\"kcal\":80.0,\"proteinG\":8.0,\"carbsG\":6.0,\"fatG\":1.3},\"portionG\":300.0,"
                         + "\"lastUsedOn\":\"2026-09-27\"}]");
         assertThat(call("felix", get("/api/food/targets")))
-                .isEqualTo("200 {\"kcal\":2300.0,\"proteinG\":200.0,\"carbsG\":235.5,\"fatG\":62.0}");
+                .isEqualTo("200 {\"kcal\":2300.0,\"proteinG\":200.0,\"carbsG\":235.5,\"fatG\":62.0,\"proteinMinG\":145.0,\"proteinMinDefault\":true}");
         // "meals" kam am 09.10. fuer alle dazu (Regel "getrackter Tag" im Weight
         // Tracker) - keine Sonderausgabe einer Person.
         assertThat(call("felix", get("/api/food/daily").param("from", "2026-09-20").param("to", "2026-09-27")))
