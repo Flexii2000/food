@@ -924,6 +924,11 @@ public class FoodService {
         repository.save(user, data.with(dishes, data.entries()));
     }
 
+    /** {@link #putRecipeDish(String, DishRequest, String)} ohne Umbenennen. */
+    public String putRecipeDish(String user, DishRequest request) {
+        return putRecipeDish(user, request, null);
+    }
+
     /**
      * Legt ein Rezept der Einkaufsliste als Gericht in die Liste dieser Person oder bringt
      * es auf den neuen Stand (Healthy-Vertrag §11.3).
@@ -939,11 +944,17 @@ public class FoodService {
      * <p>Gesucht wird ueber den Namen ohne Gross/Klein. Stimmen Grundwerte und Portion
      * schon, wird nichts geschrieben.
      *
+     * <p>Wurde das Rezept umbenannt, kommt der alte Name mit: gibt es den neuen hier noch
+     * nicht, wird das Gericht unter dem alten gesucht und umbenannt - die Einkaufsliste
+     * schreibt bei jedem Speichern, und ein Tippfehler im Namen liesse sonst je Fassung
+     * ein Gericht zurueck.
+     *
+     * @param previousName der Name vor dem Umbenennen, sonst {@code null}
      * @return {@code created}, {@code updated} oder {@code unchanged}
      * @throws ResponseStatusException 400, wenn Name oder Werte nicht in die Grenzen
      *                                 eines Gerichts passen
      */
-    public synchronized String putRecipeDish(String user, DishRequest request) {
+    public synchronized String putRecipeDish(String user, DishRequest request, String previousName) {
         if (request == null) {
             throw badRequest("dish is required");
         }
@@ -968,6 +979,15 @@ public class FoodService {
                 .filter(d -> d.name().equalsIgnoreCase(name))
                 .findFirst()
                 .orElse(null);
+        String before = previousName == null ? "" : previousName.trim();
+        boolean renamed = false;
+        if (existing == null && !before.isEmpty()) {
+            existing = dishes.stream()
+                    .filter(d -> d.name().equalsIgnoreCase(before))
+                    .findFirst()
+                    .orElse(null);
+            renamed = existing != null;
+        }
         if (existing == null) {
             dishes.add(new Dish(UUID.randomUUID().toString(), name,
                     new Nutrients(kcal, proteinG, carbsG, fatG), portionG, null, null));
@@ -975,7 +995,8 @@ public class FoodService {
             return "created";
         }
         Nutrients old = existing.per100g() == null ? Nutrients.ZERO : existing.per100g();
-        if (sameValue(old.kcal(), kcal) && sameValue(old.proteinG(), proteinG)
+        if (!renamed
+                && sameValue(old.kcal(), kcal) && sameValue(old.proteinG(), proteinG)
                 && sameValue(old.carbsG(), carbsG) && sameValue(old.fatG(), fatG)
                 && samePortion(existing.portionG(), portionG)) {
             return "unchanged";

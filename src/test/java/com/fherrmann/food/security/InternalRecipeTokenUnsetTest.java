@@ -70,7 +70,7 @@ class InternalRecipeTokenUnsetTest {
         mockMvc.perform(post("/api/internal/recipe-dishes").header("Authorization", "Bearer " + FELIX)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isNotFound());
-        verify(service, never()).putRecipeDish(anyString(), any());
+        verify(service, never()).putRecipeDish(anyString(), any(), any());
     }
 
     @Test

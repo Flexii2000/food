@@ -131,6 +131,42 @@ class RecipeDishesTest {
         assertThat(service.putRecipeDish(ME, recipe("Rezept: Gericht A", 152.4, null))).isEqualTo("unchanged");
     }
 
+    /**
+     * Ein umbenanntes Rezept benennt das Gericht um, statt ein zweites anzulegen - mit
+     * derselben Kennung und demselben Wert fuer vegan. Gibt es den neuen Namen schon,
+     * bekommt der die Werte, und der alte bleibt, wie er ist.
+     */
+    @Test
+    void aRenamedRecipeRenamesTheDish() {
+        service.putRecipeDish(ME, recipe("Rezept: Gericht A", 152.4, 420.0));
+        Dish created = service.dishes(ME).get(0);
+        service.updateDish(ME, created.id(), new DishRequest("Rezept: Gericht A", 152.4, 5.7, 18.6, 5.7, 420.0,
+                null, null, null, null, null, Boolean.TRUE));
+
+        assertThat(service.putRecipeDish(ME, recipe("Rezept: Gericht B", 152.4, 420.0), "Rezept: Gericht A"))
+                .isEqualTo("updated");
+        assertThat(service.dishes(ME)).singleElement().satisfies(dish -> {
+            assertThat(dish.id()).isEqualTo(created.id());
+            assertThat(dish.name()).isEqualTo("Rezept: Gericht B");
+            assertThat(dish.vegan()).isTrue();
+        });
+        // Dasselbe noch einmal (der Abgleich beim Start kennt den alten Namen nicht mehr).
+        assertThat(service.putRecipeDish(ME, recipe("Rezept: Gericht B", 152.4, 420.0), "Rezept: Gericht A"))
+                .isEqualTo("unchanged");
+        assertThat(service.putRecipeDish(ME, recipe("Rezept: Gericht B", 152.4, 420.0))).isEqualTo("unchanged");
+
+        // Den alten Namen gibt es nicht (mehr): angelegt wie immer.
+        assertThat(service.putRecipeDish(ME, recipe("Rezept: Gericht C", 152.4, 420.0), "Rezept: Gericht X"))
+                .isEqualTo("created");
+        // Beide Namen da: der neue bekommt die Werte, der alte bleibt.
+        assertThat(service.putRecipeDish(ME, recipe("Rezept: Gericht C", 160.0, 420.0), "Rezept: Gericht B"))
+                .isEqualTo("updated");
+        assertThat(service.dishes(ME)).extracting(Dish::name)
+                .containsExactlyInAnyOrder("Rezept: Gericht B", "Rezept: Gericht C");
+        assertThat(service.dishes(ME)).filteredOn(dish -> dish.name().equals("Rezept: Gericht B"))
+                .singleElement().satisfies(dish -> assertThat(dish.per100g().kcal()).isEqualTo(152.4));
+    }
+
     /** Detailwerte und Mikronaehrstoffe, die die Person selbst gepflegt hat, ueberleben das Update. */
     @Test
     void detailsAndMicrosThePersonAddedSurviveAnUpdate() {

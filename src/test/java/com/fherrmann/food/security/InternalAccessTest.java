@@ -92,7 +92,7 @@ class InternalAccessTest {
                 .build();
         when(notifier.send(anyString(), anyString(), anyString(), anyString(), anyMap()))
                 .thenReturn(new PushNotifier.Delivery(1, 0));
-        when(service.putRecipeDish(anyString(), any())).thenReturn("created");
+        when(service.putRecipeDish(anyString(), any(), any())).thenReturn("created");
     }
 
     private static MockHttpServletRequestBuilder push() {
@@ -132,7 +132,7 @@ class InternalAccessTest {
                         .cookie(new Cookie("fh_private", "private-token")))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(notifier);
-        verify(service, never()).putRecipeDish(anyString(), any());
+        verify(service, never()).putRecipeDish(anyString(), any(), any());
     }
 
     /** Ueber nginx (X-Real-IP) gibt es den Pfad nicht - auch nicht mit dem richtigen Token. */
@@ -146,7 +146,7 @@ class InternalAccessTest {
         mockMvc.perform(get("/api/internal/irgendwas").header("X-Real-IP", "203.0.113.7"))
                 .andExpect(status().isNotFound());
         verifyNoInteractions(notifier);
-        verify(service, never()).putRecipeDish(anyString(), any());
+        verify(service, never()).putRecipeDish(anyString(), any(), any());
     }
 
     @Test
@@ -189,7 +189,7 @@ class InternalAccessTest {
     /** Die Einkaufsliste: nur ihr Dienst-Token, und je Person ein Ergebnis in der Reihenfolge der Anfrage. */
     @Test
     void theRecipeTokenPutsADishIntoEveryLinkedDiary() throws Exception {
-        when(service.putRecipeDish(eq("torben"), any())).thenThrow(
+        when(service.putRecipeDish(eq("torben"), any(), any())).thenThrow(
                 new ResponseStatusException(HttpStatus.BAD_REQUEST, "kcal must be at most 1000.0"));
 
         mockMvc.perform(dishes().header("Authorization", "Bearer " + RECIPES))
@@ -207,9 +207,9 @@ class InternalAccessTest {
                 .andExpect(jsonPath("$[2].message").value("kcal must be at most 1000.0"));
 
         DishRequest dish = new DishRequest("Rezept: Gericht A", 152.4, 5.7, 18.6, 5.7, 420.0);
-        verify(service).putRecipeDish("felix", dish);
-        verify(service).putRecipeDish("torben", dish);
-        verify(service, never()).putRecipeDish(eq("joana"), any());
+        verify(service).putRecipeDish("felix", dish, null);
+        verify(service).putRecipeDish("torben", dish, null);
+        verify(service, never()).putRecipeDish(eq("joana"), any(), any());
     }
 
     /** Ein persoenlicher Token - auch der der Eigentuemerin - ist nicht der Dienst-Token. */
@@ -218,7 +218,7 @@ class InternalAccessTest {
         mockMvc.perform(dishes().header("Authorization", "Bearer " + FELIX)).andExpect(status().isForbidden());
         mockMvc.perform(dishes().header("Authorization", "Bearer " + TORBEN)).andExpect(status().isForbidden());
         mockMvc.perform(dishes()).andExpect(status().isForbidden());
-        verify(service, never()).putRecipeDish(anyString(), any());
+        verify(service, never()).putRecipeDish(anyString(), any(), any());
     }
 
     /** Jeder Schluessel oeffnet genau seinen Endpunkt - nicht den anderen und nichts sonst. */
@@ -248,7 +248,7 @@ class InternalAccessTest {
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());
         }
-        verify(service, never()).putRecipeDish(anyString(), any());
+        verify(service, never()).putRecipeDish(anyString(), any(), any());
     }
 
     /** Dieselbe Person zweimal genannt wird einmal bedient. */

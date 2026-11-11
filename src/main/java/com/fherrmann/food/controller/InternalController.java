@@ -138,7 +138,8 @@ public class InternalController {
                 continue;
             }
             try {
-                results.add(RecipeDishResult.of(person, service.putRecipeDish(person, request.dish())));
+                results.add(RecipeDishResult.of(person,
+                        service.putRecipeDish(person, request.dish(), request.previousName())));
             } catch (ResponseStatusException e) {
                 results.add(RecipeDishResult.rejected(person, e.getReason()));
             } catch (RuntimeException e) {

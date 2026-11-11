@@ -966,7 +966,7 @@ Zwei Endpunkte sind nur für andere Dienste auf demselben Server da
 | Pfad | Wer ruft | Schlüssel |
 |---|---|---|
 | `POST /api/internal/push` | der Weight Tracker — Chat-Antwort, Stupser, Serien-Warnung | der **Bearer-Token der Eigentümerin** aus `HEALTH_TOKENS` (den hat er ohnehin) |
-| `POST /api/internal/recipe-dishes` | die Einkaufsliste — ein gekochtes Rezept als Gericht | der **Dienst-Token** `FOOD_RECIPE_TOKEN` |
+| `POST /api/internal/recipe-dishes` | die Einkaufsliste — ein gespeichertes Rezept als Gericht | der **Dienst-Token** `FOOD_RECIPE_TOKEN` |
 
 Eine eigene Schranke (`InternalAccessFilter`) statt einer Erweiterung des
 Personen-Filters, weil hier andere Regeln gelten:
@@ -1011,10 +1011,15 @@ Arten an, die die installierte App kennt.
 ```json
 { "persons": ["felix", "joana"],
   "dish": { "name": "Rezept: Pasta mit Feta", "kcal": 152.4, "proteinG": 5.7,
-            "carbsG": 18.6, "fatG": 5.7, "portionG": 420.0 } }
+            "carbsG": 18.6, "fatG": 5.7, "portionG": 420.0 },
+  "previousName": "Rezept: Feta-Pasta" }
 ```
 
-Werte je 100 g, wie bei jedem Gericht. Antwort: je Person ein Ergebnis, in der
+Werte je 100 g, wie bei jedem Gericht. `previousName` (seit 11.11., freiwillig) kommt
+nach dem Umbenennen des Rezepts: gibt es den neuen Namen bei der Person noch nicht,
+wird das Gericht unter dem alten gesucht und umbenannt (`updated`, Kennung und vegan
+bleiben) – die Einkaufsliste schreibt bei jedem Speichern, und ein Tippfehler im Namen
+ließe sonst je Fassung ein Gericht zurück. Antwort: je Person ein Ergebnis, in der
 Reihenfolge der Anfrage —
 
 ```json
