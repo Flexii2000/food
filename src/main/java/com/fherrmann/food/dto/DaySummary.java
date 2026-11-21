@@ -29,6 +29,9 @@ import java.util.Map;
  *                    keine Detailwerte kennt (Felix' Tagebuch)
  * @param microGaps   dasselbe fuer die Mikronaehrstoffe (Schluessel aus
  *                    {@link com.fherrmann.food.model.Micronutrient#KEYS})
+ * @param cappuccino  der Cappuccino-Zaehler, nur fuer Personen, die ihn haben (sonst nicht
+ *                    im JSON). Sein {@code bonus} ist in {@code remaining} schon eingerechnet:
+ *                    das Ziel des Tages ist {@code targets + cappuccino.bonus}
  */
 public record DaySummary(
         LocalDate date,
@@ -38,7 +41,15 @@ public record DaySummary(
         List<FoodEntry> entries,
         Map<Meal, Double> mealTargets,
         @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> detailGaps,
-        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> microGaps) {
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> microGaps,
+        @JsonInclude(JsonInclude.Include.NON_NULL) CappuccinoDay cappuccino) {
+
+    /** Ohne Cappuccino-Zaehler. */
+    public DaySummary(LocalDate date, TargetsView targets, Nutrients consumed, Nutrients remaining,
+                      List<FoodEntry> entries, Map<Meal, Double> mealTargets,
+                      List<String> detailGaps, List<String> microGaps) {
+        this(date, targets, consumed, remaining, entries, mealTargets, detailGaps, microGaps, null);
+    }
 
     /** Ohne Luecken und mit der Vorgabe fuer den Eiweiß-Erhalt. */
     public DaySummary(LocalDate date, Nutrients targets, Nutrients consumed, Nutrients remaining,

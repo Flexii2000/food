@@ -229,6 +229,37 @@ und die Gerichteliste zeigt nicht-vegane gedämpft. Ein Gericht mit unbekanntem
 Kennzeichen, dessen Häkchen niemand anfasst, wird ohne `vegan` gespeichert und
 bleibt unbekannt.
 
+## Cappuccino-Zähler (seit 2026-11-21)
+
+Felix trinkt jeden Morgen denselben Cappuccino. Statt ihn jedes Mal als Essen
+einzutragen, steht **über dem Frühstück** eine Zeile mit „n/4“, „−“ und „+“.
+
+- **Ein Cappuccino ist ein normaler Eintrag** des Cappuccino-Gerichts, eine
+  Portion schwer, Mahlzeit Frühstück. Kein Zählerstand neben dem Tagebuch: so
+  zählt er ohne Sonderweg zu kcal und Eiweiß, im Verlauf, im Weight Tracker und
+  im Chat, und früher von Hand eingetragene Cappuccinos zählen mit (alle
+  Einträge des Gerichts am Tag, in Portionen gerundet).
+- **Welches Gericht:** das, dessen Name „Cappu…“/„Capu…“ enthält (bei Felix
+  „Cappuchino (zuhause)“, 61 kcal/1,1 g Eiweiß je 100 g, Portion 123 g → 75 kcal
+  je Tasse). Größere Tasse = Portion des Gerichts ändern. Gibt es keins, legt
+  das erste „+“ „Cappuccino (Hafermilch)“ an: 210 g (Espresso + ~180 ml Oatly
+  Barista), 105 kcal, 2 g Eiweiß.
+- **Eigenes Budget:** bis 4 Cappuccinos am Tag kommen zum Tagesziel dazu, statt
+  es aufzufressen; ab dem 5. zählen sie normal. Der Tag trägt dafür
+  `cappuccino.bonus` (kcal, Kohlenhydrate, Fett der ersten vier; Eiweiß 0 — es
+  ist ein Mindestziel, ein höheres wäre eine Strafe) und rechnet ihn in
+  `remaining` ein. **`targets` und `mealTargets` bleiben das gespeicherte Ziel:**
+  Web und iPhone füllen ihr Ziele-Formular aus dem Tag, ein erhöhtes Ziel wäre
+  beim nächsten Speichern zur festen Zahl geworden. Ziel des Tages =
+  `targets + cappuccino.bonus`; die Weboberfläche zeigt Tachos und das
+  Frühstücksziel damit.
+- **„−“** nimmt vom jüngsten Eintrag des Gerichts eine Portion weg; bis
+  anderthalb Portionen fällt er ganz weg. So lässt sich auch ein alter
+  „2 Cappuccinos“-Eintrag herunterzählen.
+- **Je Person:** `FOOD_CAPPUCCINO=felix,torben` (`*` = alle); ohne Einstellung
+  nur die Eigentümerin. `/features` meldet `cappuccinoCounter`, der Tag hat
+  `cappuccino` nur für diese Personen.
+
 ## Gramm-basiert, mit optionaler Portion
 
 Ein Gericht speichert seine Nährwerte **je 100 g** — so stehen sie auf der
@@ -808,7 +839,9 @@ vier Zahlen noch zusammenpassen.
 | GET     | `/api/food/entries?from=&to=` | Jeder Eintrag der Spanne (höchstens 31 Tage) als eine Zeile — liest der Weight Tracker für den Chat (siehe „Lesen für den Chat“) |
 | GET     | `/api/food/frequent-dishes?days=&limit=` | Die am häufigsten eingetragenen Gerichte der letzten Tage — ebenfalls für den Chat |
 | GET     | `/api/food/status`        | Kennzahlen für die Statusboard-Karte                    |
-| GET     | `/api/food/features`      | `{quickCapture, me, detailedNutrients, micronutrients, veganMode}` — was dieser Person angeboten wird, und wer sie ist |
+| GET     | `/api/food/features`      | `{quickCapture, me, detailedNutrients, micronutrients, veganMode, cappuccinoCounter}` — was dieser Person angeboten wird, und wer sie ist |
+| POST    | `/api/food/cappuccino`    | `{date?, id?}` (oder leer) — ein Cappuccino mehr, Antwort: der Tag (siehe „Cappuccino-Zähler“); 404 ohne Zähler |
+| DELETE  | `/api/food/cappuccino?date=` | einer weniger; 404, wenn keiner eingetragen ist |
 | PUT     | `/api/food/vegan-mode`    | `{enabled}` — veganen Modus schalten, Antwort: die neuen `features` (siehe „Veganer Modus") |
 | POST    | `/api/food/quick-capture` | Freitext und/oder Foto → **Vorschlag** (schreibt nichts); 403, wenn für diese Person nicht freigeschaltet |
 | GET     | `/api/food/quick-capture/{id}` | Stand eines Auftrags; der einer anderen Person ist 404 |
@@ -1148,6 +1181,7 @@ In `src/main/resources/application.properties`:
 | `food.agent.people`         | leer = Eigentümerin (env: `FOOD_QUICK_CAPTURE`)     | Wer die Schnellerfassung benutzen darf |
 | `food.detailed-people`      | leer = niemand (env: `FOOD_DETAILED_NUTRIENTS`)     | Wer die ganze Nährwerttabelle erfasst |
 | `food.micronutrient-people` | leer = niemand (env: `FOOD_MICRONUTRIENTS`)         | Wer Mikronährstoffe erfasst |
+| `food.cappuccino-people`    | leer = Eigentümerin (env: `FOOD_CAPPUCCINO`)        | Wer den Cappuccino-Zähler hat |
 | `food.fcm.service-account-file` | leer (env: `FCM_SERVICE_ACCOUNT_FILE`)          | Firebase-Dienstkonto für Push an Android |
 | `food.push.host`            | `https://api.sandbox.push.apple.com` (env: `APNS_HOST`) | APNs-Rechner der Sandbox — auch für Kennungen ohne Umgebung |
 | `food.push.production-host` | `https://api.push.apple.com` (env: `APNS_PRODUCTION_HOST`) | APNs-Rechner für TestFlight-Kennungen |

@@ -253,4 +253,22 @@ class FoodControllerTest {
         mockMvc.perform(get("/api/food/day").header("Origin", "https://weight.fherrmann.com"))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
+
+    @Test
+    void theCappuccinoCounterTakesAPlusWithoutBodyAndAMinusForADay() throws Exception {
+        when(service.addCappuccino(anyString(), any(), any())).thenReturn(emptyDay());
+        when(service.removeCappuccino(anyString(), eq(LocalDate.of(2026, 11, 21)))).thenReturn(emptyDay());
+        mockMvc.perform(post("/api/food/cappuccino").cookie(new Cookie("fh_private", "testtoken")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targets.kcal").value(2300.0));
+        mockMvc.perform(post("/api/food/cappuccino").cookie(new Cookie("fh_private", "testtoken"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\":\"2026-11-21\",\"id\":\"0b6f3c1e-1f7e-4a59-9a43-0d1c2b3a4f5e\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/food/cappuccino").param("date", "2026-11-21")
+                        .cookie(new Cookie("fh_private", "testtoken")))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/food/cappuccino")).andExpect(status().isForbidden());
+    }
 }

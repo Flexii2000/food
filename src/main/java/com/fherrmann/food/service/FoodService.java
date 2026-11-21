@@ -1,5 +1,6 @@
 package com.fherrmann.food.service;
 
+import com.fherrmann.food.dto.CappuccinoDay;
 import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.dto.DayAverage;
 import com.fherrmann.food.dto.DayTotal;
@@ -103,6 +104,9 @@ public class FoodService {
     /** Wer Mikronaehrstoffe erfasst - nur fuer diese Personen gibt es Werte, Ziele und Fragen danach. */
     private final MicronutrientTracking micronutrients;
 
+    /** Wer den Cappuccino-Zaehler hat - nur fuer diese Personen steht er im Tag. */
+    private final CappuccinoCounter cappuccino;
+
     public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock) {
         this(repository, extractor, clock, DetailedNutrition.none(), MicronutrientTracking.none());
     }
@@ -114,14 +118,26 @@ public class FoodService {
 
     public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
                        DetailedNutrition detailed, MicronutrientTracking micronutrients) {
+        this(repository, extractor, clock, detailed, micronutrients, CappuccinoCounter.none());
+    }
+
+    public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
+                       DetailedNutrition detailed, MicronutrientTracking micronutrients,
+                       CappuccinoCounter cappuccino) {
         this(repository, extractor, clock, Path.of(System.getProperty("java.io.tmpdir"), "food-inbox"),
-                detailed, micronutrients);
+                detailed, micronutrients, cappuccino);
+    }
+
+    public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
+                       Path inbox, DetailedNutrition detailed, MicronutrientTracking micronutrients) {
+        this(repository, extractor, clock, inbox, detailed, micronutrients, CappuccinoCounter.none());
     }
 
     @Autowired
     public FoodService(FoodRepository repository, NutritionExtractor extractor, Clock clock,
                        @Value("${food.agent.inbox:data/inbox}") Path inbox, DetailedNutrition detailed,
-                       MicronutrientTracking micronutrients) {
+                       MicronutrientTracking micronutrients, CappuccinoCounter cappuccino) {
+        this.cappuccino = cappuccino;
         this.inbox = inbox;
         this.repository = repository;
         this.extractor = extractor;
@@ -143,15 +159,76 @@ public class FoodService {
         LocalDate day = date == null ? today() : date;
         List<FoodEntry> entries = entriesOn(data, day);
         Nutrients consumed = sum(entries);
+        CappuccinoDay cups = cappuccino.isEnabled(user)
+                ? CappuccinoCounter.day(CappuccinoCounter.dish(data.dishes()).orElse(null), entries)
+                : null;
+        // Das eigene Budget der Cappuccinos: der Rest rechnet gegen Ziel plus Zuschlag. Das
+        // gespeicherte Ziel (und damit targets und die Mahlzeitenziele) bleibt, wie es ist.
+        Nutrients dayTargets = cups == null ? data.targets() : data.targets().plus(cups.bonus());
         return new DaySummary(
                 day,
                 targetsView(user, data),
                 consumed.rounded(),
-                data.targets().minus(consumed).rounded(),
+                dayTargets.minus(consumed).rounded(),
                 entries,
                 mealTargets(data),
                 detailGaps(entries),
-                microGaps(entries));
+                microGaps(entries),
+                cups);
+    }
+
+    /** Ob die Person den Cappuccino-Zaehler hat - fuer die Features. */
+    public boolean cappuccinoEnabled(String user) {
+        return cappuccino.isEnabled(user);
+    }
+
+    /**
+     * Ein Cappuccino mehr: ein Eintrag des Cappuccino-Gerichts, eine Portion, zum Fruehstueck.
+     * Gibt es das Gericht noch nicht, legt der Eintrag es mit den Vorgabewerten an.
+     *
+     * @param id die Kennung der App fuer den Eintrag (wie bei {@code POST /entries}), damit
+     *           ein nachgesendetes "+" nicht doppelt zaehlt; darf fehlen
+     */
+    public synchronized DaySummary addCappuccino(String user, LocalDate date, String id) {
+        requireCappuccino(user);
+        FoodData data = repository.load(user);
+        Dish dish = CappuccinoCounter.dish(data.dishes()).orElse(null);
+        NewEntryRequest request = dish != null
+                ? new NewEntryRequest(date, dish.id(), null, CappuccinoCounter.portion(dish), Meal.BREAKFAST, id)
+                : new NewEntryRequest(date, null, CappuccinoCounter.DEFAULT_DISH,
+                        CappuccinoCounter.DEFAULT_DISH.portionG(), Meal.BREAKFAST, id);
+        return addEntry(user, request);
+    }
+
+    /**
+     * Ein Cappuccino weniger: nimmt vom juengsten Eintrag des Gerichts an dem Tag eine
+     * Portion weg - ist er nicht groesser als anderthalb Portionen, faellt er ganz weg. So
+     * laesst sich auch ein frueher als "2 Cappuccinos" eingetragener Eintrag herunterzaehlen.
+     */
+    public synchronized DaySummary removeCappuccino(String user, LocalDate date) {
+        requireCappuccino(user);
+        LocalDate day = date == null ? today() : date;
+        FoodData data = repository.load(user);
+        Dish dish = CappuccinoCounter.dish(data.dishes())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Kein Cappuccino eingetragen."));
+        double portion = CappuccinoCounter.portion(dish);
+        List<FoodEntry> cups = entriesOn(data, day).stream()
+                .filter(e -> dish.id().equals(e.dishId()))
+                .toList();
+        if (cups.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Kein Cappuccino eingetragen.");
+        }
+        FoodEntry newest = cups.get(cups.size() - 1);
+        if (newest.grams() > portion * 1.5) {
+            return updateEntry(user, newest.id(), new UpdateEntryRequest(newest.grams() - portion, null, null));
+        }
+        return deleteEntry(user, newest.id());
+    }
+
+    private void requireCappuccino(String user) {
+        if (!cappuccino.isEnabled(user)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Kein Cappuccino-Zaehler fuer diese Person.");
+        }
     }
 
     /**

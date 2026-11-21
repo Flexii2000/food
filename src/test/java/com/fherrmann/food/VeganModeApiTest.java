@@ -85,6 +85,9 @@ class VeganModeApiTest {
         registry.add("food.micronutrient-people", () -> "torben,joana");
         registry.add("food.agent.command", AGENT::toString);
         registry.add("food.agent.people", () -> "felix,torben");
+        // Der Cappuccino-Zaehler hat eigene Tests (CappuccinoCounterTest); hier geht es um
+        // die Antworten von vorher, also ohne ihn - "niemand" ist eine Person ohne Tagebuch.
+        registry.add("food.cappuccino-people", () -> "niemand");
     }
 
     @TestConfiguration
@@ -228,7 +231,7 @@ class VeganModeApiTest {
                         + "\"error\":null,\"elapsedSeconds\":0}");
         assertThat(call("felix", get("/api/food/features")))
                 .isEqualTo("200 {\"quickCapture\":true,\"me\":\"felix\",\"detailedNutrients\":false,"
-                        + "\"micronutrients\":false,\"veganMode\":false}");
+                        + "\"micronutrients\":false,\"veganMode\":false,\"cappuccinoCounter\":false}");
         assertThat(Files.readString(DATA.resolve("food.json"))).doesNotContain("vegan");
     }
 
@@ -243,8 +246,8 @@ class VeganModeApiTest {
         assertThat(send("torben", json(put("/api/food/vegan-mode"), "{}")).getStatus()).isEqualTo(400);
         assertThat(call("torben", json(put("/api/food/vegan-mode"), "{\"enabled\":true}")))
                 .isEqualTo("200 {\"quickCapture\":true,\"me\":\"torben\",\"detailedNutrients\":true,"
-                        + "\"micronutrients\":true,\"veganMode\":true}");
-        assertThat(call("torben", get("/api/food/features"))).endsWith("\"veganMode\":true}");
+                        + "\"micronutrients\":true,\"veganMode\":true,\"cappuccinoCounter\":false}");
+        assertThat(call("torben", get("/api/food/features"))).endsWith("\"veganMode\":true,\"cappuccinoCounter\":false}");
 
         // Das erste Einschalten hat die Haferflocken markiert, das Kaesebrot bleibt.
         Map<String, String> flags = new HashMap<>();
@@ -270,7 +273,7 @@ class VeganModeApiTest {
 
         // Aus: alles wieder erlaubt, die Kennzeichen bleiben.
         assertThat(call("torben", json(put("/api/food/vegan-mode"), "{\"enabled\":false}")))
-                .endsWith("\"veganMode\":false}");
+                .endsWith("\"veganMode\":false,\"cappuccinoCounter\":false}");
         assertThat(send("torben", json(post("/api/food/entries"),
                 "{\"date\":\"2026-09-27\",\"grams\":100,\"dishId\":\"" + cheese + "\"}")).getStatus())
                 .isEqualTo(201);

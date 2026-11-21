@@ -357,6 +357,17 @@ function gauge({ ratio, tone, main, sub, mainSize = 20, subSize = 8 }) {
         </svg>`;
 }
 
+/**
+ * Das Ziel des Tages fuer einen Wert: das gespeicherte plus das Budget der
+ * Cappuccinos (bis vier am Tag zaehlen nicht gegen das Ziel, siehe
+ * CappuccinoCounter im Dienst). `remaining` rechnet das schon ein.
+ */
+function dayTarget(key) {
+    const base = day.targets[key] || 0;
+    const bonus = day.cappuccino && day.cappuccino.bonus ? day.cappuccino.bonus[key] || 0 : 0;
+    return base + bonus;
+}
+
 function renderGauges() {
     const macroRow = document.getElementById('macro-row');
     const kcalBox = document.getElementById('kcal-gauge');
@@ -367,7 +378,7 @@ function renderGauges() {
     }
 
     macroRow.innerHTML = MACROS.map(macro => {
-        const target = day.targets[macro.key] || 0;
+        const target = dayTarget(macro.key);
         const consumed = day.consumed[macro.key] || 0;
         const ratio = target > 0 ? consumed / (target * GAUGE_HEADROOM) : 0;
         return `
@@ -385,7 +396,7 @@ function renderGauges() {
             </div>`;
     }).join('');
 
-    const target = day.targets.kcal || 0;
+    const target = dayTarget('kcal');
     const consumed = day.consumed.kcal || 0;
     const remaining = day.remaining.kcal;
     const ratio = target > 0 ? consumed / (target * GAUGE_HEADROOM) : 0;
@@ -515,9 +526,86 @@ function renderEntries() {
     }
 
     sections.forEach(meal => {
+        // Der Cappuccino-Zaehler steht ueber dem Fruehstueck (Felix, 21.11.).
+        if (meal.key === 'BREAKFAST' && day && day.cappuccino) {
+            container.appendChild(buildCappuccinoCounter(day.cappuccino));
+        }
         const own = entries.filter(e => (e.meal || null) === meal.key);
         container.appendChild(buildMealSection(meal, own));
     });
+}
+
+const ICON_MINUS = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10h11"/></svg>';
+
+/**
+ * Cappuccino-Zaehler: "+" traegt einen Cappuccino (eine Portion des Gerichts)
+ * zum Fruehstueck ein, "−" nimmt den juengsten wieder weg. Bis zum Budget
+ * erhoehen sie das Ziel des Tages, statt es aufzufressen - die Zeile sagt,
+ * um wie viel.
+ */
+function buildCappuccinoCounter(cups) {
+    const box = document.createElement('section');
+    box.className = 'cappuccino';
+
+    const text = document.createElement('div');
+    text.className = 'cap-text';
+    const title = document.createElement('span');
+    title.className = 'meal-title';
+    title.textContent = 'Cappuccino';
+    const sub = document.createElement('span');
+    sub.className = 'cap-sub';
+    const bonus = cups.bonus ? cups.bonus.kcal || 0 : 0;
+    sub.textContent = `je ${num(cups.perCup.kcal)} kcal`
+        + (bonus > 0 ? ` · Ziel +${num(bonus)} kcal` : ' · eigenes Budget');
+    text.append(title, sub);
+
+    const count = document.createElement('span');
+    count.className = 'cap-count' + (cups.count > cups.budget ? ' over' : '');
+    count.textContent = `${cups.count}/${cups.budget}`;
+    count.title = cups.count > cups.budget
+        ? `Ab dem ${cups.budget + 1}. zählen sie gegen das normale Ziel.`
+        : `Bis ${cups.budget} am Tag kommen zum Ziel dazu.`;
+
+    const minus = document.createElement('button');
+    minus.type = 'button';
+    minus.className = 'meal-add';
+    minus.innerHTML = ICON_MINUS;
+    minus.disabled = cups.count <= 0;
+    minus.title = 'Einen Cappuccino weniger';
+    minus.setAttribute('aria-label', 'Einen Cappuccino weniger');
+    minus.addEventListener('click', () => changeCappuccino(-1, minus));
+
+    const plus = document.createElement('button');
+    plus.type = 'button';
+    plus.className = 'meal-add';
+    plus.innerHTML = ICON_PLUS;
+    plus.title = 'Einen Cappuccino mehr';
+    plus.setAttribute('aria-label', 'Einen Cappuccino mehr');
+    plus.addEventListener('click', () => changeCappuccino(1, plus));
+
+    box.append(text, count, minus, plus);
+    return box;
+}
+
+async function changeCappuccino(step, button) {
+    button.disabled = true;
+    try {
+        if (step > 0) {
+            await fetchJson('/api/food/cappuccino', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: currentDate }),
+            });
+        } else {
+            await fetchJson(`/api/food/cappuccino?date=${currentDate}`, { method: 'DELETE' });
+        }
+        await loadAll();
+    } catch (err) {
+        button.disabled = false;
+        const el = document.getElementById('load-msg');
+        el.classList.remove('ok');
+        el.textContent = `Fehler: ${err.message}`;
+    }
 }
 
 function buildMealSection(meal, entries) {
@@ -538,7 +626,11 @@ function buildMealSection(meal, entries) {
     // Einfaerbung - der grosse Tacho traegt das Urteil ueber den Tag, und vier
     // weitere Warnflaechen machen die Seite nur zur Nörgelei.
     const kcal = entries.reduce((acc, e) => acc + e.per100g.kcal * e.grams / 100, 0);
-    const target = day && day.mealTargets ? day.mealTargets[meal.key] : null;
+    let target = day && day.mealTargets ? day.mealTargets[meal.key] : null;
+    // Die Cappuccinos stehen im Fruehstueck - ihr Budget gehoert dann auch dorthin.
+    if (target != null && meal.key === 'BREAKFAST' && day.cappuccino && day.cappuccino.bonus) {
+        target += day.cappuccino.bonus.kcal || 0;
+    }
     if (target != null) {
         sum.innerHTML = `<span class="ms-actual">${num(kcal)}</span>/${num(target)} kcal`;
     } else if (entries.length) {

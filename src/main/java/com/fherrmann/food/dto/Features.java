@@ -16,11 +16,18 @@ package com.fherrmann.food.dto;
  * @param veganMode    ob der vegane Modus dieser Person an ist - dann zeigen die
  *                     Oberflaechen nur vegane Gerichte zur Auswahl. Fehlt nie, damit
  *                     ein Client nicht zwischen "aus" und "unbekannt" raten muss
+ * @param cappuccinoCounter ob die Person den Cappuccino-Zaehler ueber dem Fruehstueck hat
+ *                     ({@code POST}/{@code DELETE /api/food/cappuccino})
  */
 public record Features(boolean quickCapture, String me, boolean detailedNutrients, boolean micronutrients,
-                       boolean veganMode) {
+                       boolean veganMode, boolean cappuccinoCounter) {
+
+    public Features(boolean quickCapture, String me, boolean detailedNutrients, boolean micronutrients,
+                    boolean veganMode) {
+        this(quickCapture, me, detailedNutrients, micronutrients, veganMode, false);
+    }
 
     public Features(boolean quickCapture, String me) {
-        this(quickCapture, me, false, false, false);
+        this(quickCapture, me, false, false, false, false);
     }
 }

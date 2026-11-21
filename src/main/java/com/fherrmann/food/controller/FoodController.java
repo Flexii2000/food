@@ -1,5 +1,6 @@
 package com.fherrmann.food.controller;
 
+import com.fherrmann.food.dto.CappuccinoRequest;
 import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.dto.DayAverage;
 import com.fherrmann.food.dto.DayTotal;
@@ -123,7 +124,8 @@ public class FoodController {
 
     private Features features(String user) {
         return new Features(service.quickCaptureAvailable() && quickCaptureAccess.allows(user), user,
-                detailedNutrition.isDetailed(user), micronutrients.isEnabled(user), service.veganMode(user));
+                detailedNutrition.isDetailed(user), micronutrients.isEnabled(user), service.veganMode(user),
+                service.cappuccinoEnabled(user));
     }
 
     /**
@@ -151,6 +153,25 @@ public class FoodController {
     @PostMapping("/entries")
     public ResponseEntity<DaySummary> addEntry(@RequestBody NewEntryRequest request, Principal principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.addEntry(principal.getName(), request));
+    }
+
+    /**
+     * Cappuccino-Zaehler: ein Cappuccino mehr - ein Eintrag des Cappuccino-Gerichts, eine
+     * Portion, zum Fruehstueck. Antwortet mit dem Tag samt {@code cappuccino}.
+     */
+    @PostMapping("/cappuccino")
+    public DaySummary addCappuccino(@RequestBody(required = false) CappuccinoRequest request, Principal principal) {
+        return service.addCappuccino(principal.getName(), request == null ? null : request.date(),
+                request == null ? null : request.id());
+    }
+
+    /** Cappuccino-Zaehler: einer weniger (vom juengsten Eintrag des Tages); 404, wenn keiner da ist. */
+    @DeleteMapping("/cappuccino")
+    public DaySummary removeCappuccino(
+            @RequestParam(name = "date", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            Principal principal) {
+        return service.removeCappuccino(principal.getName(), date);
     }
 
     /** Menge, Mahlzeit oder Tag eines Eintrags berichtigen - das Gericht bleibt. */

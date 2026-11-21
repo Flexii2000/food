@@ -85,6 +85,9 @@ class MicronutrientsApiTest {
         registry.add("food.micronutrient-people", () -> "torben,joana");
         registry.add("food.agent.command", AGENT::toString);
         registry.add("food.agent.people", () -> "felix,torben");
+        // Der Cappuccino-Zaehler hat eigene Tests (CappuccinoCounterTest); hier geht es um
+        // die Antworten von vorher, also ohne ihn - "niemand" ist eine Person ohne Tagebuch.
+        registry.add("food.cappuccino-people", () -> "niemand");
     }
 
     @TestConfiguration
@@ -228,7 +231,7 @@ class MicronutrientsApiTest {
                         + "\"error\":null,\"elapsedSeconds\":0}");
         assertThat(call("felix", get("/api/food/features")))
                 .isEqualTo("200 {\"quickCapture\":true,\"me\":\"felix\",\"detailedNutrients\":false,"
-                        + "\"micronutrients\":false,\"veganMode\":false}");
+                        + "\"micronutrients\":false,\"veganMode\":false,\"cappuccinoCounter\":false}");
         assertThat(Files.readString(DATA.resolve("food.json"))).doesNotContain("micro");
     }
 
@@ -236,7 +239,7 @@ class MicronutrientsApiTest {
     void torbenGetsMicrosWithEveryEntryAndTheDayAddsThemUp() throws Exception {
         assertThat(call("torben", get("/api/food/features")))
                 .isEqualTo("200 {\"quickCapture\":true,\"me\":\"torben\",\"detailedNutrients\":true,"
-                        + "\"micronutrients\":true,\"veganMode\":false}");
+                        + "\"micronutrients\":true,\"veganMode\":false,\"cappuccinoCounter\":false}");
 
         // Unbekannter Schluessel, zu grosser Wert: 400 mit Grund, nichts gespeichert.
         MockHttpServletResponse rejected = send("torben", json(post("/api/food/dishes"),
