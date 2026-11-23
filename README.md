@@ -234,8 +234,9 @@ bleibt unbekannt.
 Felix trinkt jeden Morgen denselben Cappuccino. Statt ihn jedes Mal als Essen
 einzutragen, steht **über dem Frühstück** ein eigener Abschnitt „Cappuccino“:
 im Kopf die Summe gegen sein Budget („226/230 kcal“, darüber in Warnfarbe),
-darunter eine Zeile mit der Anzahl („3×“, „je 75 kcal“), „−“ und „+“, und die
-Einträge selbst.
+darunter nur der Zähler: die Anzahl („3×“, „je 75 kcal“), „−“ und „+“. Die
+Einträge selbst stehen nicht darunter (Felix, 23.11.: neben „3×“ wären sie
+dieselbe Angabe doppelt) und auch nicht im Frühstück.
 
 - **Ein Cappuccino ist ein normaler Eintrag** des Cappuccino-Gerichts, eine
   Portion schwer, gespeichert unter Frühstück. Kein Zählerstand neben dem

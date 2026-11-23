@@ -533,9 +533,11 @@ const ICON_MINUS = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10
 
 /**
  * Der Cappuccino-Abschnitt: Kopf wie eine Mahlzeit (Summe gegen das eigene
- * Budget, ueber dem Budget in Warnfarbe - Felix' Wahl), darunter die Zeile mit
- * der Anzahl, "−" und "+", und die Eintraege selbst. "+" traegt eine Portion
- * des Gerichts ein, "−" nimmt den juengsten wieder weg.
+ * Budget, ueber dem Budget in Warnfarbe - Felix' Wahl), darunter nur der
+ * Zaehler mit der Anzahl, "−" und "+". Die Eintraege selbst stehen nicht
+ * darunter - neben "4×" waeren sie dieselbe Angabe noch einmal (Felix, 23.11.
+ * abends); sie zaehlen nur in die Summe. "+" traegt eine Portion des Gerichts
+ * ein, "−" nimmt den juengsten wieder weg.
  */
 function buildCappuccinoSection(cups, entries) {
     const section = document.createElement('section');
@@ -580,13 +582,6 @@ function buildCappuccinoSection(cups, entries) {
 
     row.append(count, per, minus, plus);
     section.append(head, row);
-
-    if (entries.length) {
-        const list = document.createElement('div');
-        list.className = 'entry-list';
-        entries.forEach(entry => list.appendChild(buildEntryRow(entry)));
-        section.appendChild(list);
-    }
     return section;
 }
 
