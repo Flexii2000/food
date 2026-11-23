@@ -18,21 +18,31 @@ import java.util.Map;
  *                   {@code proteinG}. Fehlt das Feld, bleibt der gespeicherte stehen (und
  *                   sinkt still mit, wenn das Eiweißziel darunter faellt); {@code 0} heisst
  *                   "zurueck auf die Vorgabe"
+ * @param cappuccinoShare optional: der Anteil der Cappuccinos am kcal-Ziel, als Bruchteil wie
+ *                   {@code mealShares}. Nur fuer Personen mit Cappuccino-Zaehler; dann ergeben
+ *                   die vier Mahlzeiten und er zusammen 100 %. Fehlt er, gilt der bisherige
  */
 public record TargetsRequest(
         Double kcal, Double proteinG, Double carbsG, Double fatG,
         Map<Meal, Double> mealShares,
         Map<String, Double> micros,
-        Double proteinMinG) {
+        Double proteinMinG,
+        Double cappuccinoShare) {
+
+    /** Ohne Cappuccino-Anteil - so schicken es alle Clients, die ihn nicht kennen. */
+    public TargetsRequest(Double kcal, Double proteinG, Double carbsG, Double fatG, Map<Meal, Double> mealShares,
+                          Map<String, Double> micros, Double proteinMinG) {
+        this(kcal, proteinG, carbsG, fatG, mealShares, micros, proteinMinG, null);
+    }
 
     /** Ohne Eiweiß-Erhalt - so schicken es alle Clients, die ihn nicht kennen. */
     public TargetsRequest(Double kcal, Double proteinG, Double carbsG, Double fatG, Map<Meal, Double> mealShares,
                           Map<String, Double> micros) {
-        this(kcal, proteinG, carbsG, fatG, mealShares, micros, null);
+        this(kcal, proteinG, carbsG, fatG, mealShares, micros, null, null);
     }
 
     /** Ohne Mikro-Ziele - so schicken es alle Clients, die sie nicht kennen. */
     public TargetsRequest(Double kcal, Double proteinG, Double carbsG, Double fatG, Map<Meal, Double> mealShares) {
-        this(kcal, proteinG, carbsG, fatG, mealShares, null, null);
+        this(kcal, proteinG, carbsG, fatG, mealShares, null, null, null);
     }
 }

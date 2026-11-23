@@ -682,29 +682,27 @@ main {
 .meal-add:hover { background: var(--fill-strong); }
 .meal-add svg { width: 18px; height: 18px; }
 
-/* Cappuccino-Zaehler ueber dem Fruehstueck: eine Zeile, Zahl und zwei Knoepfe. */
+/* Cappuccino-Abschnitt ueber dem Fruehstueck: unter dem Kopf eine Zeile mit
+   der Anzahl und zwei Knoepfen, darunter die Eintraege. */
 .cappuccino {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-top: 16px;
+    margin-top: 10px;
     padding: 10px 12px;
     border-radius: 12px;
     background: var(--fill);
 }
 
-.cap-text { display: flex; flex-direction: column; min-width: 0; }
-
-.cap-sub { font-size: 0.8125rem; color: var(--muted); }
-
 .cap-count {
-    margin-left: auto;
     font-size: 1.125rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
 }
 
-.cap-count.over { color: var(--warn); }
+.cap-sub { margin-right: auto; font-size: 0.8125rem; color: var(--muted); }
+
+.meal-sum.over, .meal-sum.over .ms-actual { color: var(--warn); }
 
 .cappuccino .meal-add { background: var(--surface); }
 .cappuccino .meal-add:disabled { opacity: 0.4; cursor: default; }

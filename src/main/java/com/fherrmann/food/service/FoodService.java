@@ -159,19 +159,24 @@ public class FoodService {
         LocalDate day = date == null ? today() : date;
         List<FoodEntry> entries = entriesOn(data, day);
         Nutrients consumed = sum(entries);
-        CappuccinoDay cups = cappuccino.isEnabled(user)
-                ? CappuccinoCounter.day(CappuccinoCounter.dish(data.dishes()).orElse(null), entries)
-                : null;
-        // Das eigene Budget der Cappuccinos: der Rest rechnet gegen Ziel plus Zuschlag. Das
-        // gespeicherte Ziel (und damit targets und die Mahlzeitenziele) bleibt, wie es ist.
-        Nutrients dayTargets = cups == null ? data.targets() : data.targets().plus(cups.bonus());
+        double kcal = data.targets().kcal();
+        Map<Meal, Double> shares = data.mealShares();
+        CappuccinoDay cups = null;
+        if (cappuccino.isEnabled(user)) {
+            // Die Cappuccinos haben einen eigenen Anteil am Tagesziel wie die Mahlzeiten
+            // (Felix, 23.11.) - die vier Mahlzeiten teilen sich den Rest.
+            CappuccinoCounter.Shares split = CappuccinoCounter.shares(data.mealShares(), data.cappuccinoShare());
+            shares = split.meals();
+            cups = CappuccinoCounter.day(CappuccinoCounter.dish(data.dishes()).orElse(null), entries,
+                    split.cappuccino(), kcal);
+        }
         return new DaySummary(
                 day,
                 targetsView(user, data),
                 consumed.rounded(),
-                dayTargets.minus(consumed).rounded(),
+                data.targets().minus(consumed).rounded(),
                 entries,
-                mealTargets(data),
+                mealTargets(shares, kcal),
                 detailGaps(entries),
                 microGaps(entries),
                 cups);
@@ -727,12 +732,12 @@ public class FoodService {
      * Das kcal-Ziel je Mahlzeit: Tagesziel mal Anteil. Weil die Anteile in Summe
      * 1 ergeben, summieren sich auch die Mahlzeitenziele genau auf den Tag - das
      * ist der Grund, ueberhaupt Anteile zu speichern und keine absoluten Werte.
+     * Mit Cappuccino-Zaehler fehlt dazu dessen Budget ({@code cappuccino.target}).
      */
-    private static Map<Meal, Double> mealTargets(FoodData data) {
-        double kcal = data.targets().kcal();
+    private static Map<Meal, Double> mealTargets(Map<Meal, Double> shares, double kcal) {
         Map<Meal, Double> targets = new LinkedHashMap<>();
         for (Meal meal : Meal.values()) {
-            double share = data.mealShares().getOrDefault(meal, 0.0);
+            double share = shares.getOrDefault(meal, 0.0);
             targets.put(meal, Math.round(kcal * share * 10) / 10.0);
         }
         return targets;
@@ -741,9 +746,10 @@ public class FoodService {
     /**
      * Prueft eine eingereichte Aufteilung. Die Summe muss 100 % ergeben: sonst
      * stimmen die Mahlzeitenziele nicht mehr mit dem Tagesziel ueberein, und die
-     * Anzeige behauptete etwas, das sich nicht ausgeht.
+     * Anzeige behauptete etwas, das sich nicht ausgeht. Mit Cappuccino-Zaehler
+     * zaehlt dessen Anteil mit (ohne Zaehler ist er 0).
      */
-    private static Map<Meal, Double> validShares(Map<Meal, Double> shares) {
+    private static Map<Meal, Double> validShares(Map<Meal, Double> shares, double cappuccinoShare) {
         Map<Meal, Double> checked = new LinkedHashMap<>();
         double sum = 0;
         for (Meal meal : Meal.values()) {
@@ -754,9 +760,14 @@ public class FoodService {
             checked.put(meal, share);
             sum += share;
         }
+        if (!Double.isFinite(cappuccinoShare) || cappuccinoShare < 0) {
+            throw badRequest("cappuccinoShare muss >= 0 sein");
+        }
+        sum += cappuccinoShare;
         if (Math.abs(sum - 1.0) > 0.011) {
             throw badRequest(String.format(
-                    "Die Anteile muessen zusammen 100 %% ergeben, sind aber %.1f %%", sum * 100));
+                    "Die Anteile muessen zusammen 100 %% ergeben, sind aber %.1f %%", sum * 100)
+                    + (cappuccinoShare > 0 ? String.format(" (davon Cappuccino %.1f %%)", cappuccinoShare * 100) : ""));
         }
         return checked;
     }
@@ -1113,14 +1124,26 @@ public class FoodService {
                 requireNonNegative(request.carbsG(), "carbsG", 2_000),
                 requireNonNegative(request.fatG(), "fatG", 2_000));
         FoodData data = repository.load(user);
-        Map<Meal, Double> shares = request.mealShares() == null
-                ? data.mealShares()
-                : validShares(request.mealShares());
+        Map<Meal, Double> shares = data.mealShares();
+        Double cappuccinoShare = data.cappuccinoShare();
+        if (cappuccino.isEnabled(user)) {
+            // Mit Zaehler ergeben die vier Mahlzeiten und die Cappuccinos zusammen 100 % (Felix,
+            // 23.11.). Was nicht mitkommt, gilt weiter - so wie die Oberflaeche es gezeigt hat,
+            // also auch die Vorgabe, solange noch kein Anteil gespeichert ist.
+            if (request.mealShares() != null || request.cappuccinoShare() != null) {
+                CappuccinoCounter.Shares shown = CappuccinoCounter.shares(data.mealShares(), data.cappuccinoShare());
+                double cups = request.cappuccinoShare() == null ? shown.cappuccino() : request.cappuccinoShare();
+                shares = validShares(request.mealShares() == null ? shown.meals() : request.mealShares(), cups);
+                cappuccinoShare = cups;
+            }
+        } else if (request.mealShares() != null) {
+            shares = validShares(request.mealShares(), 0);
+        }
         Map<String, Double> microTargets = micronutrients.isEnabled(user) && request.micros() != null
                 ? validMicroTargets(request.micros())
                 : data.microTargets();
         FoodData updated = data.withTargets(targets, shares, microTargets,
-                proteinMin(request.proteinMinG(), data.proteinMinG(), targets.proteinG()));
+                proteinMin(request.proteinMinG(), data.proteinMinG(), targets.proteinG()), cappuccinoShare);
         repository.save(user, updated);
         return targetsView(user, updated);
     }

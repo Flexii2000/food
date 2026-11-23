@@ -4,6 +4,7 @@ import com.fherrmann.food.dto.CappuccinoDay;
 import com.fherrmann.food.dto.DaySummary;
 import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.dto.NewEntryRequest;
+import com.fherrmann.food.dto.TargetsRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
@@ -21,13 +22,16 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 /**
- * Der Cappuccino-Zaehler: "+" und "−" als normale Eintraege, das eigene Budget von vier am
- * Tag - und dass gespeicherte Ziele und Personen ohne Zaehler davon nichts merken.
+ * Der Cappuccino-Zaehler: "+" und "−" als normale Eintraege, das eigene Budget als Anteil am
+ * Tagesziel neben den Mahlzeiten (seit 23.11.) - und dass Personen ohne Zaehler davon nichts
+ * merken.
  */
 class CappuccinoCounterTest {
 
@@ -89,7 +93,6 @@ class CappuccinoCounterTest {
         assertThat(day.entries().get(0).meal()).isEqualTo(Meal.BREAKFAST);
         CappuccinoDay cups = day.cappuccino();
         assertThat(cups.count()).isEqualTo(1);
-        assertThat(cups.budget()).isEqualTo(4);
         assertThat(cups.perCup().kcal()).isEqualTo(75.0);
         assertThat(cups.perCup().proteinG()).isEqualTo(1.4);
         // Er zaehlt zum Tag - kcal und Eiweiß.
@@ -98,7 +101,22 @@ class CappuccinoCounterTest {
     }
 
     @Test
-    void cupsUpToTheBudgetRaiseTheDayInsteadOfEatingIt() {
+    void untilSavedTheCupsTakeTenPercentFromBreakfast() {
+        felixCappuccino();
+
+        DaySummary day = service.day(ME, TODAY);
+
+        // Felix' Startwert (23.11.): Fruehstueck 25 -> 15 %, Cappuccino 10 %.
+        assertThat(day.cappuccino().share()).isEqualTo(0.10);
+        assertThat(day.cappuccino().target()).isEqualTo(230.0);
+        assertThat(day.mealTargets()).containsEntry(Meal.BREAKFAST, 345.0).containsEntry(Meal.LUNCH, 805.0)
+                .containsEntry(Meal.DINNER, 690.0).containsEntry(Meal.SNACK, 230.0);
+        double meals = day.mealTargets().values().stream().mapToDouble(Double::doubleValue).sum();
+        assertThat(meals + day.cappuccino().target()).isEqualTo(day.targets().kcal());
+    }
+
+    @Test
+    void cupsCountAgainstTheDayLikeEveryOtherEntry() {
         felixCappuccino();
         DaySummary before = service.day(ME, TODAY);
 
@@ -108,22 +126,49 @@ class CappuccinoCounterTest {
         }
 
         assertThat(day.cappuccino().count()).isEqualTo(4);
-        assertThat(day.cappuccino().bonus().kcal()).isEqualTo(300.1);
-        assertThat(day.cappuccino().bonus().proteinG()).isEqualTo(0.0);
-        // Vier Cappuccinos lassen den Rest an kcal, KH und Fett, wo er war ...
-        assertThat(day.remaining().kcal()).isEqualTo(before.remaining().kcal());
-        assertThat(day.remaining().carbsG()).isEqualTo(before.remaining().carbsG());
-        assertThat(day.remaining().fatG()).isEqualTo(before.remaining().fatG());
-        // ... Eiweiß zaehlt ganz normal ...
-        assertThat(day.remaining().proteinG()).isLessThan(before.remaining().proteinG());
-        // ... und das gespeicherte Ziel bleibt unangetastet.
+        // Das Tagesziel waechst nicht mehr mit: der Rest sinkt um alle vier.
         assertThat(day.targets()).isEqualTo(before.targets());
+        assertThat(day.remaining().kcal()).isCloseTo(before.remaining().kcal() - 300.1, within(0.01));
         assertThat(day.mealTargets()).isEqualTo(before.mealTargets());
+        assertThat(day.cappuccino().target()).isEqualTo(before.cappuccino().target());
+    }
 
-        DaySummary fifth = service.addCappuccino(ME, TODAY, null);
-        assertThat(fifth.cappuccino().count()).isEqualTo(5);
-        assertThat(fifth.cappuccino().bonus().kcal()).isEqualTo(300.1);
-        assertThat(fifth.remaining().kcal()).isEqualTo(before.remaining().kcal() - 75.0);
+    @Test
+    void savedSharesOfMealsAndCupsMustAddUpTo100Percent() {
+        felixCappuccino();
+        Map<Meal, Double> meals = Map.of(Meal.BREAKFAST, 0.20, Meal.LUNCH, 0.35, Meal.DINNER, 0.30, Meal.SNACK, 0.05);
+
+        service.updateTargets(ME, new TargetsRequest(2300.0, 200.0, 235.5, 62.0, meals, null, null, 0.10));
+
+        DaySummary day = service.day(ME, TODAY);
+        assertThat(day.cappuccino().share()).isEqualTo(0.10);
+        assertThat(day.cappuccino().target()).isEqualTo(230.0);
+        assertThat(day.mealTargets()).containsEntry(Meal.BREAKFAST, 460.0).containsEntry(Meal.SNACK, 115.0);
+        // Vier Mahlzeiten mit 100 % und dazu der Cappuccino-Anteil von vorher: 110 %.
+        Map<Meal, Double> full = Map.of(Meal.BREAKFAST, 0.25, Meal.LUNCH, 0.35, Meal.DINNER, 0.30, Meal.SNACK, 0.10);
+        assertThatThrownBy(() -> service.updateTargets(ME, new TargetsRequest(2300.0, 200.0, 235.5, 62.0, full)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("110").hasMessageContaining("Cappuccino");
+        // Nur der Cappuccino-Anteil geaendert: die Mahlzeiten von vorher zaehlen mit.
+        assertThatThrownBy(() -> service.updateTargets(ME,
+                new TargetsRequest(2300.0, 200.0, 235.5, 62.0, null, null, null, 0.15)))
+                .isInstanceOf(ResponseStatusException.class);
+        service.updateTargets(ME, new TargetsRequest(2300.0, 200.0, 235.5, 62.0, full, null, null, 0.0));
+        assertThat(service.day(ME, TODAY).cappuccino().target()).isZero();
+        // Nur die kcal geaendert: die Anteile bleiben, die Budgets wandern mit.
+        service.updateTargets(ME, new TargetsRequest(2000.0, 200.0, 235.5, 62.0, null));
+        assertThat(service.day(ME, TODAY).mealTargets()).containsEntry(Meal.BREAKFAST, 500.0);
+    }
+
+    @Test
+    void peopleWithoutTheCounterKeepFourSharesAndIgnoreTheCupShare() {
+        Map<Meal, Double> full = Map.of(Meal.BREAKFAST, 0.25, Meal.LUNCH, 0.35, Meal.DINNER, 0.30, Meal.SNACK, 0.10);
+
+        service.updateTargets(TORBEN, new TargetsRequest(2800.0, 180.0, 300.0, 90.0, full, null, null, 0.2));
+
+        DaySummary day = service.day(TORBEN, TODAY);
+        assertThat(day.cappuccino()).isNull();
+        assertThat(day.mealTargets()).containsEntry(Meal.BREAKFAST, 700.0);
     }
 
     @Test
@@ -144,7 +189,6 @@ class CappuccinoCounterTest {
 
         DaySummary empty = service.removeCappuccino(ME, TODAY);
         assertThat(empty.cappuccino().count()).isZero();
-        assertThat(empty.cappuccino().bonus().kcal()).isZero();
         assertThatThrownBy(() -> service.removeCappuccino(ME, TODAY)).isInstanceOf(ResponseStatusException.class);
     }
 

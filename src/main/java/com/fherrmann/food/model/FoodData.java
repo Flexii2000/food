@@ -33,6 +33,11 @@ import java.util.Map;
  *                   dem Eiweißziel ({@link #defaultProteinMin}). Getrennt von {@code targets},
  *                   weil {@link Nutrients} auch Gerichte und Summen beschreibt, zu denen ein
  *                   Erhalt nichts sagt
+ * @param cappuccinoShare der Anteil der Cappuccinos am kcal-Tagesziel (Felix, 23.11.2026: ein
+ *                   eigenes Budget neben den vier Mahlzeiten, zusammen 100 %). Nur fuer
+ *                   Personen mit Cappuccino-Zaehler; {@code null} heisst "nie gespeichert" und
+ *                   fehlt in der Datei - dann gilt die Vorgabe
+ *                   ({@link com.fherrmann.food.service.CappuccinoCounter#shares})
  */
 public record FoodData(
         Nutrients targets,
@@ -41,7 +46,8 @@ public record FoodData(
         List<FoodEntry> entries,
         @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Double> microTargets,
         @JsonInclude(JsonInclude.Include.NON_NULL) Boolean veganMode,
-        @JsonInclude(JsonInclude.Include.NON_NULL) Double proteinMinG) {
+        @JsonInclude(JsonInclude.Include.NON_NULL) Double proteinMinG,
+        @JsonInclude(JsonInclude.Include.NON_NULL) Double cappuccinoShare) {
 
     /**
      * Daily goals used when {@code food.json} does not exist yet: 2300 kcal with 200 g
@@ -80,7 +86,7 @@ public record FoodData(
      * {@link #withVeganMode}, damit kein Feld unterwegs verloren geht.
      */
     public FoodData(Nutrients targets, Map<Meal, Double> mealShares, List<Dish> dishes, List<FoodEntry> entries) {
-        this(targets, mealShares, dishes, entries, null, null, null);
+        this(targets, mealShares, dishes, entries, null, null, null, null);
     }
 
     public static FoodData empty() {
@@ -93,18 +99,27 @@ public record FoodData(
      * veganen Modus verliert.
      */
     public FoodData with(List<Dish> dishes, List<FoodEntry> entries) {
-        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode, proteinMinG);
+        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode, proteinMinG,
+                cappuccinoShare);
     }
 
     /** Derselbe Stand mit neuen Zielen; Gerichte, Eintraege und veganer Modus bleiben. */
     public FoodData withTargets(Nutrients targets, Map<Meal, Double> mealShares,
                                 Map<String, Double> microTargets, Double proteinMinG) {
-        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode, proteinMinG);
+        return withTargets(targets, mealShares, microTargets, proteinMinG, cappuccinoShare);
+    }
+
+    /** Dasselbe samt Cappuccino-Anteil. */
+    public FoodData withTargets(Nutrients targets, Map<Meal, Double> mealShares,
+                                Map<String, Double> microTargets, Double proteinMinG, Double cappuccinoShare) {
+        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode, proteinMinG,
+                cappuccinoShare);
     }
 
     /** Derselbe Stand mit geschaltetem veganen Modus und den dabei markierten Gerichten. */
     public FoodData withVeganMode(List<Dish> dishes, Boolean veganMode) {
-        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode, proteinMinG);
+        return new FoodData(targets, mealShares, dishes, entries, microTargets, veganMode, proteinMinG,
+                cappuccinoShare);
     }
 
     /**

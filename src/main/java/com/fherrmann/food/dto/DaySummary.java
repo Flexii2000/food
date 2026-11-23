@@ -21,7 +21,8 @@ import java.util.Map;
  * @param entries     the day's entries, oldest first
  * @param mealTargets kcal-Ziel je Mahlzeit, aus dem Tagesziel und der
  *                    hinterlegten Aufteilung gerechnet. Summiert sich damit
- *                    immer auf {@code targets.kcal()}
+ *                    immer auf {@code targets.kcal()} - mit Cappuccino-Zaehler
+ *                    zusammen mit {@code cappuccino.target}
  * @param detailGaps  die Detailwerte (Feldnamen aus {@link Nutrients#DETAIL_FIELDS}),
  *                    bei denen mindestens ein Eintrag des Tages keine Angabe hat - dort
  *                    ist die Summe in {@code consumed} eine Untergrenze. Leer, und dann
@@ -30,8 +31,8 @@ import java.util.Map;
  * @param microGaps   dasselbe fuer die Mikronaehrstoffe (Schluessel aus
  *                    {@link com.fherrmann.food.model.Micronutrient#KEYS})
  * @param cappuccino  der Cappuccino-Zaehler, nur fuer Personen, die ihn haben (sonst nicht
- *                    im JSON). Sein {@code bonus} ist in {@code remaining} schon eingerechnet:
- *                    das Ziel des Tages ist {@code targets + cappuccino.bonus}
+ *                    im JSON): sein eigenes Budget als Anteil am Tagesziel, neben den
+ *                    Mahlzeiten (siehe {@link CappuccinoDay})
  */
 public record DaySummary(
         LocalDate date,

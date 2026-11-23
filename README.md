@@ -229,30 +229,42 @@ und die Gerichteliste zeigt nicht-vegane gedämpft. Ein Gericht mit unbekanntem
 Kennzeichen, dessen Häkchen niemand anfasst, wird ohne `vegan` gespeichert und
 bleibt unbekannt.
 
-## Cappuccino-Zähler (seit 2026-11-21)
+## Cappuccino-Zähler (seit 2026-11-21, eigenes Budget seit 2026-11-23)
 
 Felix trinkt jeden Morgen denselben Cappuccino. Statt ihn jedes Mal als Essen
-einzutragen, steht **über dem Frühstück** eine Zeile mit „n/4“, „−“ und „+“.
+einzutragen, steht **über dem Frühstück** ein eigener Abschnitt „Cappuccino“:
+im Kopf die Summe gegen sein Budget („226/230 kcal“, darüber in Warnfarbe),
+darunter eine Zeile mit der Anzahl („3×“, „je 75 kcal“), „−“ und „+“, und die
+Einträge selbst.
 
 - **Ein Cappuccino ist ein normaler Eintrag** des Cappuccino-Gerichts, eine
-  Portion schwer, Mahlzeit Frühstück. Kein Zählerstand neben dem Tagebuch: so
-  zählt er ohne Sonderweg zu kcal und Eiweiß, im Verlauf, im Weight Tracker und
-  im Chat, und früher von Hand eingetragene Cappuccinos zählen mit (alle
-  Einträge des Gerichts am Tag, in Portionen gerundet).
+  Portion schwer, gespeichert unter Frühstück. Kein Zählerstand neben dem
+  Tagebuch: so zählt er ohne Sonderweg zu kcal und Eiweiß, im Verlauf, im Weight
+  Tracker und im Chat, und früher von Hand eingetragene Cappuccinos zählen mit
+  (alle Einträge des Gerichts am Tag, in Portionen gerundet).
 - **Welches Gericht:** das, dessen Name „Cappu…“/„Capu…“ enthält (bei Felix
   „Cappuchino (zuhause)“, 61 kcal/1,1 g Eiweiß je 100 g, Portion 123 g → 75 kcal
   je Tasse). Größere Tasse = Portion des Gerichts ändern. Gibt es keins, legt
   das erste „+“ „Cappuccino (Hafermilch)“ an: 210 g (Espresso + ~180 ml Oatly
-  Barista), 105 kcal, 2 g Eiweiß.
-- **Eigenes Budget:** bis 4 Cappuccinos am Tag kommen zum Tagesziel dazu, statt
-  es aufzufressen; ab dem 5. zählen sie normal. Der Tag trägt dafür
-  `cappuccino.bonus` (kcal, Kohlenhydrate, Fett der ersten vier; Eiweiß 0 — es
-  ist ein Mindestziel, ein höheres wäre eine Strafe) und rechnet ihn in
-  `remaining` ein. **`targets` und `mealTargets` bleiben das gespeicherte Ziel:**
-  Web und iPhone füllen ihr Ziele-Formular aus dem Tag, ein erhöhtes Ziel wäre
-  beim nächsten Speichern zur festen Zahl geworden. Ziel des Tages =
-  `targets + cappuccino.bonus`; die Weboberfläche zeigt Tachos und das
-  Frühstücksziel damit.
+  Barista), 105 kcal, 2 g Eiweiß. **Nur dieses eine Gericht** gehört zum
+  Cappuccino-Budget; ein anderer Cappuccino (Café) zählt in seiner Mahlzeit
+  (Felix, 23.11.).
+- **Eigenes Budget** (Felix, 23.11.): ein Anteil am kcal-Tagesziel wie die vier
+  Mahlzeiten, zusammen 100 % — im Ziele-Formular (Web und App) als fünftes Feld
+  „Cappuccino (%)“, gespeichert als `cappuccinoShare` neben `mealShares`. Der Tag
+  trägt `cappuccino.share` und `cappuccino.target` (kcal = Tagesziel × Anteil,
+  wie `mealTargets`); `mealTargets` und `cappuccino.target` ergeben zusammen das
+  Tagesziel. Die Einträge des Gerichts zählen in dieses Budget und **nicht** zu
+  der Mahlzeit, unter der sie stehen: Web und App ziehen sie aus deren
+  Teilsumme heraus. Das Tagesziel bleibt das gespeicherte, `remaining` ist wieder
+  `targets − consumed`. Solange kein Anteil gespeichert ist, gelten 10 %, genommen
+  vom Frühstück (Felix' Startwert: Frühstück 25 → 15 %); gespeichert wird das
+  beim nächsten Sichern der Ziele. Mit Zähler weist `PUT /targets` eine
+  Aufteilung ab, die mit dem Cappuccino-Anteil nicht 100 % ergibt — auch die
+  eines Clients, der `cappuccinoShare` nicht kennt. **Bis 23.11.** kamen
+  stattdessen bis zu vier Cappuccinos am Tag zum Tagesziel dazu
+  (`cappuccino.bonus`, `budget`) — so hatte der Server-Agent Felix' Wunsch am
+  21.11. verstanden.
 - **„−“** nimmt vom jüngsten Eintrag des Gerichts eine Portion weg; bis
   anderthalb Portionen fällt er ganz weg. So lässt sich auch ein alter
   „2 Cappuccinos“-Eintrag herunterzählen.
@@ -833,7 +845,7 @@ vier Zahlen noch zusammenpassen.
 | DELETE  | `/api/food/entries/{id}`  | Eintrag löschen                                         |
 | PUT | `/api/food/entries/{id}` | `{grams, meal?, date?}` — Menge, Mahlzeit oder Tag berichtigen; Name und Nährwerte je 100 g bleiben, wie sie beim Eintragen waren. Antwort: der Tag, auf dem der Eintrag danach liegt |
 | GET     | `/api/food/targets`       | Tagesziele, mit `proteinMinG` und `proteinMinDefault` (siehe „Eiweiß: Erhalt und Ziel“) |
-| PUT     | `/api/food/targets`       | Tagesziele ändern (mit `micros` die Mikro-Ziele, mit `proteinMinG` der Eiweiß-Erhalt, siehe oben) |
+| PUT     | `/api/food/targets`       | Tagesziele ändern (mit `micros` die Mikro-Ziele, mit `proteinMinG` der Eiweiß-Erhalt, siehe oben; mit `mealShares` die Aufteilung, mit Cappuccino-Zähler samt `cappuccinoShare`, zusammen 100 %) |
 | GET     | `/api/food/daily?from=&to=` | Tagessummen einer Spanne mit `meals` — liest die Weight-App |
 | GET     | `/api/food/daily-average?from=&to=` | Gleitendes 7-Tage-Mittel der kcal je Tag — liest die Weight-App (siehe unten) |
 | GET     | `/api/food/entries?from=&to=` | Jeder Eintrag der Spanne (höchstens 31 Tage) als eine Zeile — liest der Weight Tracker für den Chat (siehe „Lesen für den Chat“) |

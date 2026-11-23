@@ -4,14 +4,17 @@ import com.fherrmann.food.dto.CappuccinoDay;
 import com.fherrmann.food.dto.DishRequest;
 import com.fherrmann.food.model.Dish;
 import com.fherrmann.food.model.FoodEntry;
+import com.fherrmann.food.model.Meal;
 import com.fherrmann.food.model.Nutrients;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -24,12 +27,12 @@ import java.util.Set;
  * Sonderweg zu kcal und Eiweiß, im Verlauf, im Weight Tracker, im Chat - und ein frueher
  * von Hand eingetragener Cappuccino zaehlt im Zaehler mit.
  *
- * <p><b>Eigenes Budget:</b> bis zu {@link #BUDGET} Cappuccinos am Tag kommen zum Tagesziel
- * dazu, statt es aufzufressen. Das gespeicherte Ziel bleibt dabei unangetastet - die
- * Oberflaechen fuellen ihre Ziel-Formulare aus {@code targets}, und ein Ziel, das um die
- * Cappuccinos des Tages gewachsen ist, wuerde beim naechsten Speichern zur festen Zahl.
- * Stattdessen steht der Zuschlag als {@link CappuccinoDay#bonus()} im Tag, und
- * {@code remaining} rechnet ihn ein.
+ * <p><b>Eigenes Budget</b> (Felix, 23.11.): ein Anteil am kcal-Tagesziel wie Fruehstueck,
+ * Mittag, Abend und Snacks, zusammen 100 % - einstellbar wie die anderen Anteile. Die
+ * Eintraege des Gerichts zaehlen in dieses Budget und nicht mehr zu der Mahlzeit, unter der
+ * sie stehen. Nur der Zaehler-Cappuccino, also dieses eine Gericht: ein anderer Cappuccino
+ * (Café) bleibt in seiner Mahlzeit (Felix' Wahl). Bis 23.11. kamen stattdessen bis zu vier
+ * Cappuccinos am Tag zum Tagesziel dazu; das Ziel waechst seitdem nicht mehr.
  *
  * <p>Welches Gericht der Cappuccino ist: das, dessen Name "Cappu…"/"Capu…" enthaelt (Felix:
  * "Cappuchino (zuhause)"), mit Portion vor ohne, zuletzt gegessen zuerst. Seine Portion
@@ -42,8 +45,21 @@ import java.util.Set;
 @Component
 public class CappuccinoCounter {
 
-    /** So viele Cappuccinos am Tag gehen aufs eigene Budget; jeder weitere zaehlt normal. */
-    public static final int BUDGET = 4;
+    /**
+     * Der Anteil, solange keiner gespeichert ist - genommen vom Fruehstueck, weil die
+     * Cappuccinos bis zum 23.11. dort mitzaehlten (Felix' Startwert: Fruehstueck 25 -> 15 %,
+     * Cappuccino 10 %; drei Cappuccinos sind bei ihm 226 kcal).
+     */
+    public static final double DEFAULT_SHARE = 0.10;
+
+    /**
+     * Die Aufteilung des kcal-Tagesziels samt Cappuccino.
+     *
+     * @param meals      die Anteile der vier Mahlzeiten
+     * @param cappuccino der Anteil der Cappuccinos; mit den Mahlzeiten zusammen 1
+     */
+    public record Shares(Map<Meal, Double> meals, double cappuccino) {
+    }
 
     /**
      * Gilt nur, wenn die Person noch kein Cappuccino-Gericht hat: eine Tasse mit Espresso
@@ -79,6 +95,27 @@ public class CappuccinoCounter {
         return people.contains(user);
     }
 
+    /**
+     * Die Aufteilung, wie sie fuer eine Person mit Zaehler gilt. Ist noch kein Cappuccino-Anteil
+     * gespeichert, nimmt er {@link #DEFAULT_SHARE} vom Fruehstueck, hoechstens so viel, wie das
+     * Fruehstueck hat. Gespeichert wird das erst, wenn die Person ihre Ziele sichert - bis
+     * dahin bleibt die Datei, wie sie war, und die Vorgabe gilt nur beim Lesen.
+     *
+     * @param meals  die gespeicherten Anteile der vier Mahlzeiten
+     * @param stored der gespeicherte Cappuccino-Anteil, oder {@code null}
+     */
+    public static Shares shares(Map<Meal, Double> meals, Double stored) {
+        if (stored != null) {
+            return new Shares(meals, stored);
+        }
+        double breakfast = meals.getOrDefault(Meal.BREAKFAST, 0.0);
+        double taken = Math.min(DEFAULT_SHARE, breakfast);
+        Map<Meal, Double> rest = new EnumMap<>(meals);
+        // Auf vier Stellen: sonst wird aus 0,25 - 0,1 eine 0,15000000000000002.
+        rest.put(Meal.BREAKFAST, Math.round((breakfast - taken) * 10_000) / 10_000.0);
+        return new Shares(Map.copyOf(rest), taken);
+    }
+
     /** Das Cappuccino-Gericht der Person, wenn sie eins hat. */
     static Optional<Dish> dish(List<Dish> dishes) {
         return dishes.stream()
@@ -108,41 +145,28 @@ public class CappuccinoCounter {
      * Der Zaehler fuer einen Tag.
      *
      * @param dish    das Cappuccino-Gericht, oder {@code null}, wenn es noch keins gibt
-     * @param entries die Eintraege des Tages, aelteste zuerst
+     * @param entries die Eintraege des Tages
+     * @param share   der Anteil der Cappuccinos am kcal-Tagesziel ({@link #shares})
+     * @param dayKcal das kcal-Tagesziel
      */
-    static CappuccinoDay day(Dish dish, List<FoodEntry> entries) {
-        Nutrients perCup;
+    static CappuccinoDay day(Dish dish, List<FoodEntry> entries, double share, double dayKcal) {
+        // Auf eine Stelle wie die Mahlzeitenziele - so gehen beide zusammen genau auf den Tag auf.
+        double target = Math.round(dayKcal * share * 10) / 10.0;
         if (dish == null) {
-            perCup = new Nutrients(DEFAULT_DISH.kcal(), DEFAULT_DISH.proteinG(), DEFAULT_DISH.carbsG(),
+            Nutrients perCup = new Nutrients(DEFAULT_DISH.kcal(), DEFAULT_DISH.proteinG(), DEFAULT_DISH.carbsG(),
                     DEFAULT_DISH.fatG()).scaled(DEFAULT_DISH.portionG() / 100.0);
-            return new CappuccinoDay(null, DEFAULT_DISH.name(), 0, BUDGET, DEFAULT_DISH.portionG(), perCup.rounded(),
-                    Nutrients.ZERO);
+            return new CappuccinoDay(null, DEFAULT_DISH.name(), 0, DEFAULT_DISH.portionG(), perCup.rounded(),
+                    share, target);
         }
         double portion = portion(dish);
-        perCup = dish.per100g().scaled(portion / 100.0);
-
-        // Die Eintraege tragen ihre eigene Kopie der Naehrwerte - der Zuschlag nimmt die,
-        // nicht die heutigen Werte des Gerichts, sonst aenderte eine Korrektur am Gericht
-        // nachtraeglich das Budget vergangener Tage.
-        double grams = 0;
-        double budgetLeft = BUDGET * portion;
-        Nutrients bonus = Nutrients.ZERO;
-        for (FoodEntry entry : entries) {
-            if (!dish.id().equals(entry.dishId())) {
-                continue;
-            }
-            grams += entry.grams();
-            double counted = Math.min(entry.grams(), budgetLeft);
-            if (counted > 0 && entry.per100g() != null) {
-                bonus = bonus.plus(entry.per100g().scaled(counted / 100.0));
-                budgetLeft -= counted;
-            }
-        }
+        Nutrients perCup = dish.per100g().scaled(portion / 100.0);
+        double grams = entries.stream()
+                .filter(entry -> dish.id().equals(entry.dishId()))
+                .mapToDouble(FoodEntry::grams)
+                .sum();
         int count = (int) Math.round(grams / portion);
-        // Eiweiß ist ein Mindestziel - ein hoeheres Ziel waere eine Strafe, kein Budget.
-        Nutrients budget = new Nutrients(bonus.kcal(), 0, bonus.carbsG(), bonus.fatG());
-        return new CappuccinoDay(dish.id(), dish.name(), count, BUDGET, portion,
+        return new CappuccinoDay(dish.id(), dish.name(), count, portion,
                 new Nutrients(perCup.kcal(), perCup.proteinG(), perCup.carbsG(), perCup.fatG()).rounded(),
-                budget.rounded());
+                share, target);
     }
 }
