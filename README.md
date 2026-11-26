@@ -14,7 +14,9 @@ Umschalter die hier erfassten kcal in die Gewichtskurven ein.
 
 Oben drei kleine Tachos nebeneinander für die **bisher verzehrten** Makros
 (Eiweiß, Fett, Kohlenhydrate), darunter ein großer Tacho für die **noch übrigen**
-kcal, daneben als bloße Zahl der verzehrte Wert.
+kcal, daneben als bloße Zahl der verzehrte Wert — seit 2026-11-26 in Grün
+(`--good`, hell `#2a8043`, dunkel `#6cc983`), auch über dem Ziel; „drüber“
+zeigt der Tacho daneben.
 
 Auf jedem Tacho sitzt ein **Zielstrich**, als Kerbe neben dem Bogen statt quer
 hindurch — eine Linie mitten durch die Füllung zerschneidet sie optisch. Der

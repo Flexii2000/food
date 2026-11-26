@@ -517,7 +517,10 @@ main {
     color: var(--text-2);
 }
 
+/* Die gezaehlten kcal gruen (Felix, 26.11.) - in beiden Schemata das --good der
+   Tachos. Auch ueber dem Ziel: "drueber" zeigt der Tacho daneben in Rot. */
 .kcal-consumed .value {
+    color: var(--good);
     font-size: clamp(1.375rem, 5.6vw, 1.75rem);
     font-weight: 650;
     letter-spacing: -0.02em;
